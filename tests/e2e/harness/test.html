@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>PromptTrace Content UI Harness</title>
+<style>
+  body { font-family: sans-serif; margin: 40px; line-height: 1.7; max-width: 720px; }
+  img { width: 240px; height: 160px; object-fit: cover; }
+</style>
+</head>
+<body>
+  <h1>PromptTrace harness page</h1>
+  <p id="para1">The quick brown fox jumps over the lazy dog. Select this paragraph to test
+  the selection toolbar. It should pop up role options at the selection.</p>
+  <p id="para2">Another paragraph with different content for overlap testing purposes.</p>
+  <img id="img1" src="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='160'%3E%3Crect width='240' height='160' fill='%2347a'/%3E%3C/svg%3E" alt="test image" />
+  <script src="./chrome-stub.js"></script>
+  <script src="./content-scripts/content.js"></script>
+</body>
+</html>
