@@ -10,14 +10,21 @@ export default defineConfig({
       'contextMenus',
       'downloads',
       'storage',
-      'sidePanel',
       'activeTab',
       'scripting',
       'clipboardWrite',
     ],
     host_permissions: ['<all_urls>'],
+    // default_popup + default_title are derived by WXT from the popup entrypoint
+    // (entrypoints/popup, <title>PromptTrace</title>); the toolbar icon is set
+    // explicitly here so it's used regardless of Chrome's icons-fallback.
     action: {
-      default_title: 'PromptTrace — open side panel',
+      default_icon: {
+        '16': 'icon/16.png',
+        '32': 'icon/32.png',
+        '48': 'icon/48.png',
+        '128': 'icon/128.png',
+      },
     },
     commands: {
       'summon-toolbar': {

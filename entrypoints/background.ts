@@ -21,6 +21,7 @@ import {
   categoryRepository,
   fileRecordRepository,
   modelPresetRepository,
+  recordRepository,
 } from '@/src/storage/repositories';
 import { seedDefaults } from '@/src/storage/seed';
 
@@ -57,10 +58,6 @@ export default defineBackground(() => {
   });
   seedDefaults().catch(() => {});
 
-  chrome.action.onClicked.addListener((tab) => {
-    if (tab.id != null) chrome.sidePanel.open({ tabId: tab.id }).catch(() => {});
-  });
-
   // Browser-level shortcut: overrides page key handlers, rebindable at
   // chrome://extensions/shortcuts.
   chrome.commands.onCommand.addListener(async (command) => {
@@ -74,7 +71,6 @@ export default defineBackground(() => {
   // ---------- context menu capture ----------
   chrome.contextMenus.onClicked.addListener((info, tab) => {
     if (!tab?.id) return;
-    chrome.sidePanel.open({ tabId: tab.id }).catch(() => {});
 
     if (info.menuItemId === MENU_TEXT) {
       // Ask the content script for selection details (text + overlap info + overlay anchor).
@@ -512,6 +508,41 @@ export default defineBackground(() => {
           };
           await categoryRepository.save(category);
           return sendResponse({ category });
+        }
+
+        case 'library/listRecords': {
+          const [records, allAssets, categories] = await Promise.all([
+            recordRepository.list(),
+            assetRepository.list(),
+            categoryRepository.list(),
+          ]);
+          const catName = new Map(categories.map((c) => [c.id, c.name]));
+          const assetsByRecord = new Map<string, typeof allAssets>();
+          for (const a of allAssets) {
+            const arr = assetsByRecord.get(a.recordId) ?? [];
+            arr.push(a);
+            assetsByRecord.set(a.recordId, arr);
+          }
+          const gallery = records
+            .slice()
+            .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)) // newest first
+            .map((r) => ({
+              id: r.id,
+              title: r.title,
+              categoryName: r.categoryId ? catName.get(r.categoryId) : undefined,
+              modelLabel: r.modelLabel || r.modelName || undefined,
+              createdAt: r.createdAt,
+              assets: (assetsByRecord.get(r.id) ?? [])
+                .slice()
+                .sort((a, b) => a.orderIndex - b.orderIndex)
+                .map((a) => ({
+                  role: a.role,
+                  assetType: a.assetType,
+                  textContent: a.textContent,
+                  originalUrl: a.originalUrl,
+                })),
+            }));
+          return sendResponse({ records: gallery });
         }
 
         default:

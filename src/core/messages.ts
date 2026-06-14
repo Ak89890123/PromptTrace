@@ -2,7 +2,7 @@ import type { AssetRole, AssetType } from './domain/enums';
 import type { CaptureSessionState } from './capture/session';
 
 /**
- * Message contract between content script, background, side panel and pages.
+ * Message contract between content script, background, popup and pages.
  * All messages go through chrome.runtime.sendMessage / onMessage.
  */
 
@@ -71,7 +71,7 @@ export type GetSessionMessage = {
   payload: Record<string, never>;
 };
 
-/** Background → side panel / content broadcast after every state change. */
+/** Background → content (in-page edge panel) broadcast after every state change. */
 export type SessionUpdatedMessage = {
   type: 'capture/sessionUpdated';
   payload: { state: CaptureSessionState };
@@ -111,6 +111,32 @@ export type TaxonomyQuickAddCategoryMessage = {
   payload: { name: string };
 };
 
+/** A saved asset, slimmed for the in-page gallery. */
+export type GalleryAsset = {
+  role: AssetRole;
+  assetType: AssetType;
+  textContent?: string;
+  originalUrl?: string;
+};
+
+/** A saved record, slimmed for the in-page gallery. */
+export type GalleryRecord = {
+  id: string;
+  title?: string;
+  categoryName?: string;
+  modelLabel?: string;
+  createdAt: string;
+  assets: GalleryAsset[];
+};
+
+/** Content script → background: list saved records for the in-page gallery. */
+export type ListRecordsMessage = {
+  type: 'library/listRecords';
+  payload: Record<string, never>;
+};
+
+export type ListRecordsResult = { records: GalleryRecord[] };
+
 export type ExtensionMessage =
   | CreatePendingAssetMessage
   | AssignAssetRoleMessage
@@ -127,7 +153,8 @@ export type ExtensionMessage =
   | FileRecordChangedMessage
   | FlashOverlayMessage
   | TaxonomyGetMessage
-  | TaxonomyQuickAddCategoryMessage;
+  | TaxonomyQuickAddCategoryMessage
+  | ListRecordsMessage;
 
 export function sendMessage<T = unknown>(message: ExtensionMessage): Promise<T> {
   return chrome.runtime.sendMessage(message);

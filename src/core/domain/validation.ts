@@ -1,11 +1,11 @@
 import type { AssetRole, AssetType } from './enums';
 import type { ModelPreset, PendingAsset, RecordCategory } from './entities';
 
-/** Roles allowed per asset type. Images/videos must never be Negative. */
+/** Roles allowed per asset type. Images/videos can only be Input Reference or Output. */
 const ALLOWED_ROLES: Record<AssetType, AssetRole[]> = {
   text: ['input', 'input_reference', 'negative', 'output'],
-  image: ['input', 'input_reference', 'output'],
-  video: ['input', 'input_reference', 'output'],
+  image: ['input_reference', 'output'],
+  video: ['input_reference', 'output'],
 };
 
 export function allowedRolesFor(assetType: AssetType): AssetRole[] {
@@ -17,7 +17,7 @@ export function isRoleAllowed(assetType: AssetType, role: AssetRole): boolean {
 }
 
 export const ROLE_NOT_ALLOWED_MESSAGE =
-  '圖片與影片不能作為 Negative，只能作為 Input 或 Output。';
+  '圖片與影片只能作為 Input Reference 或 Output。';
 
 export type ValidationResult = { ok: true } | { ok: false; reason: string };
 

@@ -108,8 +108,20 @@ export function createOverlayManager() {
   function repositionAll(): void {
     for (const item of tracked.values()) positionFrame(item);
   }
-  window.addEventListener('scroll', repositionAll, { passive: true });
-  window.addEventListener('resize', repositionAll, { passive: true });
+  let repositionQueued = false;
+  function scheduleReposition(): void {
+    if (repositionQueued) return;
+    repositionQueued = true;
+    requestAnimationFrame(() => {
+      repositionQueued = false;
+      repositionAll();
+    });
+  }
+  // Capture phase so scrolls inside nested overflow containers (e.g. the
+  // ChatGPT conversation pane) are caught too: scroll events don't bubble, but
+  // capturing at the window sees them from any descendant element.
+  window.addEventListener('scroll', scheduleReposition, { passive: true, capture: true });
+  window.addEventListener('resize', scheduleReposition, { passive: true });
 
   function colorFor(role: AssetRole | null): string {
     return role ? settings.roleColors[role] : settings.roleColors.pending;

@@ -12,6 +12,8 @@ import {
   type DisplaySettings,
 } from '@/src/ui/roleColors';
 import type { OverlayManager } from './overlay';
+import { LOGO_DATA_URL } from './logo';
+import type { GalleryRecord, ListRecordsResult } from '@/src/core/messages';
 
 const send = (message: unknown) => chrome.runtime.sendMessage(message).catch(() => undefined);
 
@@ -146,6 +148,16 @@ function SelectionToolbar({ overlay, settings }: { overlay: OverlayManager; sett
     };
   }, [settings, summon, hide]);
 
+  // Switching trigger mode (e.g. from the popup) cancels any pending selection
+  // toolbar, so a stale role picker from the previous mode doesn't linger.
+  const prevTrigger = useRef(settings.toolbarTrigger);
+  useEffect(() => {
+    if (prevTrigger.current !== settings.toolbarTrigger) {
+      prevTrigger.current = settings.toolbarTrigger;
+      hide();
+    }
+  }, [settings.toolbarTrigger, hide]);
+
   if (!pos) return null;
   // Only roles valid for this target type ever appear (e.g. media → no Negative).
   const roles = settings.toolbarRoles.filter((r) => allowedRolesFor(targetType).includes(r));
@@ -156,7 +168,6 @@ function SelectionToolbar({ overlay, settings }: { overlay: OverlayManager; sett
       style={{ left: pos.x, top: Math.max(pos.y - 46, 8), transform: 'translateX(-50%)' }}
       onMouseDown={(e) => e.preventDefault() /* keep the selection alive */}
     >
-      {targetType !== 'text' && <span className="pt-target-tag">{targetType === 'image' ? '🖼' : '🎞'}</span>}
       {roles.map((role) => (
         <button key={role} style={{ ['--role-color' as string]: settings.roleColors[role] }} onClick={() => capture(role)}>
           {ROLE_LABELS[role]}
@@ -173,9 +184,10 @@ function SelectionToolbar({ overlay, settings }: { overlay: OverlayManager; sett
 function EdgePanel({ session, settings }: { session: CaptureSessionState; settings: DisplaySettings }) {
   const [open, setOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
-  const closeTimer = useRef<number | null>(null);
   const prevCount = useRef(0);
   const [wizard, setWizard] = useState<null | 'category' | 'model'>(null);
+
+  const count = session.assets.length;
 
   // Auto-peek when a new asset lands in the session.
   useEffect(() => {
@@ -185,26 +197,23 @@ function EdgePanel({ session, settings }: { session: CaptureSessionState; settin
     prevCount.current = session.assets.length;
   }, [session.assets.length, session.conflicts.length, session.errors.length]);
 
-  const enter = () => {
-    if (closeTimer.current) window.clearTimeout(closeTimer.current);
-    setOpen(true);
-  };
+  const enter = () => setOpen(true);
   const leave = () => {
-    if (pinned || wizard) return;
-    if (closeTimer.current) window.clearTimeout(closeTimer.current);
-    closeTimer.current = window.setTimeout(() => setOpen(false), 350);
+    // Keep the panel open while a session has items so it never vanishes
+    // mid-capture; when empty, collapse immediately (no lingering delay).
+    if (pinned || wizard || count > 0) return;
+    setOpen(false);
   };
-
-  const count = session.assets.length;
 
   return (
-    <div className="pt-edge" onMouseEnter={enter} onMouseLeave={leave}>
-      {/* Invisible full-height strip: hovering anywhere on the right edge expands the panel. */}
-      {!open && <div className="pt-edge-hoverzone" onMouseEnter={enter} />}
+    <div className={`pt-edge${open ? ' pt-edge--open' : ''}`} onMouseEnter={enter} onMouseLeave={leave}>
       {open ? (
-        <div className="pt-glass pt-panel">
+        <div className={`pt-glass pt-panel${wizard ? ' pt-panel--wizard' : ''}`}>
           <div className="pt-panel-head">
-            <span>✦ PromptTrace</span>
+            <span className="pt-title">
+              <img className="pt-logo-img" src={LOGO_DATA_URL} alt="" />
+              PromptTrace
+            </span>
             <span className="pt-links">
               <a onClick={() => setPinned((p) => !p)} title={pinned ? '取消固定' : '固定面板'}>
                 {pinned ? '📌' : '📍'}
@@ -239,7 +248,7 @@ function EdgePanel({ session, settings }: { session: CaptureSessionState; settin
         </div>
       ) : (
         <div className="pt-glass pt-edge-tab" onClick={enter}>
-          <span>✦</span>
+          <img className="pt-tab-img" src={LOGO_DATA_URL} alt="PromptTrace" />
           {count > 0 && <span className="pt-badge">{count}</span>}
         </div>
       )}
@@ -325,14 +334,20 @@ function PanelBody({
       ))}
 
       {session.assets.length === 0 && session.conflicts.length === 0 && session.errors.length === 0 && (
-        <div className="pt-empty">
-          <span className="pt-logo">✦</span>
-          反白文字（或游標移到圖片 / 影片上）
-          <br />
-          按 <kbd>{settings.summonHotkey}</kbd> 叫出角色選項。
-          <br />
-          <span className="pt-muted">也可用右鍵選單加入；快捷鍵可在 Settings 或 chrome://extensions/shortcuts 修改。</span>
-        </div>
+        <>
+          {session.lastCommittedRecordId && (
+            <div className="pt-card">
+              ✅ 已保存。{' '}
+              <a
+                style={{ color: '#8ad7e8', cursor: 'pointer' }}
+                onClick={() => window.open(chrome.runtime.getURL(`library.html#record=${session.lastCommittedRecordId}`))}
+              >
+                在 Library 查看
+              </a>
+            </div>
+          )}
+          <Gallery settings={settings} />
+        </>
       )}
 
       {grouped.map(({ role, label, items }) => (
@@ -352,17 +367,6 @@ function PanelBody({
         </div>
       ))}
 
-      {session.lastCommittedRecordId && session.assets.length === 0 && (
-        <div className="pt-card">
-          ✅ 已保存。{' '}
-          <a
-            style={{ color: '#8ad7e8', cursor: 'pointer' }}
-            onClick={() => window.open(chrome.runtime.getURL(`library.html#record=${session.lastCommittedRecordId}`))}
-          >
-            在 Library 查看
-          </a>
-        </div>
-      )}
     </>
   );
 }
@@ -406,6 +410,99 @@ function PanelAssetCard({ asset, settings }: { asset: PendingAsset; settings: Di
 }
 
 /* ------------------------------------------------------------------ */
+/*  Gallery: scrollable, copyable library of saved prompts             */
+/* ------------------------------------------------------------------ */
+
+function Gallery({ settings }: { settings: DisplaySettings }) {
+  const [records, setRecords] = useState<GalleryRecord[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    send({ type: 'library/listRecords', payload: {} }).then((r) => {
+      if (alive) setRecords((r as ListRecordsResult | undefined)?.records ?? []);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (records === null) return <div className="pt-empty">載入中…</div>;
+  if (records.length === 0) {
+    return (
+      <div className="pt-empty">
+        <img className="pt-logo" src={LOGO_DATA_URL} alt="" />
+        還沒有保存任何 prompt。
+        <br />
+        反白文字 → <kbd>{settings.summonHotkey}</kbd> → 選角色保存。
+      </div>
+    );
+  }
+  return (
+    <div className="pt-gallery">
+      {records.map((r) => (
+        <GalleryCard key={r.id} record={r} settings={settings} />
+      ))}
+    </div>
+  );
+}
+
+function GalleryCard({ record, settings }: { record: GalleryRecord; settings: DisplaySettings }) {
+  const texts = record.assets.filter((a) => a.assetType === 'text' && a.textContent);
+  const media = record.assets.filter((a) => a.assetType !== 'text' && a.originalUrl);
+  return (
+    <div className="pt-gcard">
+      {(record.categoryName || record.modelLabel) && (
+        <div className="pt-gmeta">
+          {record.categoryName && <span className="pt-gtag">{record.categoryName}</span>}
+          {record.modelLabel && <span className="pt-gtag pt-gtag--model">{record.modelLabel}</span>}
+        </div>
+      )}
+      {media.length > 0 && (
+        <div className="pt-gthumbs">
+          {media.map((a, i) => (
+            <img
+              key={i}
+              src={a.originalUrl}
+              alt=""
+              loading="lazy"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+              }}
+            />
+          ))}
+        </div>
+      )}
+      {texts.map((a, i) => (
+        <GalleryPrompt key={i} role={a.role} text={a.textContent as string} color={settings.roleColors[a.role]} />
+      ))}
+    </div>
+  );
+}
+
+function GalleryPrompt({ role, text, color }: { role: AssetRole; text: string; color: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    } catch {
+      /* clipboard blocked on this page */
+    }
+  };
+  return (
+    <div className="pt-gprompt" onClick={copy} title="點擊複製">
+      <div className="pt-gprompt-head">
+        <span className="pt-pill" style={{ background: color }}>
+          {ROLE_LABELS[role]}
+        </span>
+        <span className="pt-gcopy">{copied ? '已複製 ✓' : '複製'}</span>
+      </div>
+      <div className="pt-gtext">{text}</div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Two-step wizard inside the edge panel                              */
 /* ------------------------------------------------------------------ */
 
@@ -414,7 +511,7 @@ function Wizard({ stage, setStage }: { stage: 'category' | 'model'; setStage: (w
   const [presets, setPresets] = useState<ModelPreset[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
-  const [choice, setChoice] = useState('');
+  const [customOpen, setCustomOpen] = useState(false);
   const [customLabel, setCustomLabel] = useState('');
 
   const loadTaxonomy = useCallback(async () => {
@@ -453,105 +550,114 @@ function Wizard({ stage, setStage }: { stage: 'category' | 'model'; setStage: (w
     setStage(null);
   };
 
+  // Pick a category → jump straight to the model step (no "next" button).
+  const pickCategory = (id: string | null) => {
+    setCategoryId(id);
+    setStage('model');
+  };
+
+  const quickAdd = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    const r = (await send({ type: 'taxonomy/quickAddCategory', payload: { name } })) as
+      | { category: RecordCategory }
+      | undefined;
+    if (r?.category) {
+      setNewName('');
+      pickCategory(r.category.id);
+    }
+  };
+
   if (stage === 'category') {
     return (
-      <div className="pt-card" style={{ borderColor: 'rgba(34,211,238,0.5)' }}>
-        <strong>Step 1 / 2 · 分類（選填）</strong>
-        <div style={{ marginTop: 8 }}>
-          <select value={categoryId ?? ''} onChange={(e) => setCategoryId(e.target.value || null)}>
-            <option value="">未分類</option>
-            {tree.map(({ c, depth }) => (
-              <option key={c.id} value={c.id}>
-                {'　'.repeat(depth)}
-                {c.name}
-              </option>
-            ))}
-          </select>
+      <div className="pt-card pt-wizard">
+        <strong>分類（選填）</strong>
+        <div className="pt-choices">
+          <button className="pt-choice" onClick={() => pickCategory(null)}>
+            未分類
+          </button>
+          {tree.map(({ c, depth }) => (
+            <button
+              key={c.id}
+              className="pt-choice"
+              style={{ paddingLeft: 12 + depth * 14 }}
+              onClick={() => pickCategory(c.id)}
+            >
+              {c.name}
+            </button>
+          ))}
         </div>
-        <div className="pt-row" style={{ marginTop: 6 }}>
+        <div className="pt-row" style={{ marginTop: 8 }}>
           <input
             type="text"
             placeholder="快速新增分類…"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') quickAdd();
+            }}
             style={{ flex: 1, width: 'auto' }}
           />
-          <button
-            className="pt-small-btn"
-            disabled={!newName.trim()}
-            onClick={async () => {
-              const r = (await send({ type: 'taxonomy/quickAddCategory', payload: { name: newName.trim() } })) as
-                | { category: RecordCategory }
-                | undefined;
-              if (r?.category) {
-                setNewName('');
-                await loadTaxonomy();
-                setCategoryId(r.category.id);
-              }
-            }}
-          >
+          <button className="pt-small-btn" disabled={!newName.trim()} onClick={quickAdd}>
             新增
           </button>
         </div>
-        <div className="pt-row" style={{ marginTop: 10 }}>
-          <button className="pt-small-btn" style={{ background: '#22d3ee', color: '#08222a', fontWeight: 700 }} onClick={() => setStage('model')}>
-            下一步
-          </button>
-          <button className="pt-small-btn" onClick={() => setStage(null)}>
-            返回
-          </button>
-        </div>
+        <button className="pt-link-btn" onClick={() => setStage(null)}>
+          ← 返回
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="pt-card" style={{ borderColor: 'rgba(34,211,238,0.5)' }}>
-      <strong>Step 2 / 2 · Model（選填）</strong>
-      <div style={{ marginTop: 8 }}>
-        <select value={choice} onChange={(e) => setChoice(e.target.value)}>
-          <option value="">不填</option>
-          <option value="__unknown">Unknown</option>
-          <option value="__na">Not applicable</option>
-          <option value="__custom">Custom…</option>
-          {presets.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.alias || p.modelName}
-              {p.provider ? `（${p.provider}）` : ''}
-            </option>
-          ))}
-        </select>
-      </div>
-      {choice === '__custom' && (
-        <input
-          type="text"
-          style={{ marginTop: 6 }}
-          placeholder="自訂 model 名稱"
-          value={customLabel}
-          onChange={(e) => setCustomLabel(e.target.value)}
-        />
-      )}
-      <div className="pt-row" style={{ marginTop: 10 }}>
-        <button
-          className="pt-small-btn"
-          style={{ background: 'linear-gradient(135deg,#34d399,#22d3ee)', color: '#06231f', fontWeight: 700 }}
-          onClick={() => {
-            if (choice === '__unknown') commit({ modelLabel: 'Unknown' });
-            else if (choice === '__na') commit({ modelLabel: 'Not applicable' });
-            else if (choice === '__custom') commit({ modelLabel: customLabel.trim() || 'Custom' });
-            else if (choice === '') commit({});
-            else {
-              const p = presets.find((x) => x.id === choice);
-              commit({ modelPresetId: choice, modelName: p?.modelName, modelProvider: p?.provider });
-            }
-          }}
-        >
-          ✓ 保存到 Library
+    <div className="pt-card pt-wizard">
+      <strong>Model（選填）</strong>
+      <div className="pt-choices">
+        <button className="pt-choice" onClick={() => commit({})}>
+          不填（直接保存）
         </button>
-        <button className="pt-small-btn" onClick={() => setStage('category')}>
-          上一步
+        {presets.map((p) => (
+          <button
+            key={p.id}
+            className="pt-choice"
+            onClick={() => commit({ modelPresetId: p.id, modelName: p.modelName, modelProvider: p.provider })}
+          >
+            {p.alias || p.modelName}
+            {p.provider ? `（${p.provider}）` : ''}
+          </button>
+        ))}
+        <button className="pt-choice pt-choice--sub" onClick={() => commit({ modelLabel: 'Unknown' })}>
+          Unknown
         </button>
+        <button className="pt-choice pt-choice--sub" onClick={() => commit({ modelLabel: 'Not applicable' })}>
+          Not applicable
+        </button>
+        {!customOpen ? (
+          <button className="pt-choice pt-choice--sub" onClick={() => setCustomOpen(true)}>
+            自訂…
+          </button>
+        ) : (
+          <div className="pt-row">
+            <input
+              type="text"
+              placeholder="自訂 model 名稱"
+              value={customLabel}
+              autoFocus
+              onChange={(e) => setCustomLabel(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && customLabel.trim()) commit({ modelLabel: customLabel.trim() });
+              }}
+              style={{ flex: 1, width: 'auto' }}
+            />
+            <button className="pt-small-btn" disabled={!customLabel.trim()} onClick={() => commit({ modelLabel: customLabel.trim() })}>
+              保存
+            </button>
+          </div>
+        )}
       </div>
+      <button className="pt-link-btn" onClick={() => setStage('category')}>
+        ← 上一步
+      </button>
     </div>
   );
 }

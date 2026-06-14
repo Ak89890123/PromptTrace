@@ -28,14 +28,17 @@ describe('role validation', () => {
     expect(allowedRolesFor('text')).toEqual(['input', 'input_reference', 'negative', 'output']);
   });
 
-  it('image and video cannot be negative, but can be input/reference/output', () => {
+  it('image and video are reference/output only (never input or negative)', () => {
     expect(isRoleAllowed('image', 'negative')).toBe(false);
     expect(isRoleAllowed('video', 'negative')).toBe(false);
+    expect(isRoleAllowed('image', 'input')).toBe(false);
+    expect(isRoleAllowed('video', 'input')).toBe(false);
     expect(isRoleAllowed('image', 'input_reference')).toBe(true);
     expect(isRoleAllowed('video', 'input_reference')).toBe(true);
-    expect(isRoleAllowed('image', 'input')).toBe(true);
+    expect(isRoleAllowed('image', 'output')).toBe(true);
     expect(isRoleAllowed('video', 'output')).toBe(true);
-    expect(allowedRolesFor('image')).toEqual(['input', 'input_reference', 'output']);
+    expect(allowedRolesFor('image')).toEqual(['input_reference', 'output']);
+    expect(allowedRolesFor('video')).toEqual(['input_reference', 'output']);
   });
 });
 

@@ -54,12 +54,6 @@
 }
 .pt-toolbar button:hover { transform: scale(1.07); filter: brightness(1.1); }
 .pt-toolbar button:active { transform: scale(0.96); }
-.pt-toolbar .pt-target-tag {
-  display: flex;
-  align-items: center;
-  padding: 0 4px 0 8px;
-  font-size: 13px;
-}
 
 /* ---------- edge panel ---------- */
 
@@ -73,14 +67,13 @@
   align-items: center;
   pointer-events: none;
 }
-
-.pt-edge-hoverzone {
-  pointer-events: auto;
-  position: fixed;
-  top: 0;
-  right: 0;
-  width: 14px;
-  height: 100vh;
+/* When the panel is open, top-align it (and give a small gap) instead of
+   vertically centering, so it sits high and tall content never gets clipped. */
+.pt-edge--open {
+  align-items: flex-start;
+}
+.pt-edge--open .pt-panel {
+  margin-top: 14px;
 }
 
 .pt-edge-tab {
@@ -99,6 +92,7 @@
   opacity: 0.85;
 }
 .pt-edge-tab:hover { opacity: 1; }
+.pt-edge-tab .pt-tab-img { width: 22px; height: 22px; display: block; }
 
 .pt-edge-tab .pt-badge {
   background: #22d3ee;
@@ -124,6 +118,11 @@
   transform-origin: right center;
   animation: pt-slide 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.05);
 }
+/* The wizard (category/model choice lists) needs far less width than the
+   asset list, so narrow the panel while choosing. */
+.pt-panel--wizard {
+  width: 232px;
+}
 
 @keyframes pt-slide {
   from { transform: translateX(24px); opacity: 0; }
@@ -139,6 +138,8 @@
   font-weight: 700;
   letter-spacing: -0.01em;
 }
+.pt-panel-head .pt-title { display: inline-flex; align-items: center; gap: 7px; }
+.pt-panel-head .pt-logo-img { width: 18px; height: 18px; }
 .pt-panel-head .pt-links { display: flex; gap: 10px; }
 .pt-panel-head a {
   color: #8ad7e8;
@@ -236,7 +237,6 @@
 .pt-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .pt-spread { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 
-.pt-panel select,
 .pt-panel input[type='text'] {
   width: 100%;
   background: rgba(0, 0, 0, 0.3);
@@ -262,6 +262,93 @@
 }
 .pt-small-btn:hover { background: rgba(255, 255, 255, 0.15); }
 
+/* Wizard: narrow vertical lists of one-tap choices (category → model → save). */
+.pt-wizard { border-color: rgba(34, 211, 238, 0.5); }
+.pt-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.pt-choice {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f5f5f7;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+.pt-choice:hover {
+  background: rgba(34, 211, 238, 0.16);
+  border-color: rgba(34, 211, 238, 0.55);
+}
+.pt-choice:active { transform: scale(0.99); }
+.pt-choice--sub { opacity: 0.7; font-size: 12px; padding: 7px 12px; }
+.pt-link-btn {
+  background: none;
+  border: none;
+  color: rgba(245, 245, 247, 0.55);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 8px 2px 2px;
+}
+.pt-link-btn:hover { color: #f5f5f7; }
+
+/* Gallery: scrollable cards of saved prompts (a lightweight Library). */
+.pt-gallery { display: flex; flex-direction: column; gap: 8px; }
+.pt-gcard {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 8px;
+}
+.pt-gmeta { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.pt-gtag {
+  font-size: 10.5px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(245, 245, 247, 0.8);
+}
+.pt-gtag--model { background: rgba(34, 211, 238, 0.18); color: #a8e8f3; }
+.pt-gthumbs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
+.pt-gthumbs img { width: 54px; height: 54px; object-fit: cover; border-radius: 8px; }
+.pt-gprompt {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 8px;
+  padding: 6px 8px;
+  margin-top: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.pt-gprompt:first-of-type { margin-top: 0; }
+.pt-gprompt:hover { background: rgba(34, 211, 238, 0.12); }
+.pt-gprompt-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.pt-gcopy { font-size: 10.5px; color: rgba(245, 245, 247, 0.55); }
+.pt-gprompt:hover .pt-gcopy { color: #8ad7e8; }
+.pt-gtext {
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(245, 245, 247, 0.85);
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .pt-h2 {
   font-size: 11px;
   text-transform: uppercase;
@@ -278,7 +365,7 @@
   font-size: 12.5px;
   line-height: 1.7;
 }
-.pt-empty .pt-logo { font-size: 26px; display: block; margin-bottom: 6px; }
+.pt-empty .pt-logo { width: 40px; height: 40px; display: block; margin: 0 auto 8px; }
 kbd {
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid rgba(255, 255, 255, 0.2);

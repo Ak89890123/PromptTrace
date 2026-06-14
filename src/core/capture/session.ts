@@ -2,7 +2,7 @@ import type { PendingAsset } from '../domain/entities';
 import type { CaptureConflict } from '../errors/conflictTypes';
 import type { CaptureError } from '../errors/errorTypes';
 
-/** Wizard step the side panel is currently showing. */
+/** Wizard step the in-page edge panel is currently showing. */
 export type WizardStage = 'idle' | 'category' | 'model';
 
 export type CaptureSessionState = {
