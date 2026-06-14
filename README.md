@@ -21,11 +21,13 @@
 
 ## Features
 
-- **召喚鍵工作流**：反白文字（或游標移到圖片 / 影片上）→ 按召喚鍵（預設 Alt+S）→ 就地浮出該對象合法的角色選項（圖片 / 影片不會出現 Negative）
+- **召喚鍵工作流**：反白文字（或游標移到圖片 / 影片上）→ 按召喚鍵（預設 Alt+S）→ 就地浮出該對象合法的角色選項（圖片 / 影片只會有 Input Reference / Output）
 - **瀏覽器層級快捷鍵**：召喚鍵走 `chrome.commands`，優先權高於網頁按鍵處理、不被網站吃掉，可在 `chrome://extensions/shortcuts` 重綁；Settings 另有頁面內備用鍵與錄製器
-- **右緣漂浮面板**：滑鼠靠近頁面右邊緣自動展開 iOS 玻璃質感面板，session 管理與保存 wizard 都在頁面內完成（Chrome side panel 保留為備用）
+- **右緣漂浮面板**：滑鼠靠近頁面右邊緣自動展開 iOS 玻璃質感面板，session 管理與保存 wizard 都在頁面內完成（不再使用 Chrome side panel）
+- **頁內 Gallery**：沒有待保存項目時，靠近右緣即浮出可捲動、可一鍵複製的 INPUT / OUTPUT prompt 庫（圖書館簡便版）
+- **設定彈出框**：點擊工具列圖示開啟概略設定（快速開關 + 角色出現方式 / 召喚鍵），細項設定另開本地網頁
 - 文字 / 圖片 / 影片 capture session，含 overlay 框線（顏色依角色變化）
-- 角色規則：文字可四種角色；圖片與影片只能 Input / Output（Negative 按鈕 disabled）
+- 角色規則：文字可四種角色；圖片與影片只能 Input Reference / Output
 - 重複 / 重疊選取偵測：Conflict Card（取代或取消）
 - 兩步 wizard：分類（選填、多層、可快速新增）→ Model（選填 / Unknown / Not applicable / Custom）
 - Library Dashboard：搜尋、分類 / Model / 角色篩選、預覽、notes、tags、補充資產（貼文字、拖放或上傳圖片 / 影片）
@@ -39,21 +41,22 @@
 
 ```
 Content Script  ──選取/框線──▶  Background Service Worker  ──IndexedDB──▶  Library / Settings
-     ▲                              │  session state、contextMenus、
-     └──── overlay 訊息 ◀───────────┘  chrome.downloads、錯誤映射
-                 Side Panel（session UI、wizard、Error/Conflict Card）
+     ▲   │ 頁內漂浮面板          │  session state、contextMenus、
+     │   │ session UI、wizard、   │  chrome.downloads、錯誤映射、
+     └───┘ Gallery、錯誤卡        └──  library/listRecords
+                 Popup（概略設定，點工具列圖示開啟）
 ```
 
 - `src/core/`：domain entities、enums、validation、session、overlap、export、copy bundle、error / conflict model（純 TS，無 Chrome API，可單元測試）
 - `src/storage/`：IndexedDB（version 1 migration）、repositories、seed、commit service
 - `src/ui/`：role colors、settings store、共用 hooks / CSS
-- `entrypoints/`：background、content、sidepanel、library、settings（WXT）
+- `entrypoints/`：background、content、popup、library、settings（WXT）
 
 詳見 [docs/architecture.md](docs/architecture.md)。
 
 ## Tech Stack
 
-WXT · TypeScript · React · Chrome Extension Manifest V3 · IndexedDB · chrome.storage / contextMenus / downloads / sidePanel · Vitest
+WXT · TypeScript · React · Chrome Extension Manifest V3 · IndexedDB · chrome.storage / contextMenus / downloads · Vitest
 
 ## Setup
 
@@ -69,7 +72,7 @@ npm test         # unit + integration tests
 1. `npm run build`
 2. 打開 `chrome://extensions`，開啟「開發人員模式」。
 3. 「載入未封裝項目」→ 選 `.output/chrome-mv3` 資料夾。
-4. 點 extension 圖示開啟 Side Panel。
+4. 點 extension 圖示開啟設定彈出框（內含 Library / 詳細設定連結）。
 
 ## Usage
 
@@ -88,7 +91,6 @@ npm test         # unit + integration tests
 | `contextMenus` | 提供右鍵「加入 PromptTrace」選單。 |
 | `downloads` | 把媒體下載到 `Downloads/PromptTrace/`；刪除 Record 時可選擇刪除這些檔案。 |
 | `storage` | 保存設定（角色顏色、匯出偏好）。 |
-| `sidePanel` | 顯示 capture session 與 wizard。 |
 | `clipboardWrite` | Copy Bundle 功能。 |
 
 ## Local-first Privacy Note
@@ -113,7 +115,8 @@ npm test
 - 圖片下載也可能因跨域、登入、防盜鏈失敗；失敗會標記 FileRecord 為 failed，可重試。
 - 重疊選取偵測在 DOM 劇烈變動（如虛擬列表）後可能失準，會退化為文字包含比對。
 - 刪除本地檔案依賴 `chrome.downloads.removeFile`，只能刪 extension 自己下載的檔案；使用者手動移動過的檔案會回報 `file_not_found`。
-- 僅支援 Chrome（MV3）。Side panel 在部分 Chrome 版本需手動允許。
+- 僅支援 Chrome（MV3）。擷取 UI 為頁內注入的 content script，載入擴充前已開啟的分頁需 F5 重整才會生效。
+- Gallery 圖片縮圖以原始 URL best-effort 顯示，URL 失效時自動隱藏（content script 讀不到本地下載路徑）。
 - 文字 + 圖片混合複製不一定被目標網站接受；fallback 是文字先複製、媒體放 Copy Tray 逐項處理。
 
 ## Roadmap
@@ -132,6 +135,32 @@ MIT — 見 [LICENSE](LICENSE)。
 ---
 
 ## 開發日誌
+
+### 2026-06-14 收工
+
+**做了什麼：**（commit `9d367c6`）
+- 移除 Chrome side panel（連 entrypoint + `sidePanel` 權限），改用 browser-action **popup** 當「概略設定」（4 快速開關 + 角色出現方式 / 召喚鍵 + Library / 詳細設定連結）；點工具列圖示不再開側欄。
+- Branding：新增 P icon（`public/icon/{16..128}.png` + manifest `icons`/`action.default_icon`），UI 內 ✦ 全換成 logo（content script 用 inline data URI `entrypoints/content/logo.ts` 避免破圖；popup 用 `/icon/128.png`）。
+- 角色規則：圖片與影片只能 Input Reference / Output（移除 Input、Negative）；同步更新 `validation.ts` + 測試 + `ROLE_NOT_ALLOWED_MESSAGE`。
+- Overlay 追蹤修復：scroll listener 改 **capture 階段** + `requestAnimationFrame`，能追內層捲動容器（ChatGPT），不再黏 viewport。
+- Edge panel UX：有項目時常駐不收、空時移開瞬間收（移除 350ms 延遲）、hover 觸發限可見圓框 tab（移除全高隱形帶）、開啟時頂部對齊、wizard 時面板變窄（232px）。
+- Wizard 重寫：分類 / Model 改窄直向一鍵清單（分類 → Model → 入庫），移除 `<select>` 與「下一步」。
+- 飄浮 **Gallery**：沒有待存項目時 hover 右緣 → 可捲動、可複製的 INPUT / OUTPUT prompt 庫（新增 `library/listRecords` 訊息 + background handler；content script 讀不到擴充 IndexedDB 故走 background 撈）。
+
+**踩到的坑：**
+- content script 在 shadow DOM 載入圖片需 `web_accessible_resources`（`chrome.runtime.getURL`）；為零破圖風險改用 inline data URI。
+- WXT 會從 popup 的 `<title>` 自動推導 `action.default_title` / `default_popup`，覆蓋 `wxt.config` 裡手寫的 `default_title`。
+- 所有改動只跑過 `tsc` / `build` / 56 tests，**Windows 無法用 browse 自動驗 Chrome 行為**。
+
+**下次方向：**
+- **全部改動尚未在 Chrome 實機驗證**。先：移除舊擴充 → 重新載入 `.output/chrome-mv3/` → 對頁面按 F5，逐項驗：
+  - 工具列圖示變橘 P；點圖示出現設定彈出框（非側欄）
+  - content script 仍會注入（EdgePanel 現在是唯一擷取 UI、無 fallback）：Console 看 `[PromptTrace]`、Elements 找 `<prompttrace-ui>`
+  - Gallery：空狀態 hover 右緣浮出、點 prompt 會複製（注意 `navigator.clipboard` 是否被該頁擋）
+  - overlay 追蹤：ChatGPT 框選後捲動，框跟著文字移動
+  - 圖片 / 影片 summon 工具列只剩 Input Reference / Output、無破方框
+- 未決：使用者提過「保存選種類在右上角」——目前保存流程仍在擷取面板內（有待存項目時顯示），若要移位再處理。
+- 邊角：ChatGPT 串流內容長高（非捲動）時 overlay 可能飄，要根治需加 `ResizeObserver`；Gallery 圖片縮圖常失效時可考慮存 thumbnail dataURL。
 
 ### 2026-06-13 收工
 
