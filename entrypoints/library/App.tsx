@@ -18,7 +18,7 @@ import {
   recordRepository,
   tagRepository,
 } from '@/src/storage/repositories';
-import { DEFAULT_ROLE_COLORS, loadSettings } from '@/src/ui/roleColors';
+import { DEFAULT_ROLE_COLORS, DEFAULT_SETTINGS, loadSettings, onSettingsChanged } from '@/src/ui/roleColors';
 import { flattenTree, useTaxonomy } from '@/src/ui/hooks';
 
 type RecordBundle = {
@@ -59,6 +59,11 @@ export default function App() {
   const { categories, presets } = useTaxonomy();
   const [refresh, setRefresh] = useState(0);
   const reload = () => setRefresh((x) => x + 1);
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  useEffect(() => {
+    loadSettings().then(setSettings);
+    onSettingsChanged(setSettings);
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -103,7 +108,7 @@ export default function App() {
 
   return (
     <div style={{ display: 'flex', height: '100vh' }}>
-      <div style={{ width: 360, borderRight: '1px solid var(--border)', overflow: 'auto', padding: 12 }}>
+      <div style={{ width: 430, borderRight: '1px solid var(--border)', overflow: 'auto', padding: 12 }}>
         <h1>Library</h1>
         <input placeholder="搜尋…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <div className="row" style={{ marginTop: 6 }}>
@@ -147,6 +152,7 @@ export default function App() {
                 <div className="muted">
                   {new Date(r.createdAt).toLocaleString()} · {assets.length} assets
                 </div>
+                <CardPreview assets={assets} layout={settings.cardLayout} />
               </div>
             );
           })}
@@ -642,3 +648,78 @@ function RecordDetail(props: {
     </div>
   );
 }
+
+/** Compact left/right (or output-only) preview of a record's assets on its list card. */
+function CardPreview({ assets, layout }: { assets: Asset[]; layout: 'split' | 'output-only' }) {
+  const cell = (a: Asset) => {
+    if (a.assetType === 'text') {
+      const text = (a.textContent ?? '').trim();
+      return text ? (
+        <div key={a.id} style={prevTextStyle}>
+          {text.slice(0, 160)}
+        </div>
+      ) : null;
+    }
+    const src = a.previewRef ?? a.originalUrl;
+    return src ? (
+      <img
+        key={a.id}
+        src={src}
+        alt=""
+        style={prevThumbStyle}
+        onError={(e) => {
+          e.currentTarget.style.display = 'none';
+        }}
+      />
+    ) : null;
+  };
+  const col = (items: Asset[], label: string) => (
+    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={prevLabelStyle}>{label}</div>
+      {items.length === 0 ? <div style={prevEmptyStyle}>—</div> : items.map(cell)}
+    </div>
+  );
+  const left = assets.filter((a) => a.role !== 'output');
+  const right = assets.filter((a) => a.role === 'output');
+  if (layout === 'output-only') {
+    return <div style={{ marginTop: 6 }}>{col(right, 'Output')}</div>;
+  }
+  return (
+    <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+      {col(left, 'Input · Reference')}
+      {col(right, 'Output')}
+    </div>
+  );
+}
+
+const prevTextStyle: React.CSSProperties = {
+  fontSize: 11,
+  lineHeight: 1.4,
+  color: 'var(--text)',
+  opacity: 0.82,
+  background: 'var(--panel-2)',
+  borderRadius: 6,
+  padding: '4px 6px',
+  maxHeight: 52,
+  overflow: 'hidden',
+};
+const prevThumbStyle: React.CSSProperties = {
+  width: '100%',
+  maxHeight: 70,
+  objectFit: 'cover',
+  borderRadius: 6,
+  display: 'block',
+};
+const prevLabelStyle: React.CSSProperties = {
+  fontSize: 9,
+  letterSpacing: '0.04em',
+  textTransform: 'uppercase',
+  fontWeight: 600,
+  opacity: 0.5,
+};
+const prevEmptyStyle: React.CSSProperties = {
+  fontSize: 12,
+  opacity: 0.3,
+  textAlign: 'center',
+  padding: '6px 0',
+};

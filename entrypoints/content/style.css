@@ -57,23 +57,32 @@
 
 /* ---------- edge panel ---------- */
 
-.pt-edge {
+/* Capture panel: pinned to the top-right corner, shown only while capturing. */
+.pt-capture-edge {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 2147483647;
+  display: flex;
+  align-items: flex-start;
+  pointer-events: none;
+}
+.pt-capture-edge .pt-panel {
+  margin-top: 14px;
+}
+
+/* Gallery panel: anchored to the right-middle. The tab and the expanded panel
+   share the same vertical center (align-items: center, never switched), so
+   opening slides out in place instead of jumping to the top. */
+.pt-gallery-edge {
   position: fixed;
   top: 0;
   right: 0;
   height: 100vh;
-  z-index: 2147483647;
+  z-index: 2147483646;
   display: flex;
   align-items: center;
   pointer-events: none;
-}
-/* When the panel is open, top-align it (and give a small gap) instead of
-   vertically centering, so it sits high and tall content never gets clipped. */
-.pt-edge--open {
-  align-items: flex-start;
-}
-.pt-edge--open .pt-panel {
-  margin-top: 14px;
 }
 
 .pt-edge-tab {
@@ -290,6 +299,19 @@
 }
 .pt-choice:active { transform: scale(0.99); }
 .pt-choice--sub { opacity: 0.7; font-size: 12px; padding: 7px 12px; }
+.pt-choice--detected {
+  border-color: rgba(34, 211, 238, 0.55);
+  background: rgba(34, 211, 238, 0.12);
+  color: #d6f6fd;
+}
+.pt-wizard-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 2px;
+}
+.pt-wizard-x { color: rgba(245, 130, 130, 0.7); }
+.pt-wizard-x:hover { color: #ff8a8a; }
 .pt-link-btn {
   background: none;
   border: none;
@@ -320,6 +342,24 @@
 .pt-gtag--model { background: rgba(34, 211, 238, 0.18); color: #a8e8f3; }
 .pt-gthumbs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
 .pt-gthumbs img { width: 54px; height: 54px; object-fit: cover; border-radius: 8px; }
+.pt-gallery-panel { width: min(440px, 94vw); }
+.pt-gcols { display: flex; gap: 8px; align-items: flex-start; }
+.pt-gcol { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.pt-gcol-label {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: rgba(245, 245, 247, 0.4);
+  padding: 0 2px;
+}
+.pt-gcol-empty {
+  color: rgba(245, 245, 247, 0.22);
+  font-size: 13px;
+  text-align: center;
+  padding: 10px 0;
+}
+.pt-gthumb { width: 100%; max-height: 120px; object-fit: cover; border-radius: 8px; display: block; }
 .pt-gprompt {
   background: rgba(0, 0, 0, 0.25);
   border-radius: 8px;

@@ -25,12 +25,15 @@ export type DisplaySettings = {
   /** 'hotkey' = select → press summon key → role options appear; 'auto' = appear right after selecting. */
   toolbarTrigger: 'auto' | 'hotkey';
   /**
-   * In-page summon key (fallback). The primary summon path is the
-   * chrome.commands browser-level shortcut, which overrides page handlers.
+   * Summon key handled in-page (capture phase). This is the authoritative,
+   * user-configurable shortcut; an optional browser-level override can be set
+   * at chrome://extensions/shortcuts.
    */
   summonHotkey: string;
   /** Which role buttons the toolbar may show (filtered per asset type at popup time). */
   toolbarRoles: AssetRole[];
+  /** Saved-prompt card layout: 'split' = Input·Reference | Output; 'output-only'. */
+  cardLayout: 'split' | 'output-only';
 };
 
 export const DEFAULT_SETTINGS: DisplaySettings = {
@@ -46,6 +49,7 @@ export const DEFAULT_SETTINGS: DisplaySettings = {
   toolbarTrigger: 'hotkey',
   summonHotkey: 'Alt+S',
   toolbarRoles: ['input', 'input_reference', 'negative', 'output'],
+  cardLayout: 'split',
 };
 
 const SETTINGS_KEY = 'prompttrace:settings';

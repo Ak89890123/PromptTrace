@@ -116,9 +116,11 @@ function InteractionSettings({
         流程：反白文字（或游標移到圖片 / 影片上）→ 按召喚鍵 → 就地跳出該對象「合法的」角色選項
         （例如圖片不會出現 Negative）。
         <br />
-        <strong>要蓋過網站自己的按鍵：</strong>到{' '}
-        <code>chrome://extensions/shortcuts</code> 設定「PromptTrace：叫出角色選項」的瀏覽器層級快捷鍵
-        （預設 Alt+S）——它的優先權高於網頁按鍵處理，不會被網站吃掉。上面的「頁面內召喚鍵」是備用路徑。
+        上面的「頁面內召喚鍵」就是主要的召喚快捷鍵，改了即時生效、無需重新整理。
+        <br />
+        <strong>若某網站把按鍵吃掉：</strong>可另到{' '}
+        <code>chrome://extensions/shortcuts</code> 為「PromptTrace：叫出角色選項」設定一個瀏覽器層級快捷鍵
+        （預設不綁，優先權高於網頁按鍵處理）。
       </p>
       <h2>工具列顯示哪些角色按鈕（2–4 顆，依對象自動過濾）</h2>
       <div className="row">
@@ -431,6 +433,18 @@ function DisplaySettingsSection({
           />
           啟用 Floating Copy Tray
         </label>
+      </div>
+      <div className="row" style={{ marginTop: 8 }}>
+        <label className="muted">已存 Prompt 卡片顯示</label>
+        <select
+          style={{ width: 'auto' }}
+          value={settings.cardLayout}
+          onChange={(e) => onPatch({ cardLayout: e.target.value as 'split' | 'output-only' })}
+        >
+          <option value="split">左右顯示（Input · Reference ｜ Output）</option>
+          <option value="output-only">只顯示 Output</option>
+        </select>
+        <span className="muted">套用到頁內 Gallery 與 Library 卡片。</span>
       </div>
     </section>
   );

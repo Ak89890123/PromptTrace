@@ -13,7 +13,8 @@ import {
 } from '@/src/ui/roleColors';
 import type { OverlayManager } from './overlay';
 import { LOGO_DATA_URL } from './logo';
-import type { GalleryRecord, ListRecordsResult } from '@/src/core/messages';
+import type { GalleryAsset, GalleryRecord, ListRecordsResult } from '@/src/core/messages';
+import { detectProvider } from '@/src/core/capture/detectProvider';
 
 const send = (message: unknown) => chrome.runtime.sendMessage(message).catch(() => undefined);
 
@@ -39,7 +40,8 @@ export default function PanelApp({ overlay }: { overlay: OverlayManager }) {
   return (
     <>
       {settings.selectionToolbarEnabled && <SelectionToolbar overlay={overlay} settings={settings} />}
-      {settings.edgePanelEnabled && <EdgePanel session={session} settings={settings} />}
+      {settings.edgePanelEnabled && <CapturePanel session={session} settings={settings} />}
+      {settings.edgePanelEnabled && <GalleryPanel settings={settings} />}
     </>
   );
 }
@@ -138,13 +140,15 @@ function SelectionToolbar({ overlay, settings }: { overlay: OverlayManager; sett
     document.addEventListener('mouseover', onMouseOver, true);
     document.addEventListener('mouseup', onMouseUp);
     document.addEventListener('keydown', onKeyDown, true);
-    window.addEventListener('scroll', onScroll, { passive: true });
+    // Capture phase so scrolling a nested overflow container (e.g. the ChatGPT
+    // conversation pane) also dismisses the toolbar — those scrolls don't bubble.
+    window.addEventListener('scroll', onScroll, { passive: true, capture: true });
     return () => {
       window.removeEventListener('prompttrace:summon', onSummon);
       document.removeEventListener('mouseover', onMouseOver, true);
       document.removeEventListener('mouseup', onMouseUp);
       document.removeEventListener('keydown', onKeyDown, true);
-      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('scroll', onScroll, true);
     };
   }, [settings, summon, hide]);
 
@@ -178,18 +182,19 @@ function SelectionToolbar({ overlay, settings }: { overlay: OverlayManager; sett
 }
 
 /* ------------------------------------------------------------------ */
-/*  Edge panel: hover the right edge → glass panel slides out          */
+/*  Capture panel: top-right corner, shown only while capturing        */
 /* ------------------------------------------------------------------ */
 
-function EdgePanel({ session, settings }: { session: CaptureSessionState; settings: DisplaySettings }) {
+function CapturePanel({ session, settings }: { session: CaptureSessionState; settings: DisplaySettings }) {
   const [open, setOpen] = useState(false);
-  const [pinned, setPinned] = useState(false);
   const prevCount = useRef(0);
   const [wizard, setWizard] = useState<null | 'category' | 'model'>(null);
 
   const count = session.assets.length;
+  const active = count > 0 || session.conflicts.length > 0 || session.errors.length > 0;
+  const justSaved = !active && !!session.lastCommittedRecordId;
 
-  // Auto-peek when a new asset lands in the session.
+  // Auto-peek when a new asset / conflict / error lands in the session.
   useEffect(() => {
     if (session.assets.length > prevCount.current || session.conflicts.length > 0 || session.errors.length > 0) {
       setOpen(true);
@@ -197,66 +202,85 @@ function EdgePanel({ session, settings }: { session: CaptureSessionState; settin
     prevCount.current = session.assets.length;
   }, [session.assets.length, session.conflicts.length, session.errors.length]);
 
-  const enter = () => setOpen(true);
+  // Nothing to show when idle — browsing saved prompts lives in GalleryPanel.
+  if (!open || (!active && !justSaved)) return null;
+
   const leave = () => {
-    // Keep the panel open while a session has items so it never vanishes
-    // mid-capture; when empty, collapse immediately (no lingering delay).
-    if (pinned || wizard || count > 0) return;
+    // Never vanish mid-capture; once idle, collapse on leave.
+    if (active || wizard) return;
     setOpen(false);
   };
 
   return (
-    <div className={`pt-edge${open ? ' pt-edge--open' : ''}`} onMouseEnter={enter} onMouseLeave={leave}>
+    <div className="pt-capture-edge" onMouseEnter={() => setOpen(true)} onMouseLeave={leave}>
+      <div className={`pt-glass pt-panel${wizard ? ' pt-panel--wizard' : ''}`}>
+        <div className="pt-panel-head">
+          <span className="pt-title">
+            <img className="pt-logo-img" src={LOGO_DATA_URL} alt="" />
+            PromptTrace
+          </span>
+          <span className="pt-links">
+            <a onClick={() => window.open(chrome.runtime.getURL('library.html'))}>Library</a>
+            <a onClick={() => window.open(chrome.runtime.getURL('settings.html'))}>Settings</a>
+          </span>
+        </div>
+        <div className="pt-panel-body">
+          <CaptureBody session={session} settings={settings} wizard={wizard} setWizard={setWizard} />
+        </div>
+        {count > 0 && !wizard && (
+          <div className="pt-footer">
+            <button
+              className="pt-commit"
+              disabled={!canCommit(session)}
+              title={canCommit(session) ? '' : '所有項目都需要先指定角色'}
+              onClick={() => setWizard('category')}
+            >
+              ✓ 保存（{count}）
+            </button>
+            <button className="pt-cancel" onClick={() => send({ type: 'capture/clearSession', payload: {} })}>
+              ✕ 取消
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Gallery panel: right-middle, pure hover (collapses on mouse-leave) */
+/* ------------------------------------------------------------------ */
+
+function GalleryPanel({ settings }: { settings: DisplaySettings }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="pt-gallery-edge" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
       {open ? (
-        <div className={`pt-glass pt-panel${wizard ? ' pt-panel--wizard' : ''}`}>
+        <div className="pt-glass pt-panel pt-gallery-panel">
           <div className="pt-panel-head">
             <span className="pt-title">
               <img className="pt-logo-img" src={LOGO_DATA_URL} alt="" />
               PromptTrace
             </span>
             <span className="pt-links">
-              <a onClick={() => setPinned((p) => !p)} title={pinned ? '取消固定' : '固定面板'}>
-                {pinned ? '📌' : '📍'}
-              </a>
               <a onClick={() => window.open(chrome.runtime.getURL('library.html'))}>Library</a>
               <a onClick={() => window.open(chrome.runtime.getURL('settings.html'))}>Settings</a>
             </span>
           </div>
           <div className="pt-panel-body">
-            <PanelBody
-              session={session}
-              settings={settings}
-              wizard={wizard}
-              setWizard={setWizard}
-            />
+            <Gallery settings={settings} />
           </div>
-          {count > 0 && !wizard && (
-            <div className="pt-footer">
-              <button
-                className="pt-commit"
-                disabled={!canCommit(session)}
-                title={canCommit(session) ? '' : '所有項目都需要先指定角色'}
-                onClick={() => setWizard('category')}
-              >
-                ✓ 保存（{count}）
-              </button>
-              <button className="pt-cancel" onClick={() => send({ type: 'capture/clearSession', payload: {} })}>
-                ✕ 取消
-              </button>
-            </div>
-          )}
         </div>
       ) : (
-        <div className="pt-glass pt-edge-tab" onClick={enter}>
+        <div className="pt-glass pt-edge-tab">
           <img className="pt-tab-img" src={LOGO_DATA_URL} alt="PromptTrace" />
-          {count > 0 && <span className="pt-badge">{count}</span>}
         </div>
       )}
     </div>
   );
 }
 
-function PanelBody({
+function CaptureBody({
   session,
   settings,
   wizard,
@@ -279,7 +303,7 @@ function PanelBody({
   }, [session.assets]);
 
   if (wizard) {
-    return <Wizard stage={wizard} setStage={setWizard} />;
+    return <Wizard stage={wizard} setStage={setWizard} sourceUrl={session.assets[0]?.pageUrl} />;
   }
 
   return (
@@ -333,22 +357,20 @@ function PanelBody({
         </div>
       ))}
 
-      {session.assets.length === 0 && session.conflicts.length === 0 && session.errors.length === 0 && (
-        <>
-          {session.lastCommittedRecordId && (
-            <div className="pt-card">
-              ✅ 已保存。{' '}
-              <a
-                style={{ color: '#8ad7e8', cursor: 'pointer' }}
-                onClick={() => window.open(chrome.runtime.getURL(`library.html#record=${session.lastCommittedRecordId}`))}
-              >
-                在 Library 查看
-              </a>
-            </div>
-          )}
-          <Gallery settings={settings} />
-        </>
-      )}
+      {session.assets.length === 0 &&
+        session.conflicts.length === 0 &&
+        session.errors.length === 0 &&
+        session.lastCommittedRecordId && (
+          <div className="pt-card">
+            ✅ 已保存。{' '}
+            <a
+              style={{ color: '#8ad7e8', cursor: 'pointer' }}
+              onClick={() => window.open(chrome.runtime.getURL(`library.html#record=${session.lastCommittedRecordId}`))}
+            >
+              在 Library 查看
+            </a>
+          </div>
+        )}
 
       {grouped.map(({ role, label, items }) => (
         <div key={label}>
@@ -446,8 +468,9 @@ function Gallery({ settings }: { settings: DisplaySettings }) {
 }
 
 function GalleryCard({ record, settings }: { record: GalleryRecord; settings: DisplaySettings }) {
-  const texts = record.assets.filter((a) => a.assetType === 'text' && a.textContent);
-  const media = record.assets.filter((a) => a.assetType !== 'text' && a.originalUrl);
+  // Left column = prompt side (input / reference / negative); right = output.
+  const left = record.assets.filter((a) => a.role !== 'output');
+  const right = record.assets.filter((a) => a.role === 'output');
   return (
     <div className="pt-gcard">
       {(record.categoryName || record.modelLabel) && (
@@ -456,26 +479,48 @@ function GalleryCard({ record, settings }: { record: GalleryRecord; settings: Di
           {record.modelLabel && <span className="pt-gtag pt-gtag--model">{record.modelLabel}</span>}
         </div>
       )}
-      {media.length > 0 && (
-        <div className="pt-gthumbs">
-          {media.map((a, i) => (
-            <img
-              key={i}
-              src={a.originalUrl}
-              alt=""
-              loading="lazy"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-              }}
-            />
-          ))}
+      <div className="pt-gcols">
+        {settings.cardLayout !== 'output-only' && (
+          <div className="pt-gcol">
+            <div className="pt-gcol-label">Input · Reference</div>
+            {left.length === 0 ? (
+              <div className="pt-gcol-empty">—</div>
+            ) : (
+              left.map((a, i) => <GalleryAssetView key={i} asset={a} settings={settings} />)
+            )}
+          </div>
+        )}
+        <div className="pt-gcol">
+          <div className="pt-gcol-label">Output</div>
+          {right.length === 0 ? (
+            <div className="pt-gcol-empty">—</div>
+          ) : (
+            right.map((a, i) => <GalleryAssetView key={i} asset={a} settings={settings} />)
+          )}
         </div>
-      )}
-      {texts.map((a, i) => (
-        <GalleryPrompt key={i} role={a.role} text={a.textContent as string} color={settings.roleColors[a.role]} />
-      ))}
+      </div>
     </div>
   );
+}
+
+function GalleryAssetView({ asset, settings }: { asset: GalleryAsset; settings: DisplaySettings }) {
+  if (asset.assetType === 'text' && asset.textContent) {
+    return <GalleryPrompt role={asset.role} text={asset.textContent} color={settings.roleColors[asset.role]} />;
+  }
+  if (asset.originalUrl) {
+    return (
+      <img
+        className="pt-gthumb"
+        src={asset.originalUrl}
+        alt=""
+        loading="lazy"
+        onError={(e) => {
+          e.currentTarget.style.display = 'none';
+        }}
+      />
+    );
+  }
+  return null;
 }
 
 function GalleryPrompt({ role, text, color }: { role: AssetRole; text: string; color: string }) {
@@ -506,7 +551,15 @@ function GalleryPrompt({ role, text, color }: { role: AssetRole; text: string; c
 /*  Two-step wizard inside the edge panel                              */
 /* ------------------------------------------------------------------ */
 
-function Wizard({ stage, setStage }: { stage: 'category' | 'model'; setStage: (w: null | 'category' | 'model') => void }) {
+function Wizard({
+  stage,
+  setStage,
+  sourceUrl,
+}: {
+  stage: 'category' | 'model';
+  setStage: (w: null | 'category' | 'model') => void;
+  sourceUrl?: string;
+}) {
   const [categories, setCategories] = useState<RecordCategory[]>([]);
   const [presets, setPresets] = useState<ModelPreset[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(null);
@@ -549,6 +602,12 @@ function Wizard({ stage, setStage }: { stage: 'category' | 'model'; setStage: (w
     await send({ type: 'capture/commitSession', payload: { categoryId, ...model } });
     setStage(null);
   };
+
+  // Provider guessed from the captured page, surfaced as a one-click option.
+  const detected = useMemo(() => detectProvider(sourceUrl), [sourceUrl]);
+  const detectedPreset = detected
+    ? presets.find((p) => p.provider === detected.provider && p.modelName === detected.modelName)
+    : undefined;
 
   // Pick a category → jump straight to the model step (no "next" button).
   const pickCategory = (id: string | null) => {
@@ -602,9 +661,14 @@ function Wizard({ stage, setStage }: { stage: 'category' | 'model'; setStage: (w
             新增
           </button>
         </div>
-        <button className="pt-link-btn" onClick={() => setStage(null)}>
-          ← 返回
-        </button>
+        <div className="pt-wizard-foot">
+          <button className="pt-link-btn" onClick={() => setStage(null)}>
+            ← 返回
+          </button>
+          <button className="pt-link-btn pt-wizard-x" onClick={() => setStage(null)} title="取消保存">
+            ✕ 取消
+          </button>
+        </div>
       </div>
     );
   }
@@ -616,7 +680,25 @@ function Wizard({ stage, setStage }: { stage: 'category' | 'model'; setStage: (w
         <button className="pt-choice" onClick={() => commit({})}>
           不填（直接保存）
         </button>
-        {presets.map((p) => (
+        {detected && (
+          <button
+            className="pt-choice pt-choice--detected"
+            onClick={() =>
+              detectedPreset
+                ? commit({
+                    modelPresetId: detectedPreset.id,
+                    modelName: detectedPreset.modelName,
+                    modelProvider: detectedPreset.provider,
+                  })
+                : commit({ modelName: detected.modelName, modelProvider: detected.provider })
+            }
+          >
+            ✨ {detected.modelName}（{detected.provider}）· 偵測自頁面
+          </button>
+        )}
+        {presets
+          .filter((p) => p.id !== detectedPreset?.id)
+          .map((p) => (
           <button
             key={p.id}
             className="pt-choice"
@@ -655,9 +737,14 @@ function Wizard({ stage, setStage }: { stage: 'category' | 'model'; setStage: (w
           </div>
         )}
       </div>
-      <button className="pt-link-btn" onClick={() => setStage('category')}>
-        ← 上一步
-      </button>
+      <div className="pt-wizard-foot">
+        <button className="pt-link-btn" onClick={() => setStage('category')}>
+          ← 上一步
+        </button>
+        <button className="pt-link-btn pt-wizard-x" onClick={() => setStage(null)} title="取消保存">
+          ✕ 取消
+        </button>
+      </div>
     </div>
   );
 }
