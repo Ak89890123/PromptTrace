@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ChatGPT-like fixture</title>
+    <style>
+      body { margin: 0; font: 16px/1.6 system-ui, sans-serif; background: #f7f7f8; }
+      header { padding: 12px 20px; border-bottom: 1px solid #e5e5e5; font-weight: 600; }
+      /* The conversation pane scrolls on its own (nested overflow), like ChatGPT.
+         The page body itself does NOT scroll — this is what broke overlay frames
+         before the capture-phase scroll listener fix. */
+      #thread { height: 320px; overflow: auto; padding: 16px 20px; }
+      .msg { max-width: 640px; margin: 0 0 28px; padding: 14px 16px; border-radius: 12px; background: #fff; }
+      .msg.user { background: #e8f0fe; margin-left: auto; }
+      .spacer { height: 700px; }
+    </style>
+  </head>
+  <body>
+    <header>Fixture · nested-scroll conversation</header>
+    <main id="thread">
+      <div class="msg" id="msg-1">
+        The quick brown fox jumps over the lazy dog. This paragraph is the
+        capture target — selecting it should draw a role-colored overlay frame
+        that tracks this nested scroll container.
+      </div>
+      <div class="msg user" id="msg-2">A reply message to add vertical content.</div>
+      <div class="msg" id="msg-3">Another assistant message so the pane scrolls.</div>
+      <img id="img-1" alt="sample" width="120" height="80"
+           src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='80'><rect width='120' height='80' fill='%2334D399'/></svg>" />
+      <div class="spacer"></div>
+    </main>
+  </body>
+</html>
