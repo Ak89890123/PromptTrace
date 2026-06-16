@@ -136,6 +136,28 @@ MIT — 見 [LICENSE](LICENSE)。
 
 ## 開發日誌
 
+### 2026-06-16 收工
+
+**做了什麼：**（commits `4133de5` / `f31d79e` / `26f1e96`）
+- **Playwright e2e harness**（取代 Windows 上不可靠的 gstack `browse` daemon）：`playwright.config.ts` + `tests/e2e/`，載入已 build 擴充、穿透 shadow DOM、grant clipboard 權限。每次 run 單一自含行程、無 daemon 即無被 kill 問題。5 個 spec：injection / capture+overlay 巢狀捲動 / **dismiss（工具列捲動消失回歸測試）** / popup 持久化 / clipboard 複製。`npm run test:e2e`（build + 跑）。
+- **面板拆分**：原本右上角「一格兩用」拆成 **CapturePanel（右上、僅擷取中）** + **GalleryPanel（右側中間、純 hover、滑開即收、tab 與面板同高不跳位）**。
+- **下載檔副檔名修正**：來源 URL 結尾 `/content`（ChatGPT/Gemini 圖）會存成無副檔名打不開檔；`mediaFilename()` 依 assetType 補 `.png`/`.mp4`。
+- **模型自動偵測**：`src/core/capture/detectProvider.ts`（4 unit test）依擷取頁 hostname 認 GPT/Claude/Gemini/…；wizard Model 步驟最上方一鍵「✨ 偵測自頁面」。
+- **Wizard `✕ 取消`**：兩步 footer 都可一鍵跳出（離開 wizard、保留已擷取項目）。
+- **卡片左右兩欄 + `cardLayout` 設定**：頁內 Gallery 與 Library 列表卡片都顯示「左 Input·Reference｜右 Output」；設定欄可切「左右顯示 / 只顯示 Output」，即時生效。
+- **召喚鍵 authoritative**：移除 manifest 寫死的 `Alt+S`（`suggested_key`），設定裡的頁內召喚鍵變成唯一主鍵。
+- **工具列捲動消失 bug 修正**：選取工具列的 scroll 監聽改 capture 階段，巢狀容器（ChatGPT pane）捲動也會消失。
+
+**踩到的坑：**
+- `browse` daemon 在這台 Windows **間歇性**被 kill（log 顯示 4/26 曾成功），且 headless 對 MV3 content-script/shadow/clipboard/CSP 本來就驗不準 → 改用 Playwright e2e（見 memory [[feedback-browse-tool-windows]]）。
+- `chrome.commands` 的瀏覽器層級快捷鍵**無法**由擴充設定改寫（只能使用者去 `chrome://extensions/shortcuts`），所以「設定裡的召喚鍵」過去只是頁內 fallback，與 Alt+S 兩條獨立路徑 → 使用者誤以為改了沒用。
+- content script 內 `<img src=遠端>` 受**宿主頁 CSP** 管轄，ChatGPT 真站縮圖很可能空白（預期限制非 bug）。
+
+**下次方向：**
+- ⚠️ **先重新載入擴充一次**（`chrome://extensions` reload `.output/chrome-mv3/`），讓「移除 Alt+S」的新 manifest 生效；之後只有設定裡的召喚鍵會作用。
+- **剩下只能手動 F5 驗的視覺/真站項**（e2e 用本地 fixture 測不到）：① 圖示變橘 P + 點出 popup ② **真 ChatGPT 的 Gallery 圖片縮圖**（大機率空白＝CSP 限制；要修得改存本地 thumbnail dataURL，見下）③ 圖片 summon 工具列只剩 Input Reference / Output。
+- 可選 feature：Gallery 圖片縮圖改存**本地 thumbnail dataURL**（根治 CSP/限時 URL 失效）；ChatGPT 串流內容長高時 overlay 飄移要加 `ResizeObserver`。
+
 ### 2026-06-14 收工
 
 **做了什麼：**（commit `9d367c6`）
