@@ -28,7 +28,9 @@ export default defineConfig({
     },
     commands: {
       'summon-toolbar': {
-        suggested_key: { default: 'Alt+S' },
+        // No default key: the in-page summon hotkey (Settings → 召喚鍵) is the
+        // authoritative shortcut. Users may still bind a browser-level override
+        // at chrome://extensions/shortcuts if a site swallows the in-page key.
         description: '在反白的文字（或游標下的圖片/影片）旁叫出角色選項',
       },
     },

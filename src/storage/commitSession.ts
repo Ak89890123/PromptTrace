@@ -3,6 +3,19 @@ import type { CommitCaptureSessionMessage } from '../core/messages';
 import { safeFilename } from '../core/domain/validation';
 import { assetRepository, fileRecordRepository, recordRepository } from './repositories';
 
+const MEDIA_EXT: Record<'image' | 'video', string> = { image: 'png', video: 'mp4' };
+
+/**
+ * Filename for a downloaded media asset, guaranteeing a usable extension.
+ * Many LLM image URLs end in `/content` (no extension), which Windows then
+ * saves as an unopenable extensionless file — fall back to the asset type.
+ */
+export function mediaFilename(url: string, assetType: 'image' | 'video'): string {
+  const name = safeFilename(url, assetType);
+  if (/\.[A-Za-z0-9]{2,5}$/.test(name)) return name;
+  return `${name}.${MEDIA_EXT[assetType]}`;
+}
+
 export type CommitResult = {
   record: LibraryRecord;
   assets: Asset[];
@@ -62,7 +75,7 @@ export async function commitSessionToLibrary(
 
     if (p.assetType !== 'text') {
       if (p.originalUrl && !p.sourceOnly && isDownloadableUrl(p.originalUrl)) {
-        const filename = safeFilename(p.originalUrl, p.assetType);
+        const filename = mediaFilename(p.originalUrl, p.assetType);
         const fileRecord: FileRecord = {
           id: crypto.randomUUID(),
           assetId: asset.id,
