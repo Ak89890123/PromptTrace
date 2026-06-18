@@ -136,6 +136,30 @@ MIT — 見 [LICENSE](LICENSE)。
 
 ## 開發日誌
 
+### 2026-06-18 收工
+
+**做了什麼：**（commit 本次一坨；主題：gallery/擷取 UX 打磨，讓「攜帶 prompt」真的站得住）
+- **OUTPUT 圖片不再空白（根治 CSP / 限時 URL）**：commit 時背景 SW 趁簽名 URL 還活著抓 bytes，用 OffscreenCanvas 縮成 768px webp dataURL 存進 `asset.previewRef`（`background.ts cacheAssetPreview`）。Gallery／Library 改 `previewRef ?? originalUrl`。解掉 2026-06-16「下次方向②」的 ChatGPT-CSP 縮圖空白。
+- **下載靜默**：`chrome.downloads.download({ saveAs: promptDownloadLocation === true })`，預設 false 壓過 Chrome 全域「下載前詢問」；Settings 加開關。
+- **OUTPUT 點擊放大**：非 modal 浮窗（`Lightbox`），靠左、等比縮放、留 480px 給右側 gallery、滑離 gallery 自動消失。提到 PanelApp root 渲染（避開 `.pt-glass` 的 backdrop-filter containing block 把 `position:fixed` 困住）。
+- **卡片右鍵 編輯/刪除**：編輯=左側飛出 `CardEditor`（重選分類＋model，不再卡片內捲動）；刪除=選單原地確認（拿掉 `window.confirm` 的螢幕中央彈窗）。背景加 `library/deleteRecord` / `library/updateRecordMeta`。
+- **智慧預設**：擷取 wizard 依 output assetType ✨ 標亮建議分類（`builtin-image-gen` 等）。
+- **快捷鍵召喚修正**：`elementsFromPoint` 穿透 ChatGPT 生成圖上的 overlay，右鍵後也抓得到；預設改 `Shift+Z`；加打字保護（無選取/無媒體時不攔截可打印鍵）。
+- **Toolbar 不再往左跳**：`pt-pop` keyframe 把 `translateX(-50%)` 焊進每一格。
+- **右緣 P tab 可調高度**：popup 滑桿（`edgeTabTop`）；面板改「位移不縮高」留在畫面內並覆蓋 tab；hover-dock 的 `padding-right` 讓邊緣間隙也算 hover 區（不閃跳）；tab transition 拿掉 transform（收合不上下跳）。
+
+**踩到的坑：**
+- `position:fixed` 會被祖先的 `backdrop-filter`／`transform` 變成 containing block 困住 → 浮窗類（lightbox）要提到 `.pt-glass` 外層渲染。
+- `document` capture 階段的 click 監聽 + shadow DOM event retarget → 會在按鈕 onClick 前關掉選單（編輯/刪除沒反應）；改用 React 樹內透明 backdrop。
+- 高面板（86vh）在 100vh 內幾乎無移動空間：硬縮高會變「一小欄 sliver」→ 改成固定高 + clamp 位移。
+- `chrome.downloads` 的 `saveAs:false` 才壓得住全域「詢問位置」；省略會跟隨全域設定。
+
+**下次方向：**
+- ⚠️ **先 reload 擴充**（`.output/chrome-mv3/`）讓背景 SW + content script 新邏輯生效，再測：下載不跳框 / 右鍵編輯刪除 / P 高度滑桿 / 浮窗。
+- 未驗的真站項：previewRef 對**真 ChatGPT 生成圖**的 fetch（browse 不穩、e2e 用 mock，邏輯已驗但沒對線上跑）；若空白看 SW fetch/CSP log。
+- 已知小邊角：卡片極少（面板內容 < 86vh）+ P 拉到最頂/底極端時，hover 覆蓋可能差一點 → 真遇到再給面板加 min-height。
+- 待辦 feature：純圖牆 `image-wall` gallery 模式（多模式可切換、純文字卡優雅降級）——使用者要先生圖填真實資料再調欄數（見 memory [[ui-preferences]] 14）。
+
 ### 2026-06-16 收工
 
 **做了什麼：**（commits `4133de5` / `f31d79e` / `26f1e96`）
