@@ -34,6 +34,10 @@ export type DisplaySettings = {
   toolbarRoles: AssetRole[];
   /** Saved-prompt card layout: 'split' = Input·Reference | Output; 'output-only'. */
   cardLayout: 'split' | 'output-only';
+  /** Ask where to save each downloaded media file. Default false = save silently. */
+  promptDownloadLocation: boolean;
+  /** Vertical position of the right-edge gallery tab, 0 (top)–100 (bottom). */
+  edgeTabTop: number;
 };
 
 export const DEFAULT_SETTINGS: DisplaySettings = {
@@ -47,9 +51,11 @@ export const DEFAULT_SETTINGS: DisplaySettings = {
   edgePanelEnabled: true,
   selectionToolbarEnabled: true,
   toolbarTrigger: 'hotkey',
-  summonHotkey: 'Alt+S',
+  summonHotkey: 'Shift+Z',
   toolbarRoles: ['input', 'input_reference', 'negative', 'output'],
   cardLayout: 'split',
+  promptDownloadLocation: false,
+  edgeTabTop: 50,
 };
 
 const SETTINGS_KEY = 'prompttrace:settings';

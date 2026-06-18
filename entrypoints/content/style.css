@@ -35,8 +35,10 @@
 }
 
 @keyframes pt-pop {
-  from { transform: translateY(6px) scale(0.92); opacity: 0; }
-  to { transform: none; opacity: 1; }
+  /* Keep translateX(-50%) in every frame, otherwise the animation drops the
+     inline centering transform mid-flight and the toolbar jumps left on finish. */
+  from { transform: translateX(-50%) translateY(6px) scale(0.92); opacity: 0; }
+  to { transform: translateX(-50%); opacity: 1; }
 }
 
 .pt-toolbar button {
@@ -97,7 +99,9 @@
   gap: 8px;
   cursor: pointer;
   font-size: 13px;
-  transition: transform 0.2s ease, opacity 0.2s ease;
+  /* Only fade — never transition transform, or the inline translateY(-50%)
+     centering animates from 0 on mount and the tab jumps up when it reappears. */
+  transition: opacity 0.2s ease;
   opacity: 0.85;
 }
 .pt-edge-tab:hover { opacity: 1; }
@@ -131,6 +135,19 @@
    asset list, so narrow the panel while choosing. */
 .pt-panel--wizard {
   width: 232px;
+}
+
+/* Hover dock: the padding-right is the visual gap to the screen edge, but it
+   stays inside the hover zone so the panel doesn't flicker shut when the cursor
+   slides into that strip. */
+.pt-panel-dock {
+  position: absolute;
+  right: 0;
+  padding-right: 10px;
+  pointer-events: auto;
+}
+.pt-panel-dock .pt-panel {
+  margin-right: 0;
 }
 
 @keyframes pt-slide {
@@ -326,11 +343,88 @@
 /* Gallery: scrollable cards of saved prompts (a lightweight Library). */
 .pt-gallery { display: flex; flex-direction: column; gap: 8px; }
 .pt-gcard {
+  position: relative;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   padding: 8px;
 }
+.pt-choice--on {
+  border-color: rgba(34, 211, 238, 0.7);
+  background: rgba(34, 211, 238, 0.2);
+  color: #eafbff;
+}
+
+/* Card right-click menu (edit / delete). */
+.pt-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 29;
+}
+.pt-gmenu {
+  position: absolute;
+  z-index: 30;
+  min-width: 132px;
+  padding: 4px;
+  border-radius: 10px;
+  background: rgba(40, 40, 46, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+}
+.pt-gmenu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: #f5f5f7;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.pt-gmenu-item:hover { background: rgba(255, 255, 255, 0.1); }
+.pt-gmenu-item--danger { color: #ff8a8a; }
+.pt-gmenu-item--danger:hover { background: rgba(255, 90, 90, 0.16); }
+
+/* Tag editor: a flyout that extends LEFT of the gallery panel, with room to show
+   every option without an internal scroll fight. */
+.pt-geditor {
+  position: absolute;
+  right: calc(min(440px, 94vw) + 18px);
+  width: 232px;
+  max-height: 86vh;
+  overflow-y: auto;
+  z-index: 40;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  animation: pt-slide 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.05);
+}
+.pt-geditor-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f5f5f7;
+  margin-bottom: 2px;
+}
+/* Inline delete confirmation inside the card menu (kept in the gallery). */
+.pt-gmenu-confirm {
+  padding: 8px 10px 4px;
+  font-size: 12.5px;
+  color: #f5f5f7;
+}
+.pt-geditor-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(245, 245, 247, 0.5);
+  margin-top: 2px;
+}
+.pt-geditor-actions { display: flex; gap: 6px; margin-top: 6px; }
+.pt-geditor-actions .pt-choice { text-align: center; }
 .pt-gmeta { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
 .pt-gtag {
   font-size: 10.5px;
@@ -359,7 +453,53 @@
   text-align: center;
   padding: 10px 0;
 }
-.pt-gthumb { width: 100%; max-height: 120px; object-fit: cover; border-radius: 8px; display: block; }
+.pt-gthumb { width: 100%; max-height: 120px; object-fit: cover; border-radius: 8px; display: block; cursor: zoom-in; transition: filter 0.15s ease; }
+.pt-gthumb:hover { filter: brightness(1.08); }
+
+/* Non-modal floating preview: anchored to the left, scaled down to its natural
+   size (capped), and sized to leave the right-edge gallery visible — no
+   full-screen backdrop so the gallery never disappears. */
+.pt-lightbox {
+  position: fixed;
+  left: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2147483646;
+  width: fit-content;
+  max-width: calc(100vw - 480px);
+  max-height: 86vh;
+  animation: pt-fade-in 0.12s ease;
+}
+.pt-lightbox-img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: calc(100vw - 480px);
+  max-height: 86vh;
+  object-fit: contain;
+  border-radius: 10px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+  cursor: zoom-out;
+}
+.pt-lightbox-close {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(20, 20, 24, 0.92);
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+.pt-lightbox-close:hover { background: rgba(40, 40, 46, 0.98); }
+@keyframes pt-fade-in { from { opacity: 0; } to { opacity: 1; } }
 .pt-gprompt {
   background: rgba(0, 0, 0, 0.25);
   border-radius: 8px;

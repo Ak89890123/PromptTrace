@@ -117,13 +117,17 @@ export type GalleryAsset = {
   assetType: AssetType;
   textContent?: string;
   originalUrl?: string;
+  /** Durable local data: URL thumbnail; survives remote URL expiry / page CSP. */
+  previewRef?: string;
 };
 
 /** A saved record, slimmed for the in-page gallery. */
 export type GalleryRecord = {
   id: string;
   title?: string;
+  categoryId?: string | null;
   categoryName?: string;
+  modelPresetId?: string | null;
   modelLabel?: string;
   createdAt: string;
   assets: GalleryAsset[];
@@ -136,6 +140,26 @@ export type ListRecordsMessage = {
 };
 
 export type ListRecordsResult = { records: GalleryRecord[] };
+
+/** Content script → background: delete a saved record (cascade + local files). */
+export type DeleteRecordMessage = {
+  type: 'library/deleteRecord';
+  payload: { recordId: string };
+};
+
+/** Content script → background: re-tag a saved record's category / model. */
+export type UpdateRecordMetaMessage = {
+  type: 'library/updateRecordMeta';
+  payload: {
+    recordId: string;
+    categoryId?: string | null;
+    modelPresetId?: string | null;
+    modelName?: string;
+    modelProvider?: string;
+    modelVersion?: string;
+    modelLabel?: string;
+  };
+};
 
 export type ExtensionMessage =
   | CreatePendingAssetMessage
@@ -154,7 +178,9 @@ export type ExtensionMessage =
   | FlashOverlayMessage
   | TaxonomyGetMessage
   | TaxonomyQuickAddCategoryMessage
-  | ListRecordsMessage;
+  | ListRecordsMessage
+  | DeleteRecordMessage
+  | UpdateRecordMetaMessage;
 
 export function sendMessage<T = unknown>(message: ExtensionMessage): Promise<T> {
   return chrome.runtime.sendMessage(message);

@@ -19,11 +19,13 @@ import { commitSessionToLibrary, downloadPathFor } from '@/src/storage/commitSes
 import {
   assetRepository,
   categoryRepository,
+  deleteRecordCascade,
   fileRecordRepository,
   modelPresetRepository,
   recordRepository,
 } from '@/src/storage/repositories';
 import { seedDefaults } from '@/src/storage/seed';
+import { loadSettings } from '@/src/ui/roleColors';
 
 const MENU_TEXT = 'prompttrace-add-selection';
 const MENU_IMAGE = 'prompttrace-add-image';
@@ -206,10 +208,16 @@ export default defineBackground(() => {
     const fileRecord = await fileRecordRepository.get(fileRecordId);
     if (!fileRecord) return;
     try {
+      const { promptDownloadLocation } = await loadSettings();
       const downloadId = await chrome.downloads.download({
         url,
         filename: downloadPathFor(recordId, fileRecord),
         conflictAction: 'uniquify',
+        // Explicit false suppresses the "Save as" dialog even when Chrome's
+        // global "Ask where to save each file" setting is on. `=== true` guards
+        // against a missing/legacy setting leaking `undefined` (which would fall
+        // back to the global pref and prompt). Keeps carrying prompts seamless.
+        saveAs: promptDownloadLocation === true,
       });
       await fileRecordRepository.save({
         ...fileRecord,
@@ -234,6 +242,55 @@ export default defineBackground(() => {
           }),
         ),
       );
+    }
+  }
+
+  const MAX_PREVIEW_DIM = 768;
+
+  async function blobToDataUrl(blob: Blob): Promise<string> {
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let binary = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+    }
+    return `data:${blob.type || 'application/octet-stream'};base64,${btoa(binary)}`;
+  }
+
+  /**
+   * Fetch an image and store a small, durable data: URL thumbnail on its asset.
+   * ChatGPT (and similar) serve images from short-lived signed URLs that expire,
+   * and the in-page gallery is also subject to the host page's CSP — so a remote
+   * `originalUrl` eventually fails to render and the OUTPUT goes blank. The
+   * service worker has <all_urls> host access and isn't bound by page CSP, so it
+   * can grab the bytes while the URL is still valid and keep a local copy.
+   * Best-effort: any failure just leaves the gallery falling back to originalUrl.
+   */
+  async function cacheAssetPreview(assetId: string, url: string): Promise<void> {
+    try {
+      if (!/^https?:/i.test(url)) return;
+      const asset = await assetRepository.get(assetId);
+      if (!asset || asset.assetType !== 'image' || asset.previewRef) return;
+      const resp = await fetch(url);
+      if (!resp.ok) return;
+      const bitmap = await createImageBitmap(await resp.blob());
+      const scale = Math.min(1, MAX_PREVIEW_DIM / Math.max(bitmap.width, bitmap.height));
+      const w = Math.max(1, Math.round(bitmap.width * scale));
+      const h = Math.max(1, Math.round(bitmap.height * scale));
+      const canvas = new OffscreenCanvas(w, h);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        bitmap.close();
+        return;
+      }
+      ctx.drawImage(bitmap, 0, 0, w, h);
+      bitmap.close();
+      const thumb = await canvas.convertToBlob({ type: 'image/webp', quality: 0.82 });
+      const previewRef = await blobToDataUrl(thumb);
+      const fresh = await assetRepository.get(assetId);
+      if (fresh) await assetRepository.save({ ...fresh, previewRef });
+    } catch {
+      // best-effort; the gallery falls back to the original URL
     }
   }
 
@@ -426,6 +483,9 @@ export default defineBackground(() => {
             }
             for (const { fileRecord, url } of result.pendingDownloads) {
               startDownload(fileRecord.id, url, result.record.id);
+              // Best-effort: stash a durable local thumbnail so the gallery keeps
+              // showing the image after the remote (often signed/expiring) URL dies.
+              void cacheAssetPreview(fileRecord.assetId, url);
             }
             sendResponse({ ok: true, recordId: result.record.id });
           } catch (e) {
@@ -529,7 +589,9 @@ export default defineBackground(() => {
             .map((r) => ({
               id: r.id,
               title: r.title,
+              categoryId: r.categoryId,
               categoryName: r.categoryId ? catName.get(r.categoryId) : undefined,
+              modelPresetId: r.modelPresetId,
               modelLabel: r.modelLabel || r.modelName || undefined,
               createdAt: r.createdAt,
               assets: (assetsByRecord.get(r.id) ?? [])
@@ -540,9 +602,44 @@ export default defineBackground(() => {
                   assetType: a.assetType,
                   textContent: a.textContent,
                   originalUrl: a.originalUrl,
+                  previewRef: a.previewRef,
                 })),
             }));
           return sendResponse({ records: gallery });
+        }
+
+        case 'library/deleteRecord': {
+          const fileRecords = await deleteRecordCascade(message.payload.recordId);
+          for (const f of fileRecords) {
+            if (f.downloadId != null) {
+              try {
+                await chrome.downloads.removeFile(f.downloadId);
+              } catch {
+                // file may already be gone / moved — ignore
+              }
+            }
+          }
+          return sendResponse({ ok: true });
+        }
+
+        case 'library/updateRecordMeta': {
+          const rec = await recordRepository.get(message.payload.recordId);
+          if (!rec) return sendResponse({ ok: false });
+          const p = message.payload;
+          // Only overwrite the model fields when the editor actually sent them,
+          // so editing just the category never wipes a custom model label.
+          const updateModel = 'modelPresetId' in p;
+          await recordRepository.save({
+            ...rec,
+            categoryId: 'categoryId' in p ? (p.categoryId ?? null) : rec.categoryId,
+            modelPresetId: updateModel ? (p.modelPresetId ?? null) : rec.modelPresetId,
+            modelName: updateModel ? p.modelName : rec.modelName,
+            modelProvider: updateModel ? p.modelProvider : rec.modelProvider,
+            modelVersion: updateModel ? p.modelVersion : rec.modelVersion,
+            modelLabel: updateModel ? p.modelLabel : rec.modelLabel,
+            updatedAt: new Date().toISOString(),
+          });
+          return sendResponse({ ok: true });
         }
 
         default:

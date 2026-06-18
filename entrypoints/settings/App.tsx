@@ -488,6 +488,16 @@ function ExportSettingsSection({
           />
           匯出包含本地檔案路徑
         </label>
+        <label className="row" style={{ gap: 4 }}>
+          <input
+            type="checkbox"
+            style={{ width: 'auto' }}
+            checked={settings.promptDownloadLocation}
+            onChange={(e) => onPatch({ promptDownloadLocation: e.target.checked })}
+          />
+          下載圖片 / 影片時詢問儲存位置
+          <span className="muted">（預設關閉＝直接存到 Downloads/PromptTrace，不跳視窗）</span>
+        </label>
       </div>
     </section>
   );

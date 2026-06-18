@@ -21,6 +21,10 @@ const send = (message: unknown) => chrome.runtime.sendMessage(message).catch(() 
 export default function PanelApp({ overlay }: { overlay: OverlayManager }) {
   const [settings, setSettings] = useState<DisplaySettings>(DEFAULT_SETTINGS);
   const [session, setSession] = useState<CaptureSessionState>(emptySession());
+  // Zoom lives at the root so the lightbox renders OUTSIDE .pt-glass — its
+  // backdrop-filter would otherwise become the containing block for the
+  // position:fixed overlay and trap it inside the narrow panel.
+  const [zoom, setZoom] = useState<ZoomSrc | null>(null);
 
   useEffect(() => {
     loadSettings().then(setSettings);
@@ -41,7 +45,8 @@ export default function PanelApp({ overlay }: { overlay: OverlayManager }) {
     <>
       {settings.selectionToolbarEnabled && <SelectionToolbar overlay={overlay} settings={settings} />}
       {settings.edgePanelEnabled && <CapturePanel session={session} settings={settings} />}
-      {settings.edgePanelEnabled && <GalleryPanel settings={settings} />}
+      {settings.edgePanelEnabled && <GalleryPanel settings={settings} onZoom={setZoom} />}
+      {zoom && <Lightbox zoom={zoom} onClose={() => setZoom(null)} />}
     </>
   );
 }
@@ -60,6 +65,13 @@ function SelectionToolbar({ overlay, settings }: { overlay: OverlayManager; sett
   const [targetType, setTargetType] = useState<'text' | 'image' | 'video'>('text');
   /** The <img>/<video> currently under the cursor (for keyboard media capture). */
   const hoveredMedia = useRef<HTMLImageElement | HTMLVideoElement | null>(null);
+  /** Last pointer position. Lets us find the media under an overlay (e.g. the
+   *  ChatGPT image action bar) that intercepts hover but sits above the <img>. */
+  const lastPointer = useRef<{ x: number; y: number } | null>(null);
+  /** Media under the last right-click. The native context menu swallows the
+   *  summon key while open, so we remember the target and pick it up once the
+   *  menu closes — even if the pointer has since moved. */
+  const lastContextMedia = useRef<HTMLImageElement | HTMLVideoElement | null>(null);
 
   const hide = useCallback(() => {
     setPos(null);
@@ -71,6 +83,24 @@ function SelectionToolbar({ overlay, settings }: { overlay: OverlayManager; sett
       x: Math.min(Math.max(rect.left + rect.width / 2, 150), window.innerWidth - 150),
       y: rect.top,
     });
+  }, []);
+
+  /** Media under the cursor, piercing overlay layers. ChatGPT stacks an action
+   *  bar over generated images, so plain hover lands on a <div>, not the <img>;
+   *  elementsFromPoint sees through to the image beneath. */
+  const findMedia = useCallback((): HTMLImageElement | HTMLVideoElement | null => {
+    const p = lastPointer.current;
+    if (p) {
+      for (const el of document.elementsFromPoint(p.x, p.y)) {
+        if (el.tagName === 'IMG' || el.tagName === 'VIDEO') {
+          return el as HTMLImageElement | HTMLVideoElement;
+        }
+      }
+    }
+    const hov = hoveredMedia.current;
+    if (hov && hov.isConnected) return hov;
+    const ctx = lastContextMedia.current;
+    return ctx && ctx.isConnected ? ctx : null;
   }, []);
 
   /** Summon flow: text selection first; otherwise the media under the cursor. */
@@ -86,8 +116,8 @@ function SelectionToolbar({ overlay, settings }: { overlay: OverlayManager; sett
         return;
       }
     }
-    const media = hoveredMedia.current;
-    if (media && media.isConnected) {
+    const media = findMedia();
+    if (media) {
       const assetType = media.tagName === 'IMG' ? ('image' as const) : ('video' as const);
       targetRef.current = { kind: 'media', el: media, assetType };
       setTargetType(assetType);
@@ -95,7 +125,7 @@ function SelectionToolbar({ overlay, settings }: { overlay: OverlayManager; sett
       return;
     }
     hide();
-  }, [showAt, hide]);
+  }, [showAt, hide, findMedia]);
 
   const capture = useCallback(
     (role: AssetRole) => {
@@ -115,9 +145,23 @@ function SelectionToolbar({ overlay, settings }: { overlay: OverlayManager; sett
   useEffect(() => {
     const onSummon = () => summon();
     const onMouseOver = (e: MouseEvent) => {
+      lastPointer.current = { x: e.clientX, y: e.clientY };
       const el = e.target as Element | null;
       if (el && (el.tagName === 'IMG' || el.tagName === 'VIDEO')) {
         hoveredMedia.current = el as HTMLImageElement | HTMLVideoElement;
+      }
+    };
+    const onMouseMove = (e: MouseEvent) => {
+      lastPointer.current = { x: e.clientX, y: e.clientY };
+    };
+    const onContextMenu = (e: MouseEvent) => {
+      lastPointer.current = { x: e.clientX, y: e.clientY };
+      lastContextMedia.current = null;
+      for (const el of document.elementsFromPoint(e.clientX, e.clientY)) {
+        if (el.tagName === 'IMG' || el.tagName === 'VIDEO') {
+          lastContextMedia.current = el as HTMLImageElement | HTMLVideoElement;
+          break;
+        }
       }
     };
     const onMouseUp = (e: MouseEvent) => {
@@ -129,15 +173,22 @@ function SelectionToolbar({ overlay, settings }: { overlay: OverlayManager; sett
       if (e.key === 'Escape') return hide();
       // In-page fallback summon key (the chrome.commands shortcut is primary
       // and arrives via the 'prompttrace:summon' event instead).
-      if (matchHotkey(e, settings.summonHotkey)) {
-        e.preventDefault();
-        e.stopPropagation();
-        summon();
-      }
+      if (!matchHotkey(e, settings.summonHotkey)) return;
+      // The summon key may be a printable character (the Shift+Z default is),
+      // so only hijack it when there is actually something to capture — a text
+      // selection or media under the cursor. Otherwise let it type normally.
+      const sel = window.getSelection();
+      const hasSelection = !!(sel && !sel.isCollapsed && sel.toString().trim());
+      if (!hasSelection && !findMedia()) return;
+      e.preventDefault();
+      e.stopPropagation();
+      summon();
     };
     const onScroll = () => hide();
     window.addEventListener('prompttrace:summon', onSummon);
     document.addEventListener('mouseover', onMouseOver, true);
+    document.addEventListener('mousemove', onMouseMove, { passive: true, capture: true });
+    document.addEventListener('contextmenu', onContextMenu, true);
     document.addEventListener('mouseup', onMouseUp);
     document.addEventListener('keydown', onKeyDown, true);
     // Capture phase so scrolling a nested overflow container (e.g. the ChatGPT
@@ -146,11 +197,13 @@ function SelectionToolbar({ overlay, settings }: { overlay: OverlayManager; sett
     return () => {
       window.removeEventListener('prompttrace:summon', onSummon);
       document.removeEventListener('mouseover', onMouseOver, true);
+      document.removeEventListener('mousemove', onMouseMove, true);
+      document.removeEventListener('contextmenu', onContextMenu, true);
       document.removeEventListener('mouseup', onMouseUp);
       document.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('scroll', onScroll, true);
     };
-  }, [settings, summon, hide]);
+  }, [settings, summon, hide, findMedia]);
 
   // Switching trigger mode (e.g. from the popup) cancels any pending selection
   // toolbar, so a stale role picker from the previous mode doesn't linger.
@@ -251,30 +304,78 @@ function CapturePanel({ session, settings }: { session: CaptureSessionState; set
 /*  Gallery panel: right-middle, pure hover (collapses on mouse-leave) */
 /* ------------------------------------------------------------------ */
 
-function GalleryPanel({ settings }: { settings: DisplaySettings }) {
+function GalleryPanel({
+  settings,
+  onZoom,
+}: {
+  settings: DisplaySettings;
+  onZoom: (z: ZoomSrc | null) => void;
+}) {
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<GalleryRecord | null>(null);
+  const [refreshSignal, setRefreshSignal] = useState(0);
+  // The tab sits where the user put it; the panel keeps its full height and only
+  // shifts enough to stay on-screen while still covering the tab (so hover-open
+  // holds). Tab high → panel pinned near the top (extends down); tab low → pinned
+  // near the bottom (extends up). It never shrinks to a sliver.
+  const PANEL_VH = 86;
+  const edgeTop = Math.min(94, Math.max(6, settings.edgeTabTop ?? 50));
+  const panelTopVh = Math.min(100 - PANEL_VH - 2, Math.max(2, edgeTop - PANEL_VH / 2));
   return (
-    <div className="pt-gallery-edge" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+    <div
+      className="pt-gallery-edge"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => {
+        // Stay open while editing (the editor flyout sits to the left). Otherwise
+        // leaving the gallery closes it and dismisses the big preview.
+        if (editing) return;
+        setOpen(false);
+        onZoom(null);
+      }}
+    >
       {open ? (
-        <div className="pt-glass pt-panel pt-gallery-panel">
-          <div className="pt-panel-head">
-            <span className="pt-title">
-              <img className="pt-logo-img" src={LOGO_DATA_URL} alt="" />
-              PromptTrace
-            </span>
-            <span className="pt-links">
-              <a onClick={() => window.open(chrome.runtime.getURL('library.html'))}>Library</a>
-              <a onClick={() => window.open(chrome.runtime.getURL('settings.html'))}>Settings</a>
-            </span>
-          </div>
-          <div className="pt-panel-body">
-            <Gallery settings={settings} />
+        // The dock's padding-right keeps the visual gap to the screen edge part of
+        // the hover zone, so sliding into it doesn't drop hover and flicker shut.
+        <div className="pt-panel-dock" style={{ top: `${panelTopVh}vh` }}>
+          <div className="pt-glass pt-panel pt-gallery-panel" style={{ maxHeight: `${PANEL_VH}vh` }}>
+            <div className="pt-panel-head">
+              <span className="pt-title">
+                <img className="pt-logo-img" src={LOGO_DATA_URL} alt="" />
+                PromptTrace
+              </span>
+              <span className="pt-links">
+                <a onClick={() => window.open(chrome.runtime.getURL('library.html'))}>Library</a>
+                <a onClick={() => window.open(chrome.runtime.getURL('settings.html'))}>Settings</a>
+              </span>
+            </div>
+            <div className="pt-panel-body">
+              <Gallery
+                settings={settings}
+                onZoom={onZoom}
+                onEdit={setEditing}
+                refreshSignal={refreshSignal}
+              />
+            </div>
           </div>
         </div>
       ) : (
-        <div className="pt-glass pt-edge-tab">
+        <div
+          className="pt-glass pt-edge-tab"
+          style={{ position: 'absolute', right: 0, top: `${edgeTop}%`, transform: 'translateY(-50%)' }}
+        >
           <img className="pt-tab-img" src={LOGO_DATA_URL} alt="PromptTrace" />
         </div>
+      )}
+      {editing && (
+        <CardEditor
+          record={editing}
+          topVh={panelTopVh}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            setRefreshSignal((n) => n + 1);
+          }}
+        />
       )}
     </div>
   );
@@ -303,7 +404,14 @@ function CaptureBody({
   }, [session.assets]);
 
   if (wizard) {
-    return <Wizard stage={wizard} setStage={setWizard} sourceUrl={session.assets[0]?.pageUrl} />;
+    return (
+      <Wizard
+        stage={wizard}
+        setStage={setWizard}
+        sourceUrl={session.assets[0]?.pageUrl}
+        outputTypes={session.assets.filter((a) => a.role === 'output').map((a) => a.assetType)}
+      />
+    );
   }
 
   return (
@@ -435,17 +543,30 @@ function PanelAssetCard({ asset, settings }: { asset: PendingAsset; settings: Di
 /*  Gallery: scrollable, copyable library of saved prompts             */
 /* ------------------------------------------------------------------ */
 
-function Gallery({ settings }: { settings: DisplaySettings }) {
+/** Best-quality source first, durable fallback second (for the zoom view). */
+type ZoomSrc = { primary?: string; fallback?: string };
+
+function Gallery({
+  settings,
+  onZoom,
+  onEdit,
+  refreshSignal,
+}: {
+  settings: DisplaySettings;
+  onZoom: (z: ZoomSrc) => void;
+  onEdit: (r: GalleryRecord) => void;
+  refreshSignal: number;
+}) {
   const [records, setRecords] = useState<GalleryRecord[] | null>(null);
-  useEffect(() => {
-    let alive = true;
+  const refresh = useCallback(() => {
     send({ type: 'library/listRecords', payload: {} }).then((r) => {
-      if (alive) setRecords((r as ListRecordsResult | undefined)?.records ?? []);
+      setRecords((r as ListRecordsResult | undefined)?.records ?? []);
     });
-    return () => {
-      alive = false;
-    };
   }, []);
+  // Re-fetch on mount and whenever an edit elsewhere bumps the signal.
+  useEffect(() => {
+    refresh();
+  }, [refresh, refreshSignal]);
 
   if (records === null) return <div className="pt-empty">載入中…</div>;
   if (records.length === 0) {
@@ -461,18 +582,94 @@ function Gallery({ settings }: { settings: DisplaySettings }) {
   return (
     <div className="pt-gallery">
       {records.map((r) => (
-        <GalleryCard key={r.id} record={r} settings={settings} />
+        <GalleryCard
+          key={r.id}
+          record={r}
+          settings={settings}
+          onZoom={onZoom}
+          onEdit={onEdit}
+          onChanged={refresh}
+        />
       ))}
     </div>
   );
 }
 
-function GalleryCard({ record, settings }: { record: GalleryRecord; settings: DisplaySettings }) {
+/** Full-screen image preview. Click anywhere or press Esc to dismiss. */
+function Lightbox({ zoom, onClose }: { zoom: ZoomSrc; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [onClose]);
+
+  const src = zoom.primary ?? zoom.fallback;
+  if (!src) return null;
+  return (
+    <div className="pt-lightbox" role="presentation">
+      <img
+        className="pt-lightbox-img"
+        src={src}
+        alt=""
+        onClick={onClose}
+        onError={(e) => {
+          if (zoom.fallback && e.currentTarget.src !== zoom.fallback) {
+            e.currentTarget.src = zoom.fallback;
+          }
+        }}
+      />
+      <button className="pt-lightbox-close" type="button" aria-label="關閉" onClick={onClose}>
+        ✕
+      </button>
+    </div>
+  );
+}
+
+function GalleryCard({
+  record,
+  settings,
+  onZoom,
+  onEdit,
+  onChanged,
+}: {
+  record: GalleryRecord;
+  settings: DisplaySettings;
+  onZoom: (z: ZoomSrc) => void;
+  onEdit: (r: GalleryRecord) => void;
+  onChanged: () => void;
+}) {
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [confirmDel, setConfirmDel] = useState(false);
+
+  const closeMenu = () => {
+    setMenu(null);
+    setConfirmDel(false);
+  };
+
   // Left column = prompt side (input / reference / negative); right = output.
   const left = record.assets.filter((a) => a.role !== 'output');
   const right = record.assets.filter((a) => a.role === 'output');
+
+  const remove = async () => {
+    closeMenu();
+    await send({ type: 'library/deleteRecord', payload: { recordId: record.id } });
+    onChanged();
+  };
+
   return (
-    <div className="pt-gcard">
+    <div
+      className="pt-gcard"
+      onContextMenu={(e) => {
+        e.preventDefault();
+        const rect = e.currentTarget.getBoundingClientRect();
+        setMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+      }}
+    >
       {(record.categoryName || record.modelLabel) && (
         <div className="pt-gmeta">
           {record.categoryName && <span className="pt-gtag">{record.categoryName}</span>}
@@ -486,7 +683,9 @@ function GalleryCard({ record, settings }: { record: GalleryRecord; settings: Di
             {left.length === 0 ? (
               <div className="pt-gcol-empty">—</div>
             ) : (
-              left.map((a, i) => <GalleryAssetView key={i} asset={a} settings={settings} />)
+              left.map((a, i) => (
+                <GalleryAssetView key={i} asset={a} settings={settings} onZoom={onZoom} />
+              ))
             )}
           </div>
         )}
@@ -495,26 +694,204 @@ function GalleryCard({ record, settings }: { record: GalleryRecord; settings: Di
           {right.length === 0 ? (
             <div className="pt-gcol-empty">—</div>
           ) : (
-            right.map((a, i) => <GalleryAssetView key={i} asset={a} settings={settings} />)
+            right.map((a, i) => (
+              <GalleryAssetView key={i} asset={a} settings={settings} onZoom={onZoom} />
+            ))
           )}
         </div>
+      </div>
+
+      {menu && <div className="pt-menu-backdrop" onClick={closeMenu} role="presentation" />}
+      {menu && (
+        <div
+          className="pt-gmenu"
+          style={{ left: menu.x, top: menu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {!confirmDel ? (
+            <>
+              <button
+                className="pt-gmenu-item"
+                onClick={() => {
+                  closeMenu();
+                  onEdit(record);
+                }}
+              >
+                ✏️ 編輯標籤
+              </button>
+              <button
+                className="pt-gmenu-item pt-gmenu-item--danger"
+                onClick={() => setConfirmDel(true)}
+              >
+                🗑 刪除
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="pt-gmenu-confirm">刪除這筆？本機檔案也會移除。</div>
+              <button className="pt-gmenu-item pt-gmenu-item--danger" onClick={remove}>
+                確定刪除
+              </button>
+              <button className="pt-gmenu-item" onClick={() => setConfirmDel(false)}>
+                取消
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Re-tag a saved record's category + model. Flies out to the left of the panel
+ *  so every option is visible without an internal scroll fight. */
+function CardEditor({
+  record,
+  topVh,
+  onClose,
+  onSaved,
+}: {
+  record: GalleryRecord;
+  topVh: number;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [categories, setCategories] = useState<RecordCategory[]>([]);
+  const [presets, setPresets] = useState<ModelPreset[]>([]);
+  const [categoryId, setCategoryId] = useState<string | null>(record.categoryId ?? null);
+  const [presetId, setPresetId] = useState<string | null>(record.modelPresetId ?? null);
+  // Don't touch the model unless the user picks one — otherwise editing the
+  // category alone would wipe a custom / auto-detected model label.
+  const [modelTouched, setModelTouched] = useState(false);
+
+  useEffect(() => {
+    send({ type: 'taxonomy/get', payload: {} }).then((r) => {
+      const data = r as { categories: RecordCategory[]; presets: ModelPreset[] } | undefined;
+      if (data) {
+        setCategories(data.categories);
+        setPresets(data.presets);
+      }
+    });
+  }, []);
+
+  const pickModel = (id: string | null) => {
+    setPresetId(id);
+    setModelTouched(true);
+  };
+
+  const save = async () => {
+    const preset = presets.find((p) => p.id === presetId);
+    await send({
+      type: 'library/updateRecordMeta',
+      payload: {
+        recordId: record.id,
+        categoryId,
+        ...(modelTouched
+          ? {
+              modelPresetId: presetId,
+              modelName: preset?.modelName,
+              modelProvider: preset?.provider,
+              modelVersion: preset?.modelVersion,
+              modelLabel: preset?.modelName,
+            }
+          : {}),
+      },
+    });
+    onSaved();
+  };
+
+  return (
+    <div
+      className="pt-glass pt-geditor"
+      style={{ top: `${topVh}vh` }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="pt-geditor-title">編輯標籤</div>
+      <div className="pt-geditor-label">分類</div>
+      <div className="pt-choices">
+        <button
+          className={categoryId === null ? 'pt-choice pt-choice--on' : 'pt-choice'}
+          onClick={() => setCategoryId(null)}
+        >
+          未分類
+        </button>
+        {categories
+          .filter((c) => c.isActive)
+          .map((c) => (
+            <button
+              key={c.id}
+              className={categoryId === c.id ? 'pt-choice pt-choice--on' : 'pt-choice'}
+              onClick={() => setCategoryId(c.id)}
+            >
+              {c.name}
+            </button>
+          ))}
+      </div>
+      <div className="pt-geditor-label">Model</div>
+      <div className="pt-choices">
+        <button
+          className={modelTouched && presetId === null ? 'pt-choice pt-choice--on' : 'pt-choice'}
+          onClick={() => pickModel(null)}
+        >
+          未指定
+        </button>
+        {presets
+          .filter((p) => p.isActive)
+          .map((p) => (
+            <button
+              key={p.id}
+              className={
+                modelTouched && presetId === p.id ? 'pt-choice pt-choice--on' : 'pt-choice'
+              }
+              onClick={() => pickModel(p.id)}
+            >
+              {p.modelName}
+              {p.provider ? `（${p.provider}）` : ''}
+            </button>
+          ))}
+      </div>
+      <div className="pt-geditor-actions">
+        <button className="pt-choice pt-choice--sub" onClick={onClose}>
+          取消
+        </button>
+        <button className="pt-choice pt-choice--detected" onClick={save}>
+          儲存
+        </button>
       </div>
     </div>
   );
 }
 
-function GalleryAssetView({ asset, settings }: { asset: GalleryAsset; settings: DisplaySettings }) {
+function GalleryAssetView({
+  asset,
+  settings,
+  onZoom,
+}: {
+  asset: GalleryAsset;
+  settings: DisplaySettings;
+  onZoom: (z: ZoomSrc) => void;
+}) {
   if (asset.assetType === 'text' && asset.textContent) {
     return <GalleryPrompt role={asset.role} text={asset.textContent} color={settings.roleColors[asset.role]} />;
   }
-  if (asset.originalUrl) {
+  // Prefer the durable local thumbnail; the remote originalUrl (e.g. ChatGPT's
+  // signed URL) can expire or be blocked by the page CSP, leaving OUTPUT blank.
+  const src = asset.previewRef ?? asset.originalUrl;
+  if (src) {
     return (
       <img
         className="pt-gthumb"
-        src={asset.originalUrl}
+        src={src}
         alt=""
         loading="lazy"
+        title="點擊放大"
+        // Zoom prefers the full-res original; falls back to the durable thumbnail.
+        onClick={() => onZoom({ primary: asset.originalUrl ?? asset.previewRef, fallback: asset.previewRef })}
         onError={(e) => {
+          if (asset.previewRef && e.currentTarget.src !== asset.previewRef) {
+            e.currentTarget.src = asset.previewRef;
+            return;
+          }
           e.currentTarget.style.display = 'none';
         }}
       />
@@ -551,17 +928,34 @@ function GalleryPrompt({ role, text, color }: { role: AssetRole; text: string; c
 /*  Two-step wizard inside the edge panel                              */
 /* ------------------------------------------------------------------ */
 
+/** Built-in category ids, keyed by asset type (mirrors storage/seed.ts). */
+const BUILTIN_CATEGORY_BY_TYPE: Record<PendingAsset['assetType'], string> = {
+  text: 'builtin-text-gen',
+  image: 'builtin-image-gen',
+  video: 'builtin-video-gen',
+};
+
 function Wizard({
   stage,
   setStage,
   sourceUrl,
+  outputTypes,
 }: {
   stage: 'category' | 'model';
   setStage: (w: null | 'category' | 'model') => void;
   sourceUrl?: string;
+  outputTypes?: PendingAsset['assetType'][];
 }) {
   const [categories, setCategories] = useState<RecordCategory[]>([]);
   const [presets, setPresets] = useState<ModelPreset[]>([]);
+
+  // Suggest a category from the OUTPUT type (image→生圖, video→生影, text→生文).
+  // Only when the outputs are a single type; mixed/none stays unsuggested.
+  const suggestedCategoryId = useMemo(() => {
+    const types = new Set(outputTypes ?? []);
+    if (types.size !== 1) return null;
+    return BUILTIN_CATEGORY_BY_TYPE[[...types][0]] ?? null;
+  }, [outputTypes]);
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [customOpen, setCustomOpen] = useState(false);
@@ -635,16 +1029,21 @@ function Wizard({
           <button className="pt-choice" onClick={() => pickCategory(null)}>
             未分類
           </button>
-          {tree.map(({ c, depth }) => (
-            <button
-              key={c.id}
-              className="pt-choice"
-              style={{ paddingLeft: 12 + depth * 14 }}
-              onClick={() => pickCategory(c.id)}
-            >
-              {c.name}
-            </button>
-          ))}
+          {tree.map(({ c, depth }) => {
+            const suggested = c.id === suggestedCategoryId;
+            return (
+              <button
+                key={c.id}
+                className={suggested ? 'pt-choice pt-choice--detected' : 'pt-choice'}
+                style={{ paddingLeft: 12 + depth * 14 }}
+                onClick={() => pickCategory(c.id)}
+              >
+                {suggested ? '✨ ' : ''}
+                {c.name}
+                {suggested ? ' · 依產出建議' : ''}
+              </button>
+            );
+          })}
         </div>
         <div className="pt-row" style={{ marginTop: 8 }}>
           <input

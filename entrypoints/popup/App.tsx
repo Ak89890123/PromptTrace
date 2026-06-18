@@ -97,6 +97,18 @@ export default function App() {
             {recording ? '按下按鍵…' : settings.summonHotkey}
           </button>
         </label>
+        <label className="spread tog-row" title="調整右緣「P」啟動鈕的上下位置">
+          <span className="tog-label">P 邊欄高度</span>
+          <input
+            type="range"
+            min={5}
+            max={95}
+            step={1}
+            value={settings.edgeTabTop}
+            onChange={(e) => patch({ edgeTabTop: Number(e.target.value) })}
+            style={{ width: 130 }}
+          />
+        </label>
       </div>
 
       <div className="pop-footer">
