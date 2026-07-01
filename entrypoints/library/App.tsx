@@ -107,12 +107,19 @@ export default function App() {
   }, [records, assetIndex, search, filterCategory, filterModel, filterRole]);
 
   return (
-    <div style={{ display: 'flex', height: '100vh' }}>
-      <div style={{ width: 430, borderRight: '1px solid var(--border)', overflow: 'auto', padding: 12 }}>
-        <h1>Library</h1>
-        <input placeholder="搜尋…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <div className="row" style={{ marginTop: 6 }}>
-          <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} style={{ width: 'auto', flex: 1 }}>
+    <div className="library-shell">
+      <aside className="library-filter-rail">
+        <div className="library-brand">
+          <h1>Library</h1>
+          <span className="library-count">{filtered.length} / {records.length}</span>
+        </div>
+        <label className="filter-field">
+          <span>搜尋</span>
+          <input placeholder="Prompt、來源、URL…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        </label>
+        <label className="filter-field">
+          <span>分類</span>
+          <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
             <option value="">全部分類</option>
             {flattenTree(categories).map(({ category, depth }) => (
               <option key={category.id} value={category.id}>
@@ -120,64 +127,134 @@ export default function App() {
               </option>
             ))}
           </select>
-          <select value={filterModel} onChange={(e) => setFilterModel(e.target.value)} style={{ width: 'auto', flex: 1 }}>
+        </label>
+        <label className="filter-field">
+          <span>Model</span>
+          <select value={filterModel} onChange={(e) => setFilterModel(e.target.value)}>
             <option value="">全部 Model</option>
             {presets.map((p) => (
               <option key={p.id} value={p.id}>{p.alias || p.modelName}</option>
             ))}
           </select>
-          <select value={filterRole} onChange={(e) => setFilterRole(e.target.value)} style={{ width: 'auto', flex: 1 }}>
+        </label>
+        <label className="filter-field">
+          <span>角色</span>
+          <select value={filterRole} onChange={(e) => setFilterRole(e.target.value)}>
             <option value="">全部角色</option>
             {(Object.keys(ROLE_LABELS) as AssetRole[]).map((r) => (
               <option key={r} value={r}>{ROLE_LABELS[r]}</option>
             ))}
           </select>
-        </div>
-        <div style={{ marginTop: 10 }}>
-          {filtered.length === 0 && <div className="muted">沒有符合的 record。</div>}
-          {filtered.map((r) => {
-            const assets = assetIndex.get(r.id) ?? [];
-            const firstText = assets.find((a) => a.textContent)?.textContent ?? '';
-            return (
-              <div
-                key={r.id}
-                className="card"
-                style={{ cursor: 'pointer', borderColor: r.id === selectedId ? 'var(--accent)' : undefined }}
-                onClick={() => setSelectedId(r.id)}
-              >
-                <strong>{r.title || firstText.slice(0, 60) || r.sourcePageTitle || r.id.slice(0, 8)}</strong>
-                <div className="muted">
-                  {categoryPath(categories, r.categoryId)} · {modelLabelOf(r)}
-                </div>
-                <div className="muted">
-                  {new Date(r.createdAt).toLocaleString()} · {assets.length} assets
-                </div>
-                <CardPreview assets={assets} layout={settings.cardLayout} />
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
-        {selectedId ? (
-          <RecordDetail
-            key={`${selectedId}-${refresh}`}
-            recordId={selectedId}
-            categories={categories}
-            presets={presets}
-            onChanged={reload}
-            onDeleted={() => {
-              setSelectedId(null);
-              reload();
-            }}
-          />
-        ) : (
-          <div className="muted" style={{ marginTop: 40, textAlign: 'center' }}>
-            選擇左側的 record 查看詳情。
+        </label>
+        <button
+          className="library-clear-filters"
+          disabled={!search && !filterCategory && !filterModel && !filterRole}
+          onClick={() => {
+            setSearch('');
+            setFilterCategory('');
+            setFilterModel('');
+            setFilterRole('');
+          }}
+        >
+          重置篩選
+        </button>
+      </aside>
+
+      <main className="library-main">
+        <header className="library-hero">
+          <div>
+            <div className="eyebrow">PromptTrace</div>
+            <h1>Library</h1>
+            <p>本機保存的 Input、參考素材、Output 與檔案紀錄。點選卡片後在右側查看完整內容。</p>
           </div>
+          <div className="library-hero-stats">
+            <span>{records.length} records</span>
+            <span>{Array.from(assetIndex.values()).reduce((sum, items) => sum + items.length, 0)} assets</span>
+          </div>
+        </header>
+
+        {filtered.length === 0 ? (
+          <div className="library-empty">
+            {records.length === 0 ? (
+              <>
+                <h2>尚無紀錄</h2>
+                <p>在網頁上反白文字或選取圖片 / 影片後保存，這裡會出現可搜尋、可複製、可匯出的本機紀錄。</p>
+              </>
+            ) : (
+              <>
+                <h2>沒有符合的紀錄</h2>
+                <p>調整左側篩選或搜尋條件，找回已保存的 prompt、輸入素材與輸出結果。</p>
+              </>
+            )}
+          </div>
+        ) : (
+          <section className="library-card-grid" aria-label="Library records">
+            {filtered.map((record) => (
+              <RecordCard
+                key={record.id}
+                record={record}
+                assets={assetIndex.get(record.id) ?? []}
+                categories={categories}
+                selected={record.id === selectedId}
+                layout={settings.cardLayout}
+                onOpen={() => setSelectedId(record.id)}
+              />
+            ))}
+          </section>
         )}
-      </div>
+      </main>
+
+      <aside className="library-detail-rail">
+        <div className={`library-detail-drawer ${selectedId ? 'is-open' : ''}`}>
+          {selectedId ? (
+            <RecordDetail
+              key={`${selectedId}-${refresh}`}
+              recordId={selectedId}
+              categories={categories}
+              presets={presets}
+              onClose={() => setSelectedId(null)}
+              onChanged={reload}
+              onDeleted={() => {
+                setSelectedId(null);
+                reload();
+              }}
+            />
+          ) : (
+            <div className="library-detail-empty">
+              <h2>選取一筆紀錄</h2>
+              <p>點選中央卡片後，這裡會固定顯示完整文字、圖片、notes、tags 與檔案紀錄。</p>
+            </div>
+          )}
+        </div>
+      </aside>
     </div>
+  );
+}
+
+function RecordCard(props: {
+  record: LibraryRecord;
+  assets: Asset[];
+  categories: ReturnType<typeof useTaxonomy>['categories'];
+  selected: boolean;
+  layout: 'split' | 'output-only';
+  onOpen: () => void;
+}) {
+  const { record, assets, categories, selected, layout, onOpen } = props;
+  const outputCount = assets.filter((a) => a.role === 'output').length;
+
+  return (
+    <button className={`record-card ${selected ? 'is-selected' : ''}`} onFocus={onOpen} onClick={onOpen}>
+      <div className="record-card-topline">
+        <span>{categoryPath(categories, record.categoryId) || '未分類'}</span>
+        <span>{assets.length} assets</span>
+      </div>
+      <div className="record-card-summary-slot" aria-label="摘要保留區" />
+      <CardPreview assets={assets} layout={layout} />
+      <div className="record-card-footer">
+        <span>{modelLabelOf(record)}</span>
+        <span>{outputCount > 0 ? `${outputCount} output` : 'no output'}</span>
+      </div>
+    </button>
   );
 }
 
@@ -185,6 +262,7 @@ function RecordDetail(props: {
   recordId: string;
   categories: ReturnType<typeof useTaxonomy>['categories'];
   presets: ReturnType<typeof useTaxonomy>['presets'];
+  onClose: () => void;
   onChanged: () => void;
   onDeleted: () => void;
 }) {
@@ -421,6 +499,7 @@ function RecordDetail(props: {
             <button onClick={() => setDeleting(false)}>取消</button>
           </div>
         )}
+        <button onClick={props.onClose} aria-label="關閉詳情">關閉</button>
       </div>
 
       <div className="row" style={{ margin: '8px 0' }}>
@@ -468,14 +547,14 @@ function RecordDetail(props: {
       )}
 
       <div className="row" style={{ margin: '10px 0' }}>
-        <button onClick={() => copyBundle(composeInputBundle(assets, fileRecords), 'Input Bundle')}>
-          Copy Input Bundle
+        <button onClick={() => copyBundle(composeInputBundle(assets, fileRecords), 'Input')}>
+          複製 Input
         </button>
-        <button onClick={() => copyBundle(composeOutputBundle(assets, fileRecords), 'Output Bundle')}>
-          Copy Output Bundle
+        <button onClick={() => copyBundle(composeOutputBundle(assets, fileRecords), 'Output')}>
+          複製 Output
         </button>
-        <button onClick={() => copyBundle(composeFullRecord(record, assets, fileRecords, catPath), 'Full Record')}>
-          Copy Full Record
+        <button onClick={() => copyBundle(composeFullRecord(record, assets, fileRecords, catPath), '完整紀錄')}>
+          複製完整紀錄
         </button>
         <button
           onClick={async () => {
@@ -488,7 +567,7 @@ function RecordDetail(props: {
             });
           }}
         >
-          Export Markdown
+          匯出 Markdown
         </button>
         <button
           onClick={async () => {
@@ -501,7 +580,7 @@ function RecordDetail(props: {
             });
           }}
         >
-          Export JSON
+          匯出 JSON
         </button>
       </div>
 
@@ -655,7 +734,7 @@ function CardPreview({ assets, layout }: { assets: Asset[]; layout: 'split' | 'o
     if (a.assetType === 'text') {
       const text = (a.textContent ?? '').trim();
       return text ? (
-        <div key={a.id} style={prevTextStyle}>
+        <div key={a.id} className="record-preview-text">
           {text.slice(0, 160)}
         </div>
       ) : null;
@@ -666,7 +745,7 @@ function CardPreview({ assets, layout }: { assets: Asset[]; layout: 'split' | 'o
         key={a.id}
         src={src}
         alt=""
-        style={prevThumbStyle}
+        className="record-preview-thumb"
         onError={(e) => {
           e.currentTarget.style.display = 'none';
         }}
@@ -674,52 +753,20 @@ function CardPreview({ assets, layout }: { assets: Asset[]; layout: 'split' | 'o
     ) : null;
   };
   const col = (items: Asset[], label: string) => (
-    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <div style={prevLabelStyle}>{label}</div>
-      {items.length === 0 ? <div style={prevEmptyStyle}>—</div> : items.map(cell)}
+    <div className="record-preview-col">
+      <div className="record-preview-label">{label}</div>
+      {items.length === 0 ? <div className="record-preview-empty">—</div> : items.map(cell)}
     </div>
   );
   const left = assets.filter((a) => a.role !== 'output');
   const right = assets.filter((a) => a.role === 'output');
   if (layout === 'output-only') {
-    return <div style={{ marginTop: 6 }}>{col(right, 'Output')}</div>;
+    return <div className="record-preview is-output-only">{col(right, 'Output')}</div>;
   }
   return (
-    <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+    <div className="record-preview">
       {col(left, 'Input · Reference')}
       {col(right, 'Output')}
     </div>
   );
 }
-
-const prevTextStyle: React.CSSProperties = {
-  fontSize: 11,
-  lineHeight: 1.4,
-  color: 'var(--text)',
-  opacity: 0.82,
-  background: 'var(--panel-2)',
-  borderRadius: 6,
-  padding: '4px 6px',
-  maxHeight: 52,
-  overflow: 'hidden',
-};
-const prevThumbStyle: React.CSSProperties = {
-  width: '100%',
-  maxHeight: 70,
-  objectFit: 'cover',
-  borderRadius: 6,
-  display: 'block',
-};
-const prevLabelStyle: React.CSSProperties = {
-  fontSize: 9,
-  letterSpacing: '0.04em',
-  textTransform: 'uppercase',
-  fontWeight: 600,
-  opacity: 0.5,
-};
-const prevEmptyStyle: React.CSSProperties = {
-  fontSize: 12,
-  opacity: 0.3,
-  textAlign: 'center',
-  padding: '6px 0',
-};

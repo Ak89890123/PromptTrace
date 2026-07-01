@@ -94,6 +94,15 @@ export type FileRecordChangedMessage = {
   payload: { fileRecordId: string };
 };
 
+/** Content script / popup → background: open an extension page from extension context. */
+export type OpenExtensionPageMessage = {
+  type: 'navigation/openExtensionPage';
+  payload: {
+    page: 'library' | 'settings';
+    hash?: string;
+  };
+};
+
 /** Content script → background: highlight request was handled. */
 export type FlashOverlayMessage = {
   type: 'overlay/flash';
@@ -175,6 +184,7 @@ export type ExtensionMessage =
   | RetryDownloadMessage
   | DeleteRecordFilesMessage
   | FileRecordChangedMessage
+  | OpenExtensionPageMessage
   | FlashOverlayMessage
   | TaxonomyGetMessage
   | TaxonomyQuickAddCategoryMessage

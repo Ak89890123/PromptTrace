@@ -4,6 +4,7 @@ import { ROLE_LABELS, type AssetRole } from '@/src/core/domain/enums';
 import { validateCategoryName, validateModelPreset, wouldCreateCycle } from '@/src/core/domain/validation';
 import { formatHotkeyFromEvent } from '@/src/core/hotkeys';
 import { categoryRepository, modelPresetRepository } from '@/src/storage/repositories';
+import { BUILTIN_CATEGORY_DEFAULTS } from '@/src/storage/seed';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type DisplaySettings } from '@/src/ui/roleColors';
 import { flattenTree, useTaxonomy } from '@/src/ui/hooks';
 
@@ -22,14 +23,16 @@ export default function App() {
   };
 
   return (
-    <div style={{ maxWidth: 860, margin: '0 auto', padding: 20 }}>
-      <h1>PromptTrace Settings</h1>
-      <InteractionSettings settings={settings} onPatch={patchSettings} />
-      <CategorySettings categories={categories} onChanged={reload} />
-      <ModelSettings presets={presets} categories={categories} onChanged={reload} />
-      <DisplaySettingsSection settings={settings} onPatch={patchSettings} />
-      <ExportSettingsSection settings={settings} onPatch={patchSettings} />
-      <PermissionInfo />
+    <div className="settings-page">
+      <h1>PromptTrace 設定</h1>
+      <div className="settings-layout">
+        <InteractionSettings settings={settings} onPatch={patchSettings} />
+        <CategorySettings categories={categories} onChanged={reload} />
+        <ModelSettings presets={presets} categories={categories} onChanged={reload} />
+        <DisplaySettingsSection settings={settings} onPatch={patchSettings} />
+        <ExportSettingsSection settings={settings} onPatch={patchSettings} />
+        <PermissionInfo />
+      </div>
     </div>
   );
 }
@@ -74,7 +77,7 @@ function InteractionSettings({
   };
 
   return (
-    <section className="card">
+    <section className="card settings-section">
       <h2>互動設定</h2>
       <div className="row" style={{ marginBottom: 8 }}>
         <label className="row" style={{ gap: 4 }}>
@@ -113,16 +116,10 @@ function InteractionSettings({
         />
       </div>
       <p className="muted">
-        流程：反白文字（或游標移到圖片 / 影片上）→ 按召喚鍵 → 就地跳出該對象「合法的」角色選項
-        （例如圖片不會出現 Negative）。
-        <br />
-        上面的「頁面內召喚鍵」就是主要的召喚快捷鍵，改了即時生效、無需重新整理。
-        <br />
-        <strong>若某網站把按鍵吃掉：</strong>可另到{' '}
-        <code>chrome://extensions/shortcuts</code> 為「PromptTrace：叫出角色選項」設定一個瀏覽器層級快捷鍵
-        （預設不綁，優先權高於網頁按鍵處理）。
+        反白文字或指到圖片 / 影片後按召喚鍵，即時顯示可用角色。若網站攔截按鍵，可到{' '}
+        <code>chrome://extensions/shortcuts</code> 設定瀏覽器層級快捷鍵。
       </p>
-      <h2>工具列顯示哪些角色按鈕（2–4 顆，依對象自動過濾）</h2>
+      <h2>工具列角色（2–4 顆，依對象自動過濾）</h2>
       <div className="row">
         {(Object.keys(ROLE_LABELS) as AssetRole[]).map((role) => (
           <label key={role} className="row" style={{ gap: 4 }}>
@@ -150,27 +147,60 @@ function CategorySettings({ categories, onChanged }: { categories: RecordCategor
     onChanged();
   };
 
+  const resetBuiltinCategories = async () => {
+    const now = new Date().toISOString();
+    const builtinIds = new Set(BUILTIN_CATEGORY_DEFAULTS.map((c) => c.id));
+    for (const c of BUILTIN_CATEGORY_DEFAULTS) {
+      const existing = categories.find((x) => x.id === c.id);
+      await categoryRepository.save({
+        ...(existing ?? {
+          id: c.id,
+          createdAt: now,
+        }),
+        id: c.id,
+        parentId: null,
+        name: c.name,
+        color: c.color,
+        icon: undefined,
+        isBuiltin: true,
+        isActive: true,
+        sortOrder: c.sortOrder,
+        updatedAt: now,
+      });
+    }
+    for (const c of categories) {
+      if (c.isBuiltin && !builtinIds.has(c.id as (typeof BUILTIN_CATEGORY_DEFAULTS)[number]['id'])) {
+        await categoryRepository.delete(c.id);
+      }
+    }
+    onChanged();
+  };
+
   return (
-    <section className="card">
-      <h2>分類（Record Category）</h2>
-      <p className="muted">
-        分類是選填的，支援多層級。內建分類（生文 / 生圖 / 生影 等）不能刪除，但可以停用。
-      </p>
+    <section className="card settings-section">
+      <div className="spread">
+        <div>
+          <h2>分類</h2>
+          <p className="muted">
+            分類是選填的，支援多層級。原廠內建為生文 / 生圖 / 生影 / 生音樂。
+          </p>
+        </div>
+        <button onClick={resetBuiltinCategories}>重置原廠分類</button>
+      </div>
+      <div className="settings-category-row settings-row-header">
+        <span>顏色</span>
+        <span>分類</span>
+        <span>父層</span>
+        <span>排序</span>
+        <span>狀態</span>
+      </div>
       {tree.map(({ category: c, depth }) => (
-        <div className="row" key={c.id} style={{ marginLeft: depth * 20, marginBottom: 4 }}>
+        <div className="settings-category-row" key={c.id} style={{ marginLeft: depth * 20 }}>
           <input
             type="color"
             value={c.color ?? '#94a3b8'}
-            style={{ width: 28, padding: 0 }}
             onChange={(e) => save(c, { color: e.target.value })}
             title="分類顏色"
-          />
-          <input
-            style={{ width: 60 }}
-            placeholder="icon"
-            value={c.icon ?? ''}
-            onChange={(e) => save(c, { icon: e.target.value })}
-            title="icon（emoji）"
           />
           <input
             style={{ width: 180, opacity: c.isActive ? 1 : 0.5 }}
@@ -200,8 +230,10 @@ function CategorySettings({ categories, onChanged }: { categories: RecordCategor
                 <option key={x.id} value={x.id}>{x.name}</option>
               ))}
           </select>
-          <button onClick={() => save(c, { sortOrder: c.sortOrder - 1.5 })} title="上移">↑</button>
-          <button onClick={() => save(c, { sortOrder: c.sortOrder + 1.5 })} title="下移">↓</button>
+          <div className="settings-compact-actions">
+            <button onClick={() => save(c, { sortOrder: c.sortOrder - 1.5 })} title="上移">↑</button>
+            <button onClick={() => save(c, { sortOrder: c.sortOrder + 1.5 })} title="下移">↓</button>
+          </div>
           <button onClick={() => save(c, { isActive: !c.isActive })}>
             {c.isActive ? '停用' : '啟用'}
           </button>
@@ -220,22 +252,22 @@ function CategorySettings({ categories, onChanged }: { categories: RecordCategor
               刪除
             </button>
           )}
-          {c.isBuiltin && <span className="muted">內建</span>}
         </div>
       ))}
-      <div className="row" style={{ marginTop: 8 }}>
+      <div className="settings-category-row settings-new-row">
+        <span />
         <input
-          style={{ width: 200 }}
           placeholder="新分類名稱"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
         />
-        <select style={{ width: 'auto' }} value={newParent} onChange={(e) => setNewParent(e.target.value)}>
+        <select value={newParent} onChange={(e) => setNewParent(e.target.value)}>
           <option value="">（頂層）</option>
           {categories.map((c) => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
+        <span />
         <button
           className="primary"
           disabled={!validateCategoryName(newName).ok}
@@ -279,15 +311,22 @@ function ModelSettings({
   };
 
   return (
-    <section className="card">
-      <h2>Model Presets</h2>
+    <section className="card settings-section settings-wide-section">
+      <h2>模型清單</h2>
       <p className="muted">
-        Model 只是 metadata、保存時可以不填。這裡的 preset 可以新增、修改、停用、刪除、排序。
+        模型只是本機 metadata，保存時可以不填。這裡可新增、修改、停用、刪除、排序。
       </p>
+      <div className="settings-model-row settings-row-header">
+        <span>模型</span>
+        <span>提供者</span>
+        <span>版本</span>
+        <span>別名</span>
+        <span>分類</span>
+        <span>動作</span>
+      </div>
       {presets.map((p) => (
-        <div className="row" key={p.id} style={{ marginBottom: 4, opacity: p.isActive ? 1 : 0.5 }}>
+        <div className="settings-model-row" key={p.id} style={{ opacity: p.isActive ? 1 : 0.5 }}>
           <input
-            style={{ width: 150 }}
             defaultValue={p.modelName}
             onBlur={(e) => {
               if (validateModelPreset({ modelName: e.target.value }).ok && e.target.value !== p.modelName)
@@ -295,25 +334,21 @@ function ModelSettings({
             }}
           />
           <input
-            style={{ width: 110 }}
             placeholder="provider"
             defaultValue={p.provider ?? ''}
             onBlur={(e) => e.target.value !== (p.provider ?? '') && save(p, { provider: e.target.value })}
           />
           <input
-            style={{ width: 90 }}
             placeholder="version"
             defaultValue={p.modelVersion ?? ''}
             onBlur={(e) => e.target.value !== (p.modelVersion ?? '') && save(p, { modelVersion: e.target.value })}
           />
           <input
-            style={{ width: 90 }}
             placeholder="alias"
             defaultValue={p.alias ?? ''}
             onBlur={(e) => e.target.value !== (p.alias ?? '') && save(p, { alias: e.target.value })}
           />
           <select
-            style={{ width: 'auto' }}
             value={p.categoryId ?? ''}
             onChange={(e) => save(p, { categoryId: e.target.value || null })}
           >
@@ -322,38 +357,39 @@ function ModelSettings({
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
-          <button onClick={() => save(p, { sortOrder: p.sortOrder - 1.5 })}>↑</button>
-          <button onClick={() => save(p, { sortOrder: p.sortOrder + 1.5 })}>↓</button>
-          <button onClick={() => save(p, { isDefault: !p.isDefault })}>
-            {p.isDefault ? '★ default' : '☆ 設為 default'}
-          </button>
-          <button onClick={() => save(p, { isActive: !p.isActive })}>{p.isActive ? '停用' : '啟用'}</button>
-          <button
-            className="danger"
-            onClick={async () => {
-              await modelPresetRepository.delete(p.id);
-              onChanged();
-            }}
-          >
-            刪除
-          </button>
+          <div className="settings-model-actions">
+            <button onClick={() => save(p, { sortOrder: p.sortOrder - 1.5 })} title="上移">↑</button>
+            <button onClick={() => save(p, { sortOrder: p.sortOrder + 1.5 })} title="下移">↓</button>
+            <button onClick={() => save(p, { isDefault: !p.isDefault })} title="設為 default">
+              {p.isDefault ? '★' : '☆'}
+            </button>
+            <button onClick={() => save(p, { isActive: !p.isActive })}>{p.isActive ? '停用' : '啟用'}</button>
+            <button
+              className="danger"
+              onClick={async () => {
+                await modelPresetRepository.delete(p.id);
+                onChanged();
+              }}
+            >
+              刪除
+            </button>
+          </div>
         </div>
       ))}
-      <div className="row" style={{ marginTop: 8 }}>
+      <div className="settings-model-row settings-new-row">
         <input
-          style={{ width: 150 }}
           placeholder="model 名稱"
           value={draft.modelName}
           onChange={(e) => setDraft({ ...draft, modelName: e.target.value })}
         />
         <input
-          style={{ width: 110 }}
           placeholder="provider（選填）"
           value={draft.provider}
           onChange={(e) => setDraft({ ...draft, provider: e.target.value })}
         />
+        <span />
+        <span />
         <select
-          style={{ width: 'auto' }}
           value={draft.categoryId}
           onChange={(e) => setDraft({ ...draft, categoryId: e.target.value })}
         >
@@ -382,7 +418,7 @@ function ModelSettings({
             onChanged();
           }}
         >
-          新增 model
+          新增 Preset
         </button>
       </div>
     </section>
@@ -397,7 +433,7 @@ function DisplaySettingsSection({
   onPatch: (p: Partial<DisplaySettings>) => void;
 }) {
   return (
-    <section className="card">
+    <section className="card settings-section">
       <h2>顯示設定</h2>
       <div className="row">
         {(['pending', ...Object.keys(ROLE_LABELS)] as (AssetRole | 'pending')[]).map((role) => (
@@ -458,7 +494,7 @@ function ExportSettingsSection({
   onPatch: (p: Partial<DisplaySettings>) => void;
 }) {
   return (
-    <section className="card">
+    <section className="card settings-section">
       <h2>匯出設定</h2>
       <div className="row">
         <label className="muted">預設格式</label>
@@ -505,7 +541,7 @@ function ExportSettingsSection({
 
 function PermissionInfo() {
   return (
-    <section className="card">
+    <section className="card settings-section settings-wide-section">
       <h2>權限與快捷鍵說明</h2>
       <ul style={{ paddingLeft: 18 }}>
         <li>

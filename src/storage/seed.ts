@@ -41,26 +41,24 @@ export const BUILTIN_CATEGORY_IDS = {
   text: 'builtin-text-gen',
   image: 'builtin-image-gen',
   video: 'builtin-video-gen',
-  systemPrompt: 'builtin-system-prompt',
-  analysis: 'builtin-analysis-prompt',
-  codeReview: 'builtin-code-review-prompt',
-  research: 'builtin-research-prompt',
+  music: 'builtin-music-gen',
 } as const;
+
+export const BUILTIN_CATEGORY_DEFAULTS = [
+  { id: BUILTIN_CATEGORY_IDS.text, name: '生文', sortOrder: 0, color: '#22D3EE' },
+  { id: BUILTIN_CATEGORY_IDS.image, name: '生圖', sortOrder: 1, color: '#A78BFA' },
+  { id: BUILTIN_CATEGORY_IDS.video, name: '生影', sortOrder: 2, color: '#34D399' },
+  { id: BUILTIN_CATEGORY_IDS.music, name: '生音樂', sortOrder: 3, color: '#FBBF24' },
+] as const;
 
 /** Seed built-in categories and starter model presets, once. Idempotent. */
 export async function seedDefaults(): Promise<void> {
   const existing = await categoryRepository.list();
   if (existing.length > 0) return;
 
-  const cats: RecordCategory[] = [
-    builtinCategory(BUILTIN_CATEGORY_IDS.text, '生文', 0, '#22D3EE'),
-    builtinCategory(BUILTIN_CATEGORY_IDS.image, '生圖', 1, '#A78BFA'),
-    builtinCategory(BUILTIN_CATEGORY_IDS.video, '生影', 2, '#34D399'),
-    builtinCategory(BUILTIN_CATEGORY_IDS.systemPrompt, 'System Prompt', 3),
-    builtinCategory(BUILTIN_CATEGORY_IDS.analysis, '分析 Prompt', 4),
-    builtinCategory(BUILTIN_CATEGORY_IDS.codeReview, 'Code Review Prompt', 5),
-    builtinCategory(BUILTIN_CATEGORY_IDS.research, 'Research Prompt', 6),
-  ];
+  const cats: RecordCategory[] = BUILTIN_CATEGORY_DEFAULTS.map((c) =>
+    builtinCategory(c.id, c.name, c.sortOrder, c.color),
+  );
   for (const c of cats) await categoryRepository.save(c);
 
   const presets: ModelPreset[] = [

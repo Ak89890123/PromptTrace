@@ -99,15 +99,27 @@ export default function App() {
         </label>
         <label className="spread tog-row" title="調整右緣「P」啟動鈕的上下位置">
           <span className="tog-label">P 邊欄高度</span>
-          <input
-            type="range"
-            min={5}
-            max={95}
-            step={1}
-            value={settings.edgeTabTop}
-            onChange={(e) => patch({ edgeTabTop: Number(e.target.value) })}
-            style={{ width: 130 }}
-          />
+          <span className="range-row">
+            <input
+              type="range"
+              min={5}
+              max={95}
+              step={1}
+              value={settings.edgeTabTop}
+              onChange={(e) => patch({ edgeTabTop: Number(e.target.value) })}
+            />
+            <button
+              type="button"
+              className="reset-btn"
+              disabled={settings.edgeTabTop === DEFAULT_SETTINGS.edgeTabTop}
+              onClick={(e) => {
+                e.preventDefault();
+                patch({ edgeTabTop: DEFAULT_SETTINGS.edgeTabTop });
+              }}
+            >
+              Reset
+            </button>
+          </span>
         </label>
       </div>
 

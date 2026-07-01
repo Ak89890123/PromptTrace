@@ -17,6 +17,8 @@ import type { GalleryAsset, GalleryRecord, ListRecordsResult } from '@/src/core/
 import { detectProvider } from '@/src/core/capture/detectProvider';
 
 const send = (message: unknown) => chrome.runtime.sendMessage(message).catch(() => undefined);
+const openExtensionPage = (page: 'library' | 'settings', hash?: string) =>
+  send({ type: 'navigation/openExtensionPage', payload: { page, hash } });
 
 export default function PanelApp({ overlay }: { overlay: OverlayManager }) {
   const [settings, setSettings] = useState<DisplaySettings>(DEFAULT_SETTINGS);
@@ -273,8 +275,8 @@ function CapturePanel({ session, settings }: { session: CaptureSessionState; set
             PromptTrace
           </span>
           <span className="pt-links">
-            <a onClick={() => window.open(chrome.runtime.getURL('library.html'))}>Library</a>
-            <a onClick={() => window.open(chrome.runtime.getURL('settings.html'))}>Settings</a>
+            <a onClick={() => openExtensionPage('library')}>Library</a>
+            <a onClick={() => openExtensionPage('settings')}>Settings</a>
           </span>
         </div>
         <div className="pt-panel-body">
@@ -301,7 +303,7 @@ function CapturePanel({ session, settings }: { session: CaptureSessionState; set
 }
 
 /* ------------------------------------------------------------------ */
-/*  Gallery panel: right-middle, pure hover (collapses on mouse-leave) */
+/*  Gallery panel: right-middle, hover-open with optional pin           */
 /* ------------------------------------------------------------------ */
 
 function GalleryPanel({
@@ -312,6 +314,7 @@ function GalleryPanel({
   onZoom: (z: ZoomSrc | null) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [pinned, setPinned] = useState(false);
   const [editing, setEditing] = useState<GalleryRecord | null>(null);
   const [refreshSignal, setRefreshSignal] = useState(0);
   // The tab sits where the user put it; the panel keeps its full height and only
@@ -321,22 +324,43 @@ function GalleryPanel({
   const PANEL_VH = 86;
   const edgeTop = Math.min(94, Math.max(6, settings.edgeTabTop ?? 50));
   const panelTopVh = Math.min(100 - PANEL_VH - 2, Math.max(2, edgeTop - PANEL_VH / 2));
+  const openGallery = () => {
+    setOpen(true);
+  };
+  const closeGallery = () => {
+    // Stay open while editing (the editor flyout sits to the left). Otherwise
+    // leaving the gallery closes it and dismisses the big preview.
+    if (editing || pinned) return;
+    setOpen(false);
+    onZoom(null);
+  };
+  const dismissGallery = useCallback(() => {
+    setPinned(false);
+    setEditing(null);
+    setOpen(false);
+    onZoom(null);
+  }, [onZoom]);
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      dismissGallery();
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, [open, dismissGallery]);
   return (
-    <div
-      className="pt-gallery-edge"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => {
-        // Stay open while editing (the editor flyout sits to the left). Otherwise
-        // leaving the gallery closes it and dismisses the big preview.
-        if (editing) return;
-        setOpen(false);
-        onZoom(null);
-      }}
-    >
+    <div className="pt-gallery-edge">
       {open ? (
         // The dock's padding-right keeps the visual gap to the screen edge part of
         // the hover zone, so sliding into it doesn't drop hover and flicker shut.
-        <div className="pt-panel-dock" style={{ top: `${panelTopVh}vh` }}>
+        <div
+          className="pt-panel-dock"
+          style={{ top: `${panelTopVh}vh` }}
+          onMouseEnter={openGallery}
+          onMouseLeave={closeGallery}
+        >
           <div className="pt-glass pt-panel pt-gallery-panel" style={{ maxHeight: `${PANEL_VH}vh` }}>
             <div className="pt-panel-head">
               <span className="pt-title">
@@ -344,8 +368,31 @@ function GalleryPanel({
                 PromptTrace
               </span>
               <span className="pt-links">
-                <a onClick={() => window.open(chrome.runtime.getURL('library.html'))}>Library</a>
-                <a onClick={() => window.open(chrome.runtime.getURL('settings.html'))}>Settings</a>
+                <a onClick={() => openExtensionPage('library')}>紀錄庫</a>
+                <a onClick={() => openExtensionPage('settings')}>設定</a>
+              </span>
+              <span className="pt-panel-actions">
+                <button
+                  className={`pt-icon-btn${pinned ? ' is-on' : ''}`}
+                  title={pinned ? '取消固定' : '固定面板'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPinned((v) => !v);
+                    setOpen(true);
+                  }}
+                >
+                  {pinned ? '固定' : '釘選'}
+                </button>
+                <button
+                  className="pt-icon-btn"
+                  title="關閉"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    dismissGallery();
+                  }}
+                >
+                  關閉
+                </button>
               </span>
             </div>
             <div className="pt-panel-body">
@@ -361,7 +408,12 @@ function GalleryPanel({
       ) : (
         <div
           className="pt-glass pt-edge-tab"
-          style={{ position: 'absolute', right: 0, top: `${edgeTop}%`, transform: 'translateY(-50%)' }}
+          style={{ top: `${edgeTop}vh`, transform: 'translateY(-50%)' }}
+          onMouseEnter={openGallery}
+          onClick={() => {
+            setPinned(true);
+            setOpen(true);
+          }}
         >
           <img className="pt-tab-img" src={LOGO_DATA_URL} alt="PromptTrace" />
         </div>
@@ -473,7 +525,7 @@ function CaptureBody({
             ✅ 已保存。{' '}
             <a
               style={{ color: '#8ad7e8', cursor: 'pointer' }}
-              onClick={() => window.open(chrome.runtime.getURL(`library.html#record=${session.lastCommittedRecordId}`))}
+              onClick={() => openExtensionPage('library', `#record=${session.lastCommittedRecordId}`)}
             >
               在 Library 查看
             </a>
@@ -717,13 +769,13 @@ function GalleryCard({
                   onEdit(record);
                 }}
               >
-                ✏️ 編輯標籤
+                編輯標籤
               </button>
               <button
                 className="pt-gmenu-item pt-gmenu-item--danger"
                 onClick={() => setConfirmDel(true)}
               >
-                🗑 刪除
+                刪除
               </button>
             </>
           ) : (

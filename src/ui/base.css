@@ -8,6 +8,17 @@
   --accent: #22d3ee;
   --danger: #f87171;
   --ok: #34d399;
+  --surface-0: #0b0b0f;
+  --surface-1: rgba(18, 19, 24, 0.84);
+  --surface-2: rgba(28, 30, 36, 0.72);
+  --stroke-soft: rgba(255, 255, 255, 0.1);
+  --stroke-strong: rgba(255, 255, 255, 0.16);
+  --accent-soft: rgba(34, 211, 238, 0.16);
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --shadow-panel: 0 14px 42px rgba(0, 0, 0, 0.32);
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
 }
 
@@ -42,7 +53,7 @@ button {
   background: rgba(255, 255, 255, 0.08);
   color: var(--text);
   border: 1px solid var(--glass-border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 5px 12px;
   font-size: 12px;
   cursor: pointer;
@@ -68,7 +79,7 @@ input, select, textarea {
   background: rgba(0, 0, 0, 0.32);
   color: var(--text);
   border: 1px solid var(--glass-border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 6px 10px;
   font-size: 12px;
   width: 100%;
@@ -83,7 +94,7 @@ option { background: #1c1c20; }
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid var(--glass-border);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   padding: 12px 14px;
   margin-bottom: 10px;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.09);
@@ -109,11 +120,11 @@ option { background: #1c1c20; }
   max-height: 80px;
   overflow: auto;
   background: rgba(0, 0, 0, 0.28);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 6px 9px;
   margin: 6px 0;
 }
-img.thumb, video.thumb { max-width: 100%; max-height: 120px; border-radius: 10px; display: block; margin: 6px 0; }
+img.thumb, video.thumb { max-width: 100%; max-height: 120px; border-radius: var(--radius-md); display: block; margin: 6px 0; }
 .toolbar { display: flex; gap: 8px; padding: 10px 0; position: sticky; top: 0; z-index: 5; }
 .section { margin-bottom: 12px; }
 a { color: #8ad7e8; }

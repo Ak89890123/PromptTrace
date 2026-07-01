@@ -23,4 +23,21 @@ test('popup renders quick toggles and persists a change across reopen', async ({
     .filter({ hasText: '右緣漂浮面板' })
     .locator('input[type=checkbox]');
   await expect(inputAfter).toBeChecked({ checked: !before });
+
+  const heightRow = page.locator('label.tog-row').filter({ hasText: 'P 邊欄高度' });
+  const range = heightRow.locator('input[type=range]');
+  const reset = heightRow.getByRole('button', { name: 'Reset' });
+
+  await range.evaluate((node) => {
+    const input = node as HTMLInputElement;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(input, '72');
+    input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect(reset).toBeEnabled();
+
+  await reset.click();
+  await expect(range).toHaveValue('50');
+  await expect(reset).toBeDisabled();
 });

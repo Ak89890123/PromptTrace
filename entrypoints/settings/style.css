@@ -1,0 +1,134 @@
+.settings-page {
+  width: min(1440px, calc(100vw - 64px));
+  margin: 0 auto;
+  padding: 20px 0 48px;
+  font-size: 14px;
+}
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: minmax(420px, 0.85fr) minmax(640px, 1.15fr);
+  gap: 14px;
+}
+
+.settings-section {
+  margin-bottom: 0;
+}
+
+.settings-wide-section {
+  grid-column: 1 / -1;
+}
+
+.settings-page .card {
+  border-radius: 12px;
+}
+
+.settings-category-row,
+.settings-model-row {
+  display: grid;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.settings-category-row {
+  grid-template-columns: 32px minmax(180px, 300px) 160px 74px 64px;
+  max-width: 650px;
+}
+
+.settings-category-row input[type="color"] {
+  width: 28px;
+  padding: 0;
+}
+
+.settings-category-row input:not([type="color"]),
+.settings-category-row select,
+.settings-model-row input,
+.settings-model-row select {
+  width: 100%;
+  min-width: 0;
+}
+
+.settings-compact-actions,
+.settings-model-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-compact-actions button {
+  width: 34px;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.settings-model-row {
+  grid-template-columns: minmax(132px, 1.2fr) minmax(132px, 1fr) 104px 104px 150px 268px;
+}
+
+.settings-model-actions {
+  justify-content: flex-start;
+}
+
+.settings-model-actions button {
+  white-space: nowrap;
+}
+
+.settings-model-actions button[title] {
+  width: 34px;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.settings-row-header {
+  margin: 12px 0 7px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.settings-category-row.settings-row-header,
+.settings-model-row.settings-row-header {
+  align-items: end;
+}
+
+.settings-new-row {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.settings-model-row.settings-new-row {
+  grid-template-columns: minmax(132px, 1.2fr) minmax(132px, 1fr) 104px 104px 150px 120px;
+}
+
+@media (max-width: 1100px) {
+  .settings-page {
+    width: min(860px, calc(100vw - 32px));
+    padding-inline: 0;
+  }
+
+  .settings-layout {
+    display: block;
+  }
+
+  .settings-section {
+    margin-bottom: 10px;
+  }
+
+  .settings-category-row,
+  .settings-model-row {
+    grid-template-columns: 1fr;
+    max-width: none;
+  }
+
+  .settings-category-row input[type="color"] {
+    width: 100%;
+    height: 34px;
+  }
+
+  .settings-row-header {
+    display: none;
+  }
+}

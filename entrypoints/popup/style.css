@@ -38,6 +38,25 @@ body {
   font-size: 12.5px;
 }
 
+.range-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.range-row input[type='range'] {
+  width: 112px;
+}
+.reset-btn {
+  padding: 4px 8px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+.reset-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* iOS-style toggle switch */
 .pt-switch {
   position: relative;

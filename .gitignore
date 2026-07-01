@@ -7,6 +7,7 @@ stats-*.json
 .env.*
 .gstack/
 .serena/
+.codegraph/
 
 # Playwright e2e artifacts
 test-results/

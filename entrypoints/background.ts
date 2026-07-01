@@ -570,6 +570,13 @@ export default defineBackground(() => {
           return sendResponse({ category });
         }
 
+        case 'navigation/openExtensionPage': {
+          const page = message.payload.page === 'settings' ? 'settings.html' : 'library.html';
+          const hash = message.payload.hash?.startsWith('#') ? message.payload.hash : '';
+          await chrome.tabs.create({ url: chrome.runtime.getURL(`${page}${hash}`) });
+          return sendResponse({ ok: true });
+        }
+
         case 'library/listRecords': {
           const [records, allAssets, categories] = await Promise.all([
             recordRepository.list(),
