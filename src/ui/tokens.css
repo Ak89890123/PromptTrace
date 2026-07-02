@@ -1,0 +1,118 @@
+:root,
+:host {
+  color-scheme: dark;
+
+  --pt-font-family-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+  --pt-line-height-body: 1.55;
+
+  --pt-font-size-micro: 10px;
+  --pt-font-size-tag: 10.5px;
+  --pt-font-size-caption: 11px;
+  --pt-font-size-control: 12px;
+  --pt-font-size-body-sm: 12.5px;
+  --pt-font-size-body: 13px;
+  --pt-font-size-page: 14px;
+  --pt-font-size-title: 15px;
+  --pt-font-size-heading: 17px;
+  --pt-font-size-display-sm: 20px;
+
+  --pt-color-text-primary: #f5f5f7;
+  --pt-color-text-secondary: rgba(245, 245, 247, 0.72);
+  --pt-color-text-muted: rgba(245, 245, 247, 0.55);
+  --pt-color-text-faint: rgba(245, 245, 247, 0.4);
+  --pt-color-text-inverse: #0b1220;
+  --pt-color-text-on-accent: #06231f;
+
+  --pt-color-accent: #22d3ee;
+  --pt-color-accent-hover: rgba(34, 211, 238, 0.55);
+  --pt-color-accent-soft: rgba(34, 211, 238, 0.16);
+  --pt-color-accent-softer: rgba(34, 211, 238, 0.08);
+  --pt-color-success: #34d399;
+  --pt-color-danger: #f87171;
+  --pt-color-danger-soft: rgba(248, 113, 113, 0.55);
+  --pt-color-warning-soft: rgba(251, 191, 36, 0.55);
+  --pt-color-link: #8ad7e8;
+
+  --pt-surface-canvas: #0b0b0f;
+  --pt-surface-panel: rgba(28, 28, 32, 0.55);
+  --pt-surface-panel-strong: rgba(28, 28, 32, 0.6);
+  --pt-surface-page: rgba(18, 19, 24, 0.84);
+  --pt-surface-elevated: rgba(28, 30, 36, 0.72);
+  --pt-surface-card: rgba(255, 255, 255, 0.07);
+  --pt-surface-card-subtle: rgba(255, 255, 255, 0.05);
+  --pt-surface-card-faint: rgba(255, 255, 255, 0.03);
+  --pt-surface-card-hover: rgba(255, 255, 255, 0.06);
+  --pt-surface-control: rgba(255, 255, 255, 0.08);
+  --pt-surface-control-hover: rgba(255, 255, 255, 0.15);
+  --pt-surface-input: rgba(0, 0, 0, 0.3);
+  --pt-surface-input-strong: rgba(0, 0, 0, 0.32);
+  --pt-surface-menu: rgba(40, 40, 46, 0.98);
+  --pt-surface-close: rgba(20, 20, 24, 0.92);
+  --pt-surface-rail: rgba(8, 8, 12, 0.76);
+  --pt-surface-rail-strong: rgba(8, 10, 14, 0.68);
+  --pt-surface-drawer: rgba(12, 13, 18, 0.9);
+
+  --pt-stroke-glass: rgba(255, 255, 255, 0.14);
+  --pt-stroke-soft: rgba(255, 255, 255, 0.1);
+  --pt-stroke-muted: rgba(255, 255, 255, 0.12);
+  --pt-stroke-strong: rgba(255, 255, 255, 0.16);
+  --pt-stroke-hover: rgba(255, 255, 255, 0.24);
+  --pt-stroke-subtle: rgba(255, 255, 255, 0.08);
+  --pt-stroke-accent: rgba(34, 211, 238, 0.72);
+  --pt-stroke-accent-strong: rgba(34, 211, 238, 0.82);
+  --pt-glass-inner: rgba(255, 255, 255, 0.07);
+  --pt-glass-highlight: rgba(255, 255, 255, 0.12);
+
+  --pt-space-0: 0;
+  --pt-space-1: 4px;
+  --pt-space-2: 6px;
+  --pt-space-3: 8px;
+  --pt-space-4: 10px;
+  --pt-space-5: 12px;
+  --pt-space-6: 14px;
+  --pt-space-7: 16px;
+  --pt-space-8: 18px;
+  --pt-space-9: 20px;
+  --pt-space-10: 24px;
+  --pt-space-12: 32px;
+  --pt-space-14: 40px;
+  --pt-space-16: 48px;
+
+  --pt-radius-tight: 4px;
+  --pt-radius-kbd: 6px;
+  --pt-radius-thumb: 8px;
+  --pt-radius-control: 10px;
+  --pt-radius-card: 12px;
+  --pt-radius-panel: 20px;
+  --pt-radius-pill: 999px;
+
+  --pt-shadow-panel: 0 14px 42px rgba(0, 0, 0, 0.32);
+  --pt-shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.35);
+  --pt-shadow-card: 0 4px 24px rgba(0, 0, 0, 0.25);
+  --pt-shadow-menu: 0 8px 28px rgba(0, 0, 0, 0.5);
+  --pt-shadow-lightbox: 0 12px 48px rgba(0, 0, 0, 0.6);
+  --pt-shadow-floating-control: 0 2px 8px rgba(0, 0, 0, 0.5);
+  --pt-shadow-focus: 0 0 0 1px rgba(34, 211, 238, 0.18);
+  --pt-shadow-accent-button: 0 2px 12px rgba(34, 211, 238, 0.3);
+
+  /* Compatibility aliases for existing extension pages. */
+  --text: var(--pt-color-text-primary);
+  --muted: var(--pt-color-text-muted);
+  --glass: var(--pt-surface-panel);
+  --glass-border: var(--pt-stroke-glass);
+  --glass-inner: var(--pt-glass-inner);
+  --accent: var(--pt-color-accent);
+  --danger: var(--pt-color-danger);
+  --ok: var(--pt-color-success);
+  --surface-0: var(--pt-surface-canvas);
+  --surface-1: var(--pt-surface-page);
+  --surface-2: var(--pt-surface-elevated);
+  --stroke-soft: var(--pt-stroke-soft);
+  --stroke-strong: var(--pt-stroke-strong);
+  --accent-soft: var(--pt-color-accent-soft);
+  --radius-sm: var(--pt-radius-thumb);
+  --radius-md: var(--pt-radius-control);
+  --radius-lg: var(--pt-radius-card);
+  --radius-xl: 16px;
+  --shadow-panel: var(--pt-shadow-panel);
+}
