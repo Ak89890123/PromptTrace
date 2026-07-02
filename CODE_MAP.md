@@ -2,7 +2,7 @@
 
 ## Product Shape
 - PromptTrace is a local-first Chrome MV3 extension for capturing prompt workflow assets as Input, Input Reference, Negative, and Output.
-- It has no backend, account system, analytics, cloud sync, or built-in LLM API calls.
+- It has no backend, account system, analytics, or cloud sync. Optional BYOK prompt summaries can call OpenAI, Gemini, Claude, or OpenRouter only after the user enables them.
 - User data stays in IndexedDB, `chrome.storage`, and extension-managed downloads under `Downloads/PromptTrace/`.
 
 ## Main Entrypoints
@@ -10,10 +10,10 @@
 - `entrypoints/content/`: injected shadow-root UI for selection toolbar, capture panel, right-edge gallery, card editor, lightbox, and overlay frames.
 - `entrypoints/popup/`: toolbar popup for quick settings and links to Library / Settings.
 - `entrypoints/library/`: full-page local record browser with left filters, central record cards, and right detail inspector.
-- `entrypoints/settings/`: detailed settings for interaction, categories, model presets, display, export, and permissions.
+- `entrypoints/settings/`: detailed settings for interaction, categories, model presets, display, BYOK summary provider/API key/system prompt/token usage, export, and permissions.
 
 ## Core And Storage
-- `src/core/`: pure TypeScript domain logic, validation, capture reducers, hotkeys, export, copy bundle, conflict, and error models. Keep Chrome APIs out of this layer.
+- `src/core/`: pure TypeScript domain logic, validation, capture reducers, hotkeys, export, copy bundle, summary provider adapters, conflict, and error models. Keep Chrome APIs out of this layer.
 - `src/storage/`: IndexedDB schema, repositories, seed data, commit/delete services, and file record handling.
 - `src/ui/`: shared settings hooks, role colors, taxonomy hooks, base CSS, and lightweight design tokens.
 
