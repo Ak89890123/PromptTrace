@@ -16,7 +16,7 @@
 
 1. 反白文字 → 選取處直接浮出角色按鈕（或按自訂快捷鍵 Alt+1～4 立即加入）；圖片 / 影片用右鍵選單。
 2. 頁面出現角色顏色框線；滑鼠靠近頁面右緣，玻璃質感漂浮面板自動展開顯示本次選取。
-3. 在面板中調整角色、按 ✓ → 選填分類（可多層、可自訂）→ 選填 Model → 保存。
+3. 在面板中調整角色、按 ✓ → 選填分類與 Model metadata → 保存。
 4. 文字進 IndexedDB，媒體下載到 `Downloads/PromptTrace/`，Library 中可搜尋、預覽、複製、匯出、刪除。
 
 ## Features
@@ -29,12 +29,12 @@
 - 文字 / 圖片 / 影片 capture session，含 overlay 框線（顏色依角色變化）
 - 角色規則：文字可四種角色；圖片與影片只能 Input Reference / Output
 - 重複 / 重疊選取偵測：Conflict Card（取代或取消）
-- 兩步 wizard：分類（選填、多層、可快速新增）→ Model（選填 / Unknown / Not applicable / Custom）
-- Library Dashboard：搜尋、分類 / Model / 角色篩選、預覽、notes、tags、補充資產（貼文字、拖放或上傳圖片 / 影片）
+- 兩步 wizard：分類（選填、可快速新增）→ Model metadata（選填 / 自動偵測 / 自訂）
+- Library Dashboard：搜尋、分類篩選、預覽、notes、tags、補充資產（貼文字、拖放或上傳圖片 / 影片）
 - Copy Input Bundle / Copy Output Bundle / Copy Full Record，含 Floating Copy Tray fallback
 - Markdown / JSON export
 - 刪除 Record 時可選擇是否連同本地下載檔案刪除
-- Settings：分類樹管理、Model preset 管理、角色顏色、overlay / tray 開關、匯出偏好
+- Settings：語言、互動方式、分類管理、角色顏色、overlay / tray 開關與本地檔案資料夾入口
 - 影片無法下載時顯示 Error Card，可 fallback 只保存來源——流程不會 crash
 
 ## Architecture
@@ -79,9 +79,9 @@ npm test         # unit + integration tests
 1. 在任何網頁反白文字 → 按召喚鍵（預設 **Alt+S**）→ 選取處浮出角色選項，點一下即加入（也可在 Settings 改成反白後自動出現，或用右鍵選單）。
 2. 圖片 / 影片 → 游標移上去按召喚鍵（只會出現合法角色），或右鍵 → **PromptTrace：加入圖片 / 加入影片**。
 3. 滑鼠移到頁面右緣 → 漂浮面板展開，可調整角色（圖片 / 影片不能選 Negative）、移除項目。
-4. 按 **✓ 保存** → Step 1 選分類（可不選）→ Step 2 選 Model（可不選）。
+4. 按 **✓ 保存** → Step 1 選分類（可不選）→ Step 2 確認 Model metadata（可不選）。
 5. 開 **Library** 搜尋、預覽、複製 bundle、匯出 Markdown / JSON、刪除。
-6. 在 **Settings** 自訂快捷鍵、工具列按鈕、觸發方式、角色顏色與開關。
+6. 在 **Settings** 自訂語言、觸發方式、工具列按鈕、分類、角色顏色與開關。
 
 ## Permissions Explanation
 
@@ -105,7 +105,7 @@ npm test         # unit + integration tests
 npm test
 ```
 
-- Unit：role / asset / category tree / model 驗證、duplicate-overlap 偵測、Markdown / JSON export、copy bundle、error / conflict 映射、session state。
+- Unit：role / asset / category / model metadata 驗證、duplicate-overlap 偵測、Markdown / JSON export、copy bundle、error / conflict 映射、session state。
 - Integration（fake-indexeddb）：seed、commit session、FileRecord 建立、下載失敗狀態、delete cascade。
 - 手動 E2E：見 [tests/e2e/manual-e2e.md](tests/e2e/manual-e2e.md) 與 [docs/demo/demo-script.md](docs/demo/demo-script.md)。
 

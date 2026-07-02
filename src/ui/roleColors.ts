@@ -11,12 +11,10 @@ export const DEFAULT_ROLE_COLORS: RoleColorMap = {
 };
 
 export type DisplaySettings = {
+  language: 'system' | 'zh-TW' | 'en-US';
   roleColors: RoleColorMap;
   overlayEnabled: boolean;
   copyTrayEnabled: boolean;
-  defaultExportFormat: 'markdown' | 'json';
-  exportIncludeSource: boolean;
-  exportIncludeFilePath: boolean;
 
   /** In-page floating panel that expands when hovering the right edge. */
   edgePanelEnabled: boolean;
@@ -34,19 +32,15 @@ export type DisplaySettings = {
   toolbarRoles: AssetRole[];
   /** Saved-prompt card layout: 'split' = Input·Reference | Output; 'output-only'. */
   cardLayout: 'split' | 'output-only';
-  /** Ask where to save each downloaded media file. Default false = save silently. */
-  promptDownloadLocation: boolean;
   /** Vertical position of the right-edge gallery tab, 0 (top)–100 (bottom). */
   edgeTabTop: number;
 };
 
 export const DEFAULT_SETTINGS: DisplaySettings = {
+  language: 'system',
   roleColors: DEFAULT_ROLE_COLORS,
   overlayEnabled: true,
   copyTrayEnabled: true,
-  defaultExportFormat: 'markdown',
-  exportIncludeSource: true,
-  exportIncludeFilePath: true,
 
   edgePanelEnabled: true,
   selectionToolbarEnabled: true,
@@ -54,7 +48,6 @@ export const DEFAULT_SETTINGS: DisplaySettings = {
   summonHotkey: 'Shift+Z',
   toolbarRoles: ['input', 'input_reference', 'negative', 'output'],
   cardLayout: 'split',
-  promptDownloadLocation: false,
   edgeTabTop: 50,
 };
 
@@ -62,9 +55,14 @@ const SETTINGS_KEY = 'prompttrace:settings';
 
 function withDefaults(stored: Partial<DisplaySettings> | undefined): DisplaySettings {
   if (!stored) return DEFAULT_SETTINGS;
+  const language =
+    stored.language === 'system' || stored.language === 'zh-TW' || stored.language === 'en-US'
+      ? stored.language
+      : DEFAULT_SETTINGS.language;
   return {
     ...DEFAULT_SETTINGS,
     ...stored,
+    language,
     roleColors: { ...DEFAULT_ROLE_COLORS, ...(stored.roleColors ?? {}) },
     toolbarRoles:
       stored.toolbarRoles && stored.toolbarRoles.length >= 2

@@ -1,16 +1,67 @@
 import { useEffect, useState } from 'react';
-import type { ModelPreset, RecordCategory } from '@/src/core/domain/entities';
+import type { RecordCategory } from '@/src/core/domain/entities';
 import { ROLE_LABELS, type AssetRole } from '@/src/core/domain/enums';
-import { validateCategoryName, validateModelPreset, wouldCreateCycle } from '@/src/core/domain/validation';
+import { validateCategoryName } from '@/src/core/domain/validation';
 import { formatHotkeyFromEvent } from '@/src/core/hotkeys';
-import { categoryRepository, modelPresetRepository } from '@/src/storage/repositories';
+import { categoryRepository } from '@/src/storage/repositories';
 import { BUILTIN_CATEGORY_DEFAULTS } from '@/src/storage/seed';
+import { categoryLabel, resolveLanguage, roleLabel, UI_TEXT, type ResolvedLanguage, type UiText } from '@/src/ui/i18n';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type DisplaySettings } from '@/src/ui/roleColors';
-import { flattenTree, useTaxonomy } from '@/src/ui/hooks';
+import { useTaxonomy } from '@/src/ui/hooks';
+
+const COLOR_PALETTES = [
+  {
+    id: 'red',
+    label: '紅',
+    base: '#FB7185',
+    shades: ['#7F1D1D', '#991B1B', '#DC2626', '#EF4444', '#F87171', '#FB7185', '#FDA4AF', '#F97316'],
+  },
+  {
+    id: 'orange',
+    label: '橘',
+    base: '#F97316',
+    shades: ['#7C2D12', '#9A3412', '#C2410C', '#EA580C', '#F97316', '#FB923C', '#FDBA74', '#F59E0B'],
+  },
+  {
+    id: 'yellow',
+    label: '黃',
+    base: '#FBBF24',
+    shades: ['#713F12', '#854D0E', '#A16207', '#CA8A04', '#EAB308', '#FBBF24', '#FDE047', '#FEF08A'],
+  },
+  {
+    id: 'green',
+    label: '綠',
+    base: '#34D399',
+    shades: ['#064E3B', '#065F46', '#047857', '#059669', '#10B981', '#34D399', '#6EE7B7', '#A3E635'],
+  },
+  {
+    id: 'cyan',
+    label: '青',
+    base: '#22D3EE',
+    shades: ['#164E63', '#155E75', '#0E7490', '#0891B2', '#06B6D4', '#22D3EE', '#67E8F9', '#2DD4BF'],
+  },
+  {
+    id: 'blue',
+    label: '藍',
+    base: '#60A5FA',
+    shades: ['#1E3A8A', '#1D4ED8', '#2563EB', '#3B82F6', '#60A5FA', '#93C5FD', '#38BDF8', '#818CF8'],
+  },
+  {
+    id: 'purple',
+    label: '紫',
+    base: '#A78BFA',
+    shades: ['#4C1D95', '#6D28D9', '#7C3AED', '#8B5CF6', '#A78BFA', '#C084FC', '#D8B4FE', '#F472B6'],
+  },
+];
+
+function colorFamilyFor(value: string): string {
+  const normalized = value.toUpperCase();
+  return COLOR_PALETTES.find((palette) => palette.shades.includes(normalized))?.id ?? 'cyan';
+}
 
 export default function App() {
   const [refresh, setRefresh] = useState(0);
-  const { categories, presets } = useTaxonomy(refresh);
+  const { categories } = useTaxonomy(refresh);
   const reload = () => setRefresh((x) => x + 1);
   const [settings, setSettings] = useState<DisplaySettings>(DEFAULT_SETTINGS);
   useEffect(() => {
@@ -21,23 +72,127 @@ export default function App() {
     setSettings(next);
     await saveSettings(next);
   };
+  const language = resolveLanguage(settings.language);
+  const t = UI_TEXT[language];
 
   return (
     <div className="settings-page">
-      <h1>PromptTrace 設定</h1>
+      <header className="settings-header">
+        <h1>{t.settingsTitle}</h1>
+        <button
+          type="button"
+          className="settings-nav-button"
+          onClick={() => {
+            location.href = 'library.html';
+          }}
+        >
+          {t.goLibrary}
+        </button>
+      </header>
       <div className="settings-layout">
-        <InteractionSettings settings={settings} onPatch={patchSettings} />
-        <CategorySettings categories={categories} onChanged={reload} />
-        <ModelSettings presets={presets} categories={categories} onChanged={reload} />
-        <DisplaySettingsSection settings={settings} onPatch={patchSettings} />
-        <ExportSettingsSection settings={settings} onPatch={patchSettings} />
-        <PermissionInfo />
+        <LanguageSettings settings={settings} onPatch={patchSettings} t={t} />
+        <DisplaySettingsSection settings={settings} onPatch={patchSettings} t={t} language={language} />
+        <InteractionSettings settings={settings} onPatch={patchSettings} t={t} language={language} />
+        <LibraryRulesSettings categories={categories} onChanged={reload} t={t} language={language} />
+        <FileSettingsSection t={t} />
       </div>
     </div>
   );
 }
 
-function HotkeyRecorder({ value, onChange }: { value: string | undefined; onChange: (v: string) => void }) {
+function LanguageSettings({
+  settings,
+  onPatch,
+  t,
+}: {
+  settings: DisplaySettings;
+  onPatch: (p: Partial<DisplaySettings>) => void;
+  t: UiText;
+}) {
+  return (
+    <section className="card settings-section">
+      <h2>{t.languageCard}</h2>
+      <label className="settings-field">
+        <span className="muted">{t.interfaceLanguage}</span>
+        <select
+          value={settings.language}
+          onChange={(e) => onPatch({ language: e.target.value as DisplaySettings['language'] })}
+        >
+          <option value="system">{t.followSystem}</option>
+          <option value="zh-TW">{t.traditionalChinese}</option>
+          <option value="en-US">{t.english}</option>
+        </select>
+      </label>
+    </section>
+  );
+}
+
+function ColorSwatchPicker({
+  value,
+  label,
+  onChange,
+}: {
+  value: string;
+  label: string;
+  onChange: (color: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [activeFamily, setActiveFamily] = useState(() => colorFamilyFor(value));
+  const normalizedValue = value.toUpperCase();
+  const activePalette = COLOR_PALETTES.find((palette) => palette.id === activeFamily) ?? COLOR_PALETTES[0];
+
+  useEffect(() => {
+    setActiveFamily(colorFamilyFor(value));
+  }, [value]);
+
+  return (
+    <div className="settings-color-picker">
+      <button
+        type="button"
+        className="settings-color-current"
+        aria-label={label}
+        title={label}
+        style={{ backgroundColor: value }}
+        onClick={() => setOpen((x) => !x)}
+      />
+      {open && (
+        <div className="settings-color-popover">
+          <div className="settings-color-grid" aria-label={`${activePalette.label}色系`}>
+            {activePalette.shades.map((color) => (
+              <button
+                type="button"
+                key={color}
+                className={normalizedValue === color ? 'settings-color-dot is-active' : 'settings-color-dot'}
+                aria-label={`選擇 ${color}`}
+                title={color}
+                style={{ backgroundColor: color }}
+                onClick={() => {
+                  onChange(color);
+                  setOpen(false);
+                }}
+              />
+            ))}
+          </div>
+          <div className="settings-color-family-row" aria-label="色系">
+            {COLOR_PALETTES.map((palette) => (
+              <button
+                type="button"
+                key={palette.id}
+                className={activeFamily === palette.id ? 'settings-color-family is-active' : 'settings-color-family'}
+                aria-label={`${palette.label}色系`}
+                title={`${palette.label}色系`}
+                style={{ backgroundColor: palette.base }}
+                onClick={() => setActiveFamily(palette.id)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HotkeyRecorder({ value, onChange, t }: { value: string | undefined; onChange: (v: string) => void; t: UiText }) {
   const [recording, setRecording] = useState(false);
   return (
     <button
@@ -55,7 +210,7 @@ function HotkeyRecorder({ value, onChange }: { value: string | undefined; onChan
         }
       }}
     >
-      {recording ? '按下組合鍵…' : value || '未設定'}
+      {recording ? t.recordingHotkey : value || t.notSet}
     </button>
   );
 }
@@ -63,9 +218,13 @@ function HotkeyRecorder({ value, onChange }: { value: string | undefined; onChan
 function InteractionSettings({
   settings,
   onPatch,
+  t,
+  language,
 }: {
   settings: DisplaySettings;
   onPatch: (p: Partial<DisplaySettings>) => void;
+  t: UiText;
+  language: ResolvedLanguage;
 }) {
   const toggleToolbarRole = (role: AssetRole) => {
     const has = settings.toolbarRoles.includes(role);
@@ -78,7 +237,7 @@ function InteractionSettings({
 
   return (
     <section className="card settings-section">
-      <h2>互動設定</h2>
+      <h2>{t.interaction}</h2>
       <div className="row" style={{ marginBottom: 8 }}>
         <label className="row" style={{ gap: 4 }}>
           <input
@@ -87,7 +246,7 @@ function InteractionSettings({
             checked={settings.edgePanelEnabled}
             onChange={(e) => onPatch({ edgePanelEnabled: e.target.checked })}
           />
-          頁面右緣漂浮面板（滑鼠靠近右邊自動展開）
+          {t.edgePanel}
         </label>
         <label className="row" style={{ gap: 4 }}>
           <input
@@ -96,30 +255,31 @@ function InteractionSettings({
             checked={settings.selectionToolbarEnabled}
             onChange={(e) => onPatch({ selectionToolbarEnabled: e.target.checked })}
           />
-          反白文字時顯示角色按鈕
+          {t.selectionToolbar}
         </label>
       </div>
       <div className="row" style={{ marginBottom: 8 }}>
-        <label className="muted">角色選項出現方式</label>
+        <label className="muted">{t.toolbarTrigger}</label>
         <select
           style={{ width: 'auto' }}
           value={settings.toolbarTrigger}
           onChange={(e) => onPatch({ toolbarTrigger: e.target.value as 'auto' | 'hotkey' })}
         >
-          <option value="hotkey">反白後按召喚鍵才出現（建議）</option>
-          <option value="auto">反白後自動出現</option>
+          <option value="hotkey">{t.triggerHotkey}</option>
+          <option value="auto">{t.triggerAuto}</option>
         </select>
-        <label className="muted">頁面內召喚鍵</label>
+        <label className="muted">{t.hotkey}</label>
         <HotkeyRecorder
           value={settings.summonHotkey}
           onChange={(v) => onPatch({ summonHotkey: v })}
+          t={t}
         />
       </div>
       <p className="muted">
-        反白文字或指到圖片 / 影片後按召喚鍵，即時顯示可用角色。若網站攔截按鍵，可到{' '}
-        <code>chrome://extensions/shortcuts</code> 設定瀏覽器層級快捷鍵。
+        {t.hotkeyBlocked} <code>chrome://extensions/shortcuts</code> {t.hotkeyBlockedSuffix}
       </p>
-      <h2>工具列角色（2–4 顆，依對象自動過濾）</h2>
+      <h2>{t.quickSaveButtons}</h2>
+      <p className="muted">{t.quickSaveHint}</p>
       <div className="row">
         {(Object.keys(ROLE_LABELS) as AssetRole[]).map((role) => (
           <label key={role} className="row" style={{ gap: 4 }}>
@@ -129,7 +289,7 @@ function InteractionSettings({
               checked={settings.toolbarRoles.includes(role)}
               onChange={() => toggleToolbarRole(role)}
             />
-            {ROLE_LABELS[role]}
+            {roleLabel(role, language)}
           </label>
         ))}
       </div>
@@ -137,10 +297,19 @@ function InteractionSettings({
   );
 }
 
-function CategorySettings({ categories, onChanged }: { categories: RecordCategory[]; onChanged: () => void }) {
+function CategorySettings({
+  categories,
+  onChanged,
+  t,
+  language,
+}: {
+  categories: RecordCategory[];
+  onChanged: () => void;
+  t: UiText;
+  language: ResolvedLanguage;
+}) {
   const [newName, setNewName] = useState('');
-  const [newParent, setNewParent] = useState('');
-  const tree = flattenTree(categories);
+  const categoryRows = [...categories].sort((a, b) => a.sortOrder - b.sortOrder);
 
   const save = async (c: RecordCategory, patch: Partial<RecordCategory>) => {
     await categoryRepository.save({ ...c, ...patch, updatedAt: new Date().toISOString() });
@@ -177,96 +346,63 @@ function CategorySettings({ categories, onChanged }: { categories: RecordCategor
   };
 
   return (
-    <section className="card settings-section">
+    <div className="settings-subsection">
       <div className="spread">
         <div>
-          <h2>分類</h2>
+          <h2>{t.category}</h2>
           <p className="muted">
-            分類是選填的，支援多層級。原廠內建為生文 / 生圖 / 生影 / 生音樂。
+            {t.categoryHint}
           </p>
         </div>
-        <button onClick={resetBuiltinCategories}>重置原廠分類</button>
+        <button onClick={resetBuiltinCategories}>{t.resetBuiltinCategories}</button>
       </div>
       <div className="settings-category-row settings-row-header">
-        <span>顏色</span>
-        <span>分類</span>
-        <span>父層</span>
-        <span>排序</span>
-        <span>狀態</span>
+        <span>{t.colorHeader}</span>
+        <span>{t.category}</span>
+        <span>{t.order}</span>
+        <span>{t.action}</span>
       </div>
-      {tree.map(({ category: c, depth }) => (
-        <div className="settings-category-row" key={c.id} style={{ marginLeft: depth * 20 }}>
-          <input
-            type="color"
-            value={c.color ?? '#94a3b8'}
-            onChange={(e) => save(c, { color: e.target.value })}
-            title="分類顏色"
-          />
-          <input
-            style={{ width: 180, opacity: c.isActive ? 1 : 0.5 }}
-            defaultValue={c.name}
-            onBlur={(e) => {
-              const v = validateCategoryName(e.target.value);
-              if (v.ok && e.target.value !== c.name) save(c, { name: e.target.value.trim() });
-            }}
-          />
-          <select
-            style={{ width: 'auto' }}
-            value={c.parentId ?? ''}
-            title="父分類"
-            onChange={(e) => {
-              const parentId = e.target.value || null;
-              if (wouldCreateCycle(categories, c.id, parentId)) {
-                alert('不能把分類移到自己的子分類底下。');
-                return;
-              }
-              save(c, { parentId });
-            }}
-          >
-            <option value="">（頂層）</option>
-            {categories
-              .filter((x) => x.id !== c.id)
-              .map((x) => (
-                <option key={x.id} value={x.id}>{x.name}</option>
-              ))}
-          </select>
-          <div className="settings-compact-actions">
-            <button onClick={() => save(c, { sortOrder: c.sortOrder - 1.5 })} title="上移">↑</button>
-            <button onClick={() => save(c, { sortOrder: c.sortOrder + 1.5 })} title="下移">↓</button>
-          </div>
-          <button onClick={() => save(c, { isActive: !c.isActive })}>
-            {c.isActive ? '停用' : '啟用'}
-          </button>
-          {!c.isBuiltin && (
+      {categoryRows.map((c) => {
+        const displayName = categoryLabel(c, language);
+        return (
+          <div className="settings-category-row" key={c.id}>
+            <ColorSwatchPicker
+              value={c.color ?? '#94a3b8'}
+              label={`${displayName} ${t.color}`}
+              onChange={(color) => save(c, { color })}
+            />
+            <input
+              style={{ width: 180 }}
+              defaultValue={displayName}
+              onBlur={(e) => {
+                const name = e.target.value.trim();
+                const v = validateCategoryName(name);
+                if (v.ok && name !== displayName) save(c, { name });
+              }}
+            />
+            <div className="settings-compact-actions">
+              <button onClick={() => save(c, { sortOrder: c.sortOrder - 1.5 })} title={t.moveUp}>↑</button>
+              <button onClick={() => save(c, { sortOrder: c.sortOrder + 1.5 })} title={t.moveDown}>↓</button>
+            </div>
             <button
               className="danger"
               onClick={async () => {
-                if (categories.some((x) => x.parentId === c.id)) {
-                  alert('請先移除或搬移子分類。');
-                  return;
-                }
                 await categoryRepository.delete(c.id);
                 onChanged();
               }}
             >
-              刪除
+              {t.delete}
             </button>
-          )}
-        </div>
-      ))}
+          </div>
+        );
+      })}
       <div className="settings-category-row settings-new-row">
         <span />
         <input
-          placeholder="新分類名稱"
+          placeholder={t.newCategoryName}
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
         />
-        <select value={newParent} onChange={(e) => setNewParent(e.target.value)}>
-          <option value="">（頂層）</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
         <span />
         <button
           className="primary"
@@ -275,7 +411,7 @@ function CategorySettings({ categories, onChanged }: { categories: RecordCategor
             const now = new Date().toISOString();
             await categoryRepository.save({
               id: crypto.randomUUID(),
-              parentId: newParent || null,
+              parentId: null,
               name: newName.trim(),
               isBuiltin: false,
               isActive: true,
@@ -287,140 +423,27 @@ function CategorySettings({ categories, onChanged }: { categories: RecordCategor
             onChanged();
           }}
         >
-          新增分類
+          {t.addCategory}
         </button>
       </div>
-    </section>
+    </div>
   );
 }
 
-function ModelSettings({
-  presets,
+function LibraryRulesSettings({
   categories,
   onChanged,
+  t,
+  language,
 }: {
-  presets: ModelPreset[];
   categories: RecordCategory[];
   onChanged: () => void;
+  t: UiText;
+  language: ResolvedLanguage;
 }) {
-  const [draft, setDraft] = useState({ modelName: '', provider: '', categoryId: '' });
-
-  const save = async (p: ModelPreset, patch: Partial<ModelPreset>) => {
-    await modelPresetRepository.save({ ...p, ...patch, updatedAt: new Date().toISOString() });
-    onChanged();
-  };
-
   return (
     <section className="card settings-section settings-wide-section">
-      <h2>模型清單</h2>
-      <p className="muted">
-        模型只是本機 metadata，保存時可以不填。這裡可新增、修改、停用、刪除、排序。
-      </p>
-      <div className="settings-model-row settings-row-header">
-        <span>模型</span>
-        <span>提供者</span>
-        <span>版本</span>
-        <span>別名</span>
-        <span>分類</span>
-        <span>動作</span>
-      </div>
-      {presets.map((p) => (
-        <div className="settings-model-row" key={p.id} style={{ opacity: p.isActive ? 1 : 0.5 }}>
-          <input
-            defaultValue={p.modelName}
-            onBlur={(e) => {
-              if (validateModelPreset({ modelName: e.target.value }).ok && e.target.value !== p.modelName)
-                save(p, { modelName: e.target.value.trim() });
-            }}
-          />
-          <input
-            placeholder="provider"
-            defaultValue={p.provider ?? ''}
-            onBlur={(e) => e.target.value !== (p.provider ?? '') && save(p, { provider: e.target.value })}
-          />
-          <input
-            placeholder="version"
-            defaultValue={p.modelVersion ?? ''}
-            onBlur={(e) => e.target.value !== (p.modelVersion ?? '') && save(p, { modelVersion: e.target.value })}
-          />
-          <input
-            placeholder="alias"
-            defaultValue={p.alias ?? ''}
-            onBlur={(e) => e.target.value !== (p.alias ?? '') && save(p, { alias: e.target.value })}
-          />
-          <select
-            value={p.categoryId ?? ''}
-            onChange={(e) => save(p, { categoryId: e.target.value || null })}
-          >
-            <option value="">（不綁分類）</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-          <div className="settings-model-actions">
-            <button onClick={() => save(p, { sortOrder: p.sortOrder - 1.5 })} title="上移">↑</button>
-            <button onClick={() => save(p, { sortOrder: p.sortOrder + 1.5 })} title="下移">↓</button>
-            <button onClick={() => save(p, { isDefault: !p.isDefault })} title="設為 default">
-              {p.isDefault ? '★' : '☆'}
-            </button>
-            <button onClick={() => save(p, { isActive: !p.isActive })}>{p.isActive ? '停用' : '啟用'}</button>
-            <button
-              className="danger"
-              onClick={async () => {
-                await modelPresetRepository.delete(p.id);
-                onChanged();
-              }}
-            >
-              刪除
-            </button>
-          </div>
-        </div>
-      ))}
-      <div className="settings-model-row settings-new-row">
-        <input
-          placeholder="model 名稱"
-          value={draft.modelName}
-          onChange={(e) => setDraft({ ...draft, modelName: e.target.value })}
-        />
-        <input
-          placeholder="provider（選填）"
-          value={draft.provider}
-          onChange={(e) => setDraft({ ...draft, provider: e.target.value })}
-        />
-        <span />
-        <span />
-        <select
-          value={draft.categoryId}
-          onChange={(e) => setDraft({ ...draft, categoryId: e.target.value })}
-        >
-          <option value="">（不綁分類）</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-        <button
-          className="primary"
-          disabled={!validateModelPreset({ modelName: draft.modelName }).ok}
-          onClick={async () => {
-            const now = new Date().toISOString();
-            await modelPresetRepository.save({
-              id: crypto.randomUUID(),
-              modelName: draft.modelName.trim(),
-              provider: draft.provider.trim() || undefined,
-              categoryId: draft.categoryId || null,
-              isActive: true,
-              isDefault: false,
-              sortOrder: presets.length + 100,
-              createdAt: now,
-              updatedAt: now,
-            });
-            setDraft({ modelName: '', provider: '', categoryId: '' });
-            onChanged();
-          }}
-        >
-          新增 Preset
-        </button>
-      </div>
+      <CategorySettings categories={categories} onChanged={onChanged} t={t} language={language} />
     </section>
   );
 }
@@ -428,26 +451,27 @@ function ModelSettings({
 function DisplaySettingsSection({
   settings,
   onPatch,
+  t,
+  language,
 }: {
   settings: DisplaySettings;
   onPatch: (p: Partial<DisplaySettings>) => void;
+  t: UiText;
+  language: ResolvedLanguage;
 }) {
   return (
     <section className="card settings-section">
-      <h2>顯示設定</h2>
+      <h2>{t.display}</h2>
       <div className="row">
         {(['pending', ...Object.keys(ROLE_LABELS)] as (AssetRole | 'pending')[]).map((role) => (
-          <label key={role} className="row" style={{ gap: 4 }}>
-            <input
-              type="color"
-              style={{ width: 28, padding: 0 }}
+          <div key={role} className="settings-role-color">
+            <ColorSwatchPicker
               value={settings.roleColors[role]}
-              onChange={(e) =>
-                onPatch({ roleColors: { ...settings.roleColors, [role]: e.target.value } })
-              }
+              label={`${role === 'pending' ? t.uncategorized : roleLabel(role as AssetRole, language)} ${t.color}`}
+              onChange={(color) => onPatch({ roleColors: { ...settings.roleColors, [role]: color } })}
             />
-            <span className="muted">{role === 'pending' ? 'Pending' : ROLE_LABELS[role as AssetRole]}</span>
-          </label>
+            <span className="muted">{role === 'pending' ? t.uncategorized : roleLabel(role as AssetRole, language)}</span>
+          </div>
         ))}
       </div>
       <div className="row" style={{ marginTop: 8 }}>
@@ -458,7 +482,7 @@ function DisplaySettingsSection({
             checked={settings.overlayEnabled}
             onChange={(e) => onPatch({ overlayEnabled: e.target.checked })}
           />
-          顯示頁面 overlay 框線
+          {t.pageFrame}
         </label>
         <label className="row" style={{ gap: 4 }}>
           <input
@@ -467,102 +491,72 @@ function DisplaySettingsSection({
             checked={settings.copyTrayEnabled}
             onChange={(e) => onPatch({ copyTrayEnabled: e.target.checked })}
           />
-          啟用 Floating Copy Tray
+          {t.copyTray}
         </label>
       </div>
       <div className="row" style={{ marginTop: 8 }}>
-        <label className="muted">已存 Prompt 卡片顯示</label>
+        <label className="muted">{t.cardLayout}</label>
         <select
           style={{ width: 'auto' }}
           value={settings.cardLayout}
           onChange={(e) => onPatch({ cardLayout: e.target.value as 'split' | 'output-only' })}
         >
-          <option value="split">左右顯示（Input · Reference ｜ Output）</option>
-          <option value="output-only">只顯示 Output</option>
+          <option value="split">{t.splitCard}</option>
+          <option value="output-only">{t.outputOnly}</option>
         </select>
-        <span className="muted">套用到頁內 Gallery 與 Library 卡片。</span>
+        <span className="muted">{t.layoutApplies}</span>
       </div>
     </section>
   );
 }
 
-function ExportSettingsSection({
-  settings,
-  onPatch,
-}: {
-  settings: DisplaySettings;
-  onPatch: (p: Partial<DisplaySettings>) => void;
-}) {
+const PROMPTTRACE_ROOT_FILE_REGEX = '[\\\\/]PromptTrace[\\\\/][^\\\\/]+$';
+const PROMPTTRACE_FILE_REGEX = '[\\\\/]PromptTrace[\\\\/]';
+
+async function openPromptTraceFolder(): Promise<void> {
+  const [rootItem] = await chrome.downloads.search({
+    filenameRegex: PROMPTTRACE_ROOT_FILE_REGEX,
+    state: 'complete',
+    exists: true,
+    orderBy: ['-startTime'],
+    limit: 1,
+  });
+  if (rootItem) {
+    chrome.downloads.show(rootItem.id);
+    return;
+  }
+
+  const [nestedItem] = await chrome.downloads.search({
+    filenameRegex: PROMPTTRACE_FILE_REGEX,
+    state: 'complete',
+    exists: true,
+    orderBy: ['-startTime'],
+    limit: 1,
+  });
+  if (nestedItem) {
+    chrome.downloads.show(nestedItem.id);
+    return;
+  }
+
+  throw new Error('NO_PROMPTTRACE_DOWNLOADS');
+}
+
+function FileSettingsSection({ t }: { t: UiText }) {
   return (
     <section className="card settings-section">
-      <h2>匯出設定</h2>
+      <h2>{t.files}</h2>
       <div className="row">
-        <label className="muted">預設格式</label>
-        <select
-          style={{ width: 'auto' }}
-          value={settings.defaultExportFormat}
-          onChange={(e) => onPatch({ defaultExportFormat: e.target.value as 'markdown' | 'json' })}
+        <button
+          type="button"
+          onClick={() => {
+            openPromptTraceFolder().catch((error) => {
+              alert(error instanceof Error && error.message === 'NO_PROMPTTRACE_DOWNLOADS' ? t.noDownloads : t.openFolderFailed);
+            });
+          }}
         >
-          <option value="markdown">Markdown</option>
-          <option value="json">JSON</option>
-        </select>
-        <label className="row" style={{ gap: 4 }}>
-          <input
-            type="checkbox"
-            style={{ width: 'auto' }}
-            checked={settings.exportIncludeSource}
-            onChange={(e) => onPatch({ exportIncludeSource: e.target.checked })}
-          />
-          匯出包含來源 URL
-        </label>
-        <label className="row" style={{ gap: 4 }}>
-          <input
-            type="checkbox"
-            style={{ width: 'auto' }}
-            checked={settings.exportIncludeFilePath}
-            onChange={(e) => onPatch({ exportIncludeFilePath: e.target.checked })}
-          />
-          匯出包含本地檔案路徑
-        </label>
-        <label className="row" style={{ gap: 4 }}>
-          <input
-            type="checkbox"
-            style={{ width: 'auto' }}
-            checked={settings.promptDownloadLocation}
-            onChange={(e) => onPatch({ promptDownloadLocation: e.target.checked })}
-          />
-          下載圖片 / 影片時詢問儲存位置
-          <span className="muted">（預設關閉＝直接存到 Downloads/PromptTrace，不跳視窗）</span>
-        </label>
+          {t.openFileFolder}
+        </button>
       </div>
-    </section>
-  );
-}
-
-function PermissionInfo() {
-  return (
-    <section className="card settings-section settings-wide-section">
-      <h2>權限與快捷鍵說明</h2>
-      <ul style={{ paddingLeft: 18 }}>
-        <li>
-          <strong>頁面存取（&lt;all_urls&gt; / activeTab）</strong>：讀取你反白的文字與右鍵選到的圖片 /
-          影片 URL，並在頁面上畫出選取框線。不會讀取其他內容、不會上傳任何資料。
-        </li>
-        <li>
-          <strong>downloads</strong>：把圖片 / 影片下載到 <code>Downloads/PromptTrace/</code>{' '}
-          子資料夾，並在刪除 Record 時可選擇連同檔案刪除（只刪 extension 自己下載的檔案）。
-        </li>
-        <li>
-          <strong>storage / IndexedDB</strong>：所有 Prompt 與 metadata 都保存在本機瀏覽器內，沒有雲端同步。
-        </li>
-        <li>
-          <strong>快捷鍵</strong>：可在 <code>chrome://extensions/shortcuts</code> 自訂開啟 Side Panel 的快捷鍵。
-        </li>
-      </ul>
-      <p className="muted">
-        下載策略：媒體固定下載到 Downloads/PromptTrace/&#123;record&#125;/，extension 無法寫入任意系統資料夾。
-        blob / 串流 / DRM 影片無法下載，會以 Error Card + 只保存來源處理。
-      </p>
     </section>
   );
 }

@@ -472,14 +472,44 @@
 .pt-gthumbs img { width: 54px; height: 54px; object-fit: cover; border-radius: 8px; }
 .pt-gallery-panel { width: min(440px, 94vw); }
 .pt-gcols { display: flex; gap: 8px; align-items: flex-start; }
-.pt-gcol { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.pt-gcol {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-radius: 8px;
+  outline: none;
+}
+.pt-gcol--copyable {
+  cursor: copy;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+.pt-gcol--copyable:hover,
+.pt-gcol--copyable:focus-visible {
+  background: rgba(34, 211, 238, 0.08);
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.18);
+}
 .pt-gcol-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
   font-size: 10px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   font-weight: 600;
   color: rgba(245, 245, 247, 0.4);
   padding: 0 2px;
+}
+.pt-gcol-copy {
+  color: rgba(245, 245, 247, 0.55);
+  text-transform: none;
+  white-space: nowrap;
+}
+.pt-gcol--copyable:hover .pt-gcol-copy,
+.pt-gcol--copyable:focus-visible .pt-gcol-copy {
+  color: #8ad7e8;
 }
 .pt-gcol-empty {
   color: rgba(245, 245, 247, 0.22);
@@ -539,7 +569,6 @@
   border-radius: 8px;
   padding: 6px 8px;
   margin-top: 6px;
-  cursor: pointer;
   transition: background 0.15s ease;
 }
 .pt-gprompt:first-of-type { margin-top: 0; }
@@ -550,8 +579,6 @@
   align-items: center;
   margin-bottom: 4px;
 }
-.pt-gcopy { font-size: 10.5px; color: rgba(245, 245, 247, 0.55); }
-.pt-gprompt:hover .pt-gcopy { color: #8ad7e8; }
 .pt-gtext {
   font-size: 12px;
   line-height: 1.5;

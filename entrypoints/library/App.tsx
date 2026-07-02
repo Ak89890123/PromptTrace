@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Asset, FileRecord, LibraryRecord, Tag } from '@/src/core/domain/entities';
-import { ASSET_TYPE_LABELS, ROLE_LABELS, type AssetRole, type AssetType } from '@/src/core/domain/enums';
-import { allowedRolesFor, categoryPath, ROLE_NOT_ALLOWED_MESSAGE } from '@/src/core/domain/validation';
+import { ROLE_LABELS, type AssetRole, type AssetType } from '@/src/core/domain/enums';
+import {
+  allowedRolesFor,
+  categoryPath,
+  ROLE_NOT_ALLOWED_MESSAGE,
+  validateCategoryName,
+} from '@/src/core/domain/validation';
 import {
   composeFullRecord,
   composeInputBundle,
@@ -12,12 +17,14 @@ import { exportMarkdown, modelLabelOf, type ExportContext } from '@/src/core/exp
 import { exportJsonString } from '@/src/core/export/json';
 import {
   assetRepository,
+  categoryRepository,
   deleteRecordCascade,
   exportRecordRepository,
   fileRecordRepository,
   recordRepository,
   tagRepository,
 } from '@/src/storage/repositories';
+import { assetTypeLabel, categoryLabel, resolveLanguage, roleLabel, UI_TEXT, type ResolvedLanguage, type UiText } from '@/src/ui/i18n';
 import { DEFAULT_ROLE_COLORS, DEFAULT_SETTINGS, loadSettings, onSettingsChanged } from '@/src/ui/roleColors';
 import { flattenTree, useTaxonomy } from '@/src/ui/hooks';
 
@@ -26,6 +33,11 @@ type RecordBundle = {
   assets: Asset[];
   fileRecords: FileRecord[];
   tags: Tag[];
+};
+
+type CategoryDraft = {
+  id: string;
+  name: string;
 };
 
 async function loadBundle(record: LibraryRecord): Promise<RecordBundle> {
@@ -52,18 +64,19 @@ export default function App() {
     () => new URLSearchParams(location.hash.slice(1)).get('record'),
   );
   const [search, setSearch] = useState('');
-  const [filterCategory, setFilterCategory] = useState('');
-  const [filterModel, setFilterModel] = useState('');
-  const [filterRole, setFilterRole] = useState('');
+  const [filterCategories, setFilterCategories] = useState<string[]>([]);
+  const [categoryDrafts, setCategoryDrafts] = useState<CategoryDraft[]>([]);
   const [assetIndex, setAssetIndex] = useState<Map<string, Asset[]>>(new Map());
-  const { categories, presets } = useTaxonomy();
   const [refresh, setRefresh] = useState(0);
+  const { categories, presets } = useTaxonomy(refresh);
   const reload = () => setRefresh((x) => x + 1);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   useEffect(() => {
     loadSettings().then(setSettings);
     onSettingsChanged(setSettings);
   }, []);
+  const language = resolveLanguage(settings.language);
+  const t = UI_TEXT[language];
 
   useEffect(() => {
     (async () => {
@@ -79,13 +92,49 @@ export default function App() {
     })();
   }, [refresh]);
 
+  const toggleCategoryFilter = (categoryId: string) => {
+    setFilterCategories((ids) => (ids.includes(categoryId) ? ids.filter((id) => id !== categoryId) : [...ids, categoryId]));
+  };
+
+  const addCategoryDraft = () => {
+    setCategoryDrafts((drafts) => [...drafts, { id: crypto.randomUUID(), name: '' }]);
+  };
+
+  const updateCategoryDraft = (draftId: string, name: string) => {
+    setCategoryDrafts((drafts) => drafts.map((draft) => (draft.id === draftId ? { ...draft, name } : draft)));
+  };
+
+  const discardCategoryDraft = (draftId: string) => {
+    setCategoryDrafts((drafts) => drafts.filter((draft) => draft.id !== draftId));
+  };
+
+  const commitCategoryDraft = async (draft: CategoryDraft) => {
+    const name = draft.name.trim();
+    const validation = validateCategoryName(name);
+    if (!validation.ok) {
+      if (name.length === 0) discardCategoryDraft(draft.id);
+      return;
+    }
+    const now = new Date().toISOString();
+    await categoryRepository.save({
+      id: crypto.randomUUID(),
+      parentId: null,
+      name,
+      isBuiltin: false,
+      isActive: true,
+      sortOrder: categories.length + categoryDrafts.length,
+      createdAt: now,
+      updatedAt: now,
+    });
+    discardCategoryDraft(draft.id);
+    reload();
+  };
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return records.filter((r) => {
-      if (filterCategory && r.categoryId !== filterCategory) return false;
-      if (filterModel && r.modelPresetId !== filterModel) return false;
+      if (filterCategories.length > 0 && (!r.categoryId || !filterCategories.includes(r.categoryId))) return false;
       const assets = assetIndex.get(r.id) ?? [];
-      if (filterRole && !assets.some((a) => a.role === filterRole)) return false;
       if (q) {
         const haystack = [
           r.title,
@@ -104,72 +153,91 @@ export default function App() {
       }
       return true;
     });
-  }, [records, assetIndex, search, filterCategory, filterModel, filterRole]);
+  }, [records, assetIndex, search, filterCategories]);
 
   return (
     <div className="library-shell">
       <aside className="library-filter-rail">
         <div className="library-brand">
-          <h1>Library</h1>
           <span className="library-count">{filtered.length} / {records.length}</span>
+          <button
+            type="button"
+            className="library-settings-button"
+            aria-label={t.settings}
+            title={t.settings}
+            onClick={() => {
+              location.href = 'settings.html';
+            }}
+          >
+            {t.settings}
+          </button>
         </div>
         <label className="filter-field">
-          <span>搜尋</span>
-          <input placeholder="Prompt、來源、URL…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <span>{t.search}</span>
+          <input placeholder={t.searchPlaceholder} value={search} onChange={(e) => setSearch(e.target.value)} />
         </label>
-        <label className="filter-field">
-          <span>分類</span>
-          <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
-            <option value="">全部分類</option>
+        <div className="filter-section">
+          <div className="filter-section-title">{t.category}</div>
+          <button
+            type="button"
+            className="filter-section-reset"
+            disabled={filterCategories.length === 0}
+            onClick={() => setFilterCategories([])}
+          >
+            {t.resetCategory}
+          </button>
+          <div className="filter-option-list" role="group" aria-label={t.category}>
             {flattenTree(categories).map(({ category, depth }) => (
-              <option key={category.id} value={category.id}>
-                {'  '.repeat(depth)}{category.name}
-              </option>
+              <button
+                type="button"
+                key={category.id}
+                className={filterCategories.includes(category.id) ? 'filter-option is-active' : 'filter-option'}
+                style={{ paddingLeft: 12 + depth * 10 }}
+                aria-pressed={filterCategories.includes(category.id)}
+                onClick={() => toggleCategoryFilter(category.id)}
+              >
+                <span>{categoryLabel(category, language)}</span>
+                <i aria-hidden="true" />
+              </button>
             ))}
-          </select>
-        </label>
-        <label className="filter-field">
-          <span>Model</span>
-          <select value={filterModel} onChange={(e) => setFilterModel(e.target.value)}>
-            <option value="">全部 Model</option>
-            {presets.map((p) => (
-              <option key={p.id} value={p.id}>{p.alias || p.modelName}</option>
+            {categoryDrafts.map((draft) => (
+              <input
+                key={draft.id}
+                className="filter-new-item-input"
+                value={draft.name}
+                autoFocus
+                placeholder={t.addCategory}
+                onChange={(e) => updateCategoryDraft(draft.id, e.target.value)}
+                onBlur={() => commitCategoryDraft(draft)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.currentTarget.blur();
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    discardCategoryDraft(draft.id);
+                  }
+                }}
+              />
             ))}
-          </select>
-        </label>
-        <label className="filter-field">
-          <span>角色</span>
-          <select value={filterRole} onChange={(e) => setFilterRole(e.target.value)}>
-            <option value="">全部角色</option>
-            {(Object.keys(ROLE_LABELS) as AssetRole[]).map((r) => (
-              <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-            ))}
-          </select>
-        </label>
-        <button
-          className="library-clear-filters"
-          disabled={!search && !filterCategory && !filterModel && !filterRole}
-          onClick={() => {
-            setSearch('');
-            setFilterCategory('');
-            setFilterModel('');
-            setFilterRole('');
-          }}
-        >
-          重置篩選
-        </button>
+            <button
+              type="button"
+              className="filter-add-item"
+              aria-label={t.addCategory}
+              onClick={addCategoryDraft}
+            >
+              +
+            </button>
+          </div>
+        </div>
       </aside>
 
       <main className="library-main">
         <header className="library-hero">
-          <div>
-            <div className="eyebrow">PromptTrace</div>
-            <h1>Library</h1>
-            <p>本機保存的 Input、參考素材、Output 與檔案紀錄。點選卡片後在右側查看完整內容。</p>
-          </div>
           <div className="library-hero-stats">
-            <span>{records.length} records</span>
-            <span>{Array.from(assetIndex.values()).reduce((sum, items) => sum + items.length, 0)} assets</span>
+            <span>{records.length} {t.records}</span>
+            <span>{Array.from(assetIndex.values()).reduce((sum, items) => sum + items.length, 0)} {t.assets}</span>
           </div>
         </header>
 
@@ -177,18 +245,18 @@ export default function App() {
           <div className="library-empty">
             {records.length === 0 ? (
               <>
-                <h2>尚無紀錄</h2>
-                <p>在網頁上反白文字或選取圖片 / 影片後保存，這裡會出現可搜尋、可複製、可匯出的本機紀錄。</p>
+                <h2>{t.noRecords}</h2>
+                <p>{t.noRecordsHint}</p>
               </>
             ) : (
               <>
-                <h2>沒有符合的紀錄</h2>
-                <p>調整左側篩選或搜尋條件，找回已保存的 prompt、輸入素材與輸出結果。</p>
+                <h2>{t.noMatches}</h2>
+                <p>{t.noMatchesHint}</p>
               </>
             )}
           </div>
         ) : (
-          <section className="library-card-grid" aria-label="Library records">
+          <section className="library-card-grid" aria-label={language === 'en-US' ? 'Library records' : '紀錄庫卡片'}>
             {filtered.map((record) => (
               <RecordCard
                 key={record.id}
@@ -197,6 +265,8 @@ export default function App() {
                 categories={categories}
                 selected={record.id === selectedId}
                 layout={settings.cardLayout}
+                t={t}
+                language={language}
                 onOpen={() => setSelectedId(record.id)}
               />
             ))}
@@ -214,6 +284,8 @@ export default function App() {
               presets={presets}
               onClose={() => setSelectedId(null)}
               onChanged={reload}
+              t={t}
+              language={language}
               onDeleted={() => {
                 setSelectedId(null);
                 reload();
@@ -221,8 +293,8 @@ export default function App() {
             />
           ) : (
             <div className="library-detail-empty">
-              <h2>選取一筆紀錄</h2>
-              <p>點選中央卡片後，這裡會固定顯示完整文字、圖片、notes、tags 與檔案紀錄。</p>
+              <h2>{language === 'en-US' ? 'Select a record' : '選取一筆紀錄'}</h2>
+              <p>{language === 'en-US' ? 'Select a card to see its full text, media, notes, tags, and files here.' : '點選中央卡片後，這裡會固定顯示完整文字、圖片、notes、tags 與檔案紀錄。'}</p>
             </div>
           )}
         </div>
@@ -237,22 +309,25 @@ function RecordCard(props: {
   categories: ReturnType<typeof useTaxonomy>['categories'];
   selected: boolean;
   layout: 'split' | 'output-only';
+  t: UiText;
+  language: ResolvedLanguage;
   onOpen: () => void;
 }) {
-  const { record, assets, categories, selected, layout, onOpen } = props;
+  const { record, assets, categories, selected, layout, t, language, onOpen } = props;
   const outputCount = assets.filter((a) => a.role === 'output').length;
+  const category = categories.find((c) => c.id === record.categoryId);
 
   return (
     <button className={`record-card ${selected ? 'is-selected' : ''}`} onFocus={onOpen} onClick={onOpen}>
       <div className="record-card-topline">
-        <span>{categoryPath(categories, record.categoryId) || '未分類'}</span>
-        <span>{assets.length} assets</span>
+        <span>{category ? categoryLabel(category, language) : t.uncategorized}</span>
+        <span>{assets.length} {t.assets}</span>
       </div>
-      <div className="record-card-summary-slot" aria-label="摘要保留區" />
-      <CardPreview assets={assets} layout={layout} />
+      <div className="record-card-summary-slot" aria-label={language === 'en-US' ? 'Summary area' : '摘要保留區'} />
+      <CardPreview assets={assets} layout={layout} t={t} />
       <div className="record-card-footer">
         <span>{modelLabelOf(record)}</span>
-        <span>{outputCount > 0 ? `${outputCount} output` : 'no output'}</span>
+        <span>{outputCount > 0 ? `${outputCount} ${t.output}` : language === 'en-US' ? 'no output' : '無輸出'}</span>
       </div>
     </button>
   );
@@ -265,6 +340,8 @@ function RecordDetail(props: {
   onClose: () => void;
   onChanged: () => void;
   onDeleted: () => void;
+  t: UiText;
+  language: ResolvedLanguage;
 }) {
   const [bundle, setBundle] = useState<RecordBundle | null>(null);
   const [tray, setTray] = useState<CopyBundle | null>(null);
@@ -282,7 +359,8 @@ function RecordDetail(props: {
     load();
   }, [load]);
 
-  if (!bundle) return <div className="muted">載入中…</div>;
+  const { t, language } = props;
+  if (!bundle) return <div className="muted">{t.loading}</div>;
   const { record, assets, fileRecords, tags } = bundle;
   const catPath = categoryPath(props.categories, record.categoryId);
 
@@ -296,26 +374,25 @@ function RecordDetail(props: {
       await navigator.clipboard.writeText(b.text);
       if (b.needsTrayFallback) {
         setTray(b);
-        say(`${label} 文字已複製；媒體請從下方 Copy Tray 逐項處理。`);
+        say(language === 'en-US' ? `${label} text copied. Handle media from the copy tray below.` : `${label} 文字已複製；媒體請從下方快速複製列逐項處理。`);
       } else {
-        say(`${label} 已複製。`);
+        say(language === 'en-US' ? `${label} copied.` : `${label} 已複製。`);
       }
     } catch {
       setTray(b);
-      say('剪貼簿寫入失敗（CLIPBOARD_WRITE_FAILED）；請從 Copy Tray 逐項複製。');
+      say(language === 'en-US' ? 'Clipboard write failed. Copy items from the copy tray below.' : '剪貼簿寫入失敗；請從快速複製列逐項複製。');
     }
   };
 
   const exportCtx = async (): Promise<ExportContext> => {
-    const settings = await loadSettings();
     return {
       record,
       assets,
       fileRecords,
       tags,
       categoryPath: catPath,
-      includeSource: settings.exportIncludeSource,
-      includeFilePath: settings.exportIncludeFilePath,
+      includeSource: true,
+      includeFilePath: true,
     };
   };
 
@@ -367,17 +444,17 @@ function RecordDetail(props: {
       <div className="section" key={role}>
         <h2>
           <span className="pill" style={{ background: DEFAULT_ROLE_COLORS[role] }}>
-            {ROLE_LABELS[role]}
+            {roleLabel(role, language)}
           </span>{' '}
           <span className="muted">{items.length}</span>
         </h2>
-        {items.length === 0 && <div className="muted">None</div>}
+        {items.length === 0 && <div className="muted">{language === 'en-US' ? 'None' : '無'}</div>}
         {items.map((a) => {
           const file = fileRecords.find((f) => f.assetId === a.id);
           return (
             <div className="card" key={a.id}>
               <div className="spread">
-                <strong>{ASSET_TYPE_LABELS[a.assetType]}</strong>
+                <strong>{assetTypeLabel(a.assetType, language)}</strong>
                 <div className="row">
                   <select
                     value={a.role}
@@ -394,7 +471,7 @@ function RecordDetail(props: {
                   >
                     {(Object.keys(ROLE_LABELS) as AssetRole[]).map((r) => (
                       <option key={r} value={r} disabled={!allowedRolesFor(a.assetType).includes(r)}>
-                        {ROLE_LABELS[r]}
+                        {roleLabel(r, language)}
                       </option>
                     ))}
                   </select>
@@ -407,7 +484,7 @@ function RecordDetail(props: {
                       props.onChanged();
                     }}
                   >
-                    移除
+                    {language === 'en-US' ? 'Remove' : '移除'}
                   </button>
                 </div>
               </div>
@@ -418,16 +495,16 @@ function RecordDetail(props: {
               ) : a.previewRef?.startsWith('data:') ? (
                 <video className="thumb" src={a.previewRef} controls />
               ) : (
-                <div className="preview-text">🎞 影片 file card</div>
+                <div className="preview-text">🎞 {language === 'en-US' ? 'Video file' : '影片檔案'}</div>
               )}
               {a.originalUrl && !a.originalUrl.startsWith('data:') && (
                 <div className="muted" style={{ wordBreak: 'break-all' }}>
-                  來源：<a href={a.originalUrl} target="_blank" rel="noreferrer">{a.originalUrl}</a>
+                  {language === 'en-US' ? 'Source' : '來源'}：<a href={a.originalUrl} target="_blank" rel="noreferrer">{a.originalUrl}</a>
                 </div>
               )}
               {file && (
                 <div className="muted">
-                  下載：{file.downloadStatus}
+                  {language === 'en-US' ? 'Download' : '下載'}：{file.downloadStatus}
                   {file.localPath ? ` · ${file.localPath}` : ''}
                   {file.deleteStatus !== 'not_deleted' ? ` · 檔案狀態：${file.deleteStatus}` : ''}
                   {file.downloadStatus === 'failed' && (
@@ -437,10 +514,10 @@ function RecordDetail(props: {
                         onClick={() =>
                           chrome.runtime
                             .sendMessage({ type: 'media/retryDownload', payload: { fileRecordId: file.id } })
-                            .then(() => say('已重試下載。'))
+                            .then(() => say(language === 'en-US' ? 'Download retried.' : '已重試下載。'))
                         }
                       >
-                        重試下載
+                        {language === 'en-US' ? 'Retry download' : '重試下載'}
                       </button>
                     </>
                   )}
@@ -464,12 +541,12 @@ function RecordDetail(props: {
         <input
           style={{ fontSize: 16, fontWeight: 600, flex: 1 }}
           value={record.title ?? ''}
-          placeholder="（未命名 record — 點此輸入標題）"
+          placeholder={language === 'en-US' ? '(Untitled record - type a title)' : '（未命名紀錄，點此輸入標題）'}
           onChange={(e) => setBundle({ ...bundle, record: { ...record, title: e.target.value } })}
           onBlur={(e) => updateRecord({ title: e.target.value })}
         />
         {!deleting ? (
-          <button className="danger" onClick={() => setDeleting(true)}>刪除 Record</button>
+          <button className="danger" onClick={() => setDeleting(true)}>{language === 'en-US' ? 'Delete record' : '刪除紀錄'}</button>
         ) : (
           <div className="row">
             <button
@@ -479,7 +556,7 @@ function RecordDetail(props: {
                 props.onDeleted();
               }}
             >
-              只刪 Record（保留檔案）
+              {language === 'en-US' ? 'Delete record only' : '只刪紀錄（保留檔案）'}
             </button>
             <button
               className="danger"
@@ -489,34 +566,34 @@ function RecordDetail(props: {
                   .catch(() => ({ ok: false }));
                 await deleteRecordCascade(record.id);
                 if (res && !res.ok) {
-                  alert('部分本地檔案刪除失敗（FILE_DELETE_FAILED），請手動處理。Record 已刪除。');
+                  alert(language === 'en-US' ? 'Some local files could not be deleted. The record was deleted.' : '部分本地檔案刪除失敗，請手動處理。紀錄已刪除。');
                 }
                 props.onDeleted();
               }}
             >
-              連同本地檔案刪除
+              {language === 'en-US' ? 'Delete record and files' : '連同本地檔案刪除'}
             </button>
-            <button onClick={() => setDeleting(false)}>取消</button>
+            <button onClick={() => setDeleting(false)}>{language === 'en-US' ? 'Cancel' : '取消'}</button>
           </div>
         )}
-        <button onClick={props.onClose} aria-label="關閉詳情">關閉</button>
+        <button onClick={props.onClose} aria-label={language === 'en-US' ? 'Close details' : '關閉詳情'}>{t.close}</button>
       </div>
 
       <div className="row" style={{ margin: '8px 0' }}>
-        <label className="muted">分類</label>
+        <label className="muted">{t.category}</label>
         <select
           style={{ width: 'auto' }}
           value={record.categoryId ?? ''}
           onChange={(e) => updateRecord({ categoryId: e.target.value || null })}
         >
-          <option value="">未分類</option>
+          <option value="">{t.uncategorized}</option>
           {flattenTree(props.categories).map(({ category, depth }) => (
             <option key={category.id} value={category.id}>
-              {'  '.repeat(depth)}{category.name}
+              {'  '.repeat(depth)}{categoryLabel(category, language)}
             </option>
           ))}
         </select>
-        <label className="muted">Model</label>
+        <label className="muted">{t.model}</label>
         <select
           style={{ width: 'auto' }}
           value={record.modelPresetId ?? (record.modelLabel ? '__label' : '')}
@@ -529,7 +606,7 @@ function RecordDetail(props: {
             }
           }}
         >
-          <option value="">Not specified</option>
+          <option value="">{language === 'en-US' ? 'Not specified' : '未指定'}</option>
           {record.modelLabel && <option value="__label">{record.modelLabel}</option>}
           {props.presets.map((p) => (
             <option key={p.id} value={p.id}>{p.alias || p.modelName}</option>
@@ -547,14 +624,14 @@ function RecordDetail(props: {
       )}
 
       <div className="row" style={{ margin: '10px 0' }}>
-        <button onClick={() => copyBundle(composeInputBundle(assets, fileRecords), 'Input')}>
-          複製 Input
+        <button onClick={() => copyBundle(composeInputBundle(assets, fileRecords), roleLabel('input', language))}>
+          {t.copy} {roleLabel('input', language)}
         </button>
-        <button onClick={() => copyBundle(composeOutputBundle(assets, fileRecords), 'Output')}>
-          複製 Output
+        <button onClick={() => copyBundle(composeOutputBundle(assets, fileRecords), roleLabel('output', language))}>
+          {t.copy} {roleLabel('output', language)}
         </button>
-        <button onClick={() => copyBundle(composeFullRecord(record, assets, fileRecords, catPath), '完整紀錄')}>
-          複製完整紀錄
+        <button onClick={() => copyBundle(composeFullRecord(record, assets, fileRecords, catPath), language === 'en-US' ? 'Full record' : '完整紀錄')}>
+          {language === 'en-US' ? 'Copy full record' : '複製完整紀錄'}
         </button>
         <button
           onClick={async () => {
@@ -567,7 +644,7 @@ function RecordDetail(props: {
             });
           }}
         >
-          匯出 Markdown
+          {language === 'en-US' ? 'Export Markdown' : '匯出 Markdown'}
         </button>
         <button
           onClick={async () => {
@@ -580,18 +657,20 @@ function RecordDetail(props: {
             });
           }}
         >
-          匯出 JSON
+          {language === 'en-US' ? 'Export JSON' : '匯出 JSON'}
         </button>
       </div>
 
       {tray && (
         <div className="card" style={{ borderColor: 'var(--accent)' }}>
           <div className="spread">
-            <strong>Floating Copy Tray</strong>
-            <button onClick={() => setTray(null)}>關閉</button>
+            <strong>{t.copyTrayShort}</strong>
+            <button onClick={() => setTray(null)}>{t.close}</button>
           </div>
           <div className="muted">
-            文字已複製。以下媒體無法與文字一起寫入剪貼簿，請逐項複製或直接拖進目標聊天框。
+            {language === 'en-US'
+              ? 'Text was copied. Copy the media below one by one, or drag it into the target chat.'
+              : '文字已複製。以下媒體無法與文字一起寫入剪貼簿，請逐項複製或直接拖進目標聊天框。'}
           </div>
           <div className="row" style={{ marginTop: 6 }}>
             {tray.mediaAssets.map((m) => (
@@ -606,10 +685,10 @@ function RecordDetail(props: {
                   onClick={async () => {
                     const url = m.originalUrl ?? m.previewRef ?? '';
                     await navigator.clipboard.writeText(url);
-                    say('已複製媒體連結。');
+                    say(language === 'en-US' ? 'Media link copied.' : '已複製媒體連結。');
                   }}
                 >
-                  複製連結
+                  {language === 'en-US' ? 'Copy link' : '複製連結'}
                 </button>
               </div>
             ))}
@@ -648,7 +727,7 @@ function RecordDetail(props: {
           </div>
           <div className="row" style={{ marginTop: 4 }}>
             <input
-              placeholder="新增 tag…"
+              placeholder={language === 'en-US' ? 'Add tag…' : '新增標籤…'}
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
               onKeyDown={async (e) => {
@@ -660,17 +739,17 @@ function RecordDetail(props: {
               }}
             />
           </div>
-          <h2>補充資產</h2>
+          <h2>{language === 'en-US' ? 'Add content' : '補充內容'}</h2>
           <textarea
             rows={3}
-            placeholder="貼上文字後按「新增文字」"
+            placeholder={language === 'en-US' ? 'Paste text, then click Add text' : '貼上文字後按「新增文字」'}
             value={newText}
             onChange={(e) => setNewText(e.target.value)}
           />
           <div className="row" style={{ marginTop: 4 }}>
             <select value={newTextRole} style={{ width: 'auto' }} onChange={(e) => setNewTextRole(e.target.value as AssetRole)}>
               {(Object.keys(ROLE_LABELS) as AssetRole[]).map((r) => (
-                <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                <option key={r} value={r}>{roleLabel(r, language)}</option>
               ))}
             </select>
             <button
@@ -680,11 +759,13 @@ function RecordDetail(props: {
                 setNewText('');
               }}
             >
-              新增文字
+              {language === 'en-US' ? 'Add text' : '新增文字'}
             </button>
           </div>
           <div className="muted" style={{ marginTop: 6 }}>
-            或直接把圖片 / 影片檔拖放到本頁面即可加入（以 Input 角色加入，可再調整）。
+            {language === 'en-US'
+              ? 'You can also drag images or videos here. They are added as Input first and can be changed later.'
+              : '也可以直接把圖片或影片拖放到這裡。會先用輸入角色加入，之後可以再調整。'}
           </div>
           <label className="row" style={{ marginTop: 6 }}>
             <input
@@ -710,8 +791,8 @@ function RecordDetail(props: {
               }}
             />
           </label>
-          <h2>File Records</h2>
-          {fileRecords.length === 0 && <div className="muted">None</div>}
+          <h2>{language === 'en-US' ? 'Files' : '檔案紀錄'}</h2>
+          {fileRecords.length === 0 && <div className="muted">{language === 'en-US' ? 'None' : '無'}</div>}
           {fileRecords.map((f) => (
             <div className="card" key={f.id}>
               <div style={{ wordBreak: 'break-all' }}>{f.filename}</div>
@@ -729,7 +810,7 @@ function RecordDetail(props: {
 }
 
 /** Compact left/right (or output-only) preview of a record's assets on its list card. */
-function CardPreview({ assets, layout }: { assets: Asset[]; layout: 'split' | 'output-only' }) {
+function CardPreview({ assets, layout, t }: { assets: Asset[]; layout: 'split' | 'output-only'; t: UiText }) {
   const cell = (a: Asset) => {
     if (a.assetType === 'text') {
       const text = (a.textContent ?? '').trim();
@@ -761,12 +842,12 @@ function CardPreview({ assets, layout }: { assets: Asset[]; layout: 'split' | 'o
   const left = assets.filter((a) => a.role !== 'output');
   const right = assets.filter((a) => a.role === 'output');
   if (layout === 'output-only') {
-    return <div className="record-preview is-output-only">{col(right, 'Output')}</div>;
+    return <div className="record-preview is-output-only">{col(right, t.output)}</div>;
   }
   return (
     <div className="record-preview">
-      {col(left, 'Input · Reference')}
-      {col(right, 'Output')}
+      {col(left, t.inputReference)}
+      {col(right, t.output)}
     </div>
   );
 }

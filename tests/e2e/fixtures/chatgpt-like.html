@@ -13,6 +13,19 @@
       .msg { max-width: 640px; margin: 0 0 28px; padding: 14px 16px; border-radius: 12px; background: #fff; }
       .msg.user { background: #e8f0fe; margin-left: auto; }
       .spacer { height: 700px; }
+      .composer { position: fixed; left: 20px; right: 20px; bottom: 16px; display: flex; justify-content: center; }
+      .composer-inner { width: min(720px, calc(100vw - 40px)); }
+      #attachments { display: flex; gap: 8px; margin-bottom: 8px; }
+      #attachments img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid #d1d5db; }
+      #prompt-textarea {
+        width: 100%;
+        min-height: 44px;
+        padding: 10px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 12px;
+        resize: vertical;
+        background: white;
+      }
     </style>
   </head>
   <body>
@@ -29,5 +42,29 @@
            src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='80'><rect width='120' height='80' fill='%2334D399'/></svg>" />
       <div class="spacer"></div>
     </main>
+    <div class="composer">
+      <div class="composer-inner">
+        <div id="attachments"></div>
+        <textarea id="prompt-textarea" data-testid="prompt-textarea" aria-label="Message Prompt"></textarea>
+      </div>
+    </div>
+    <script>
+      const composer = document.querySelector('#prompt-textarea');
+      const attachments = document.querySelector('#attachments');
+      composer.addEventListener('paste', (event) => {
+        const files = [...event.clipboardData.files].filter((file) => file.type.startsWith('image/'));
+        if (!files.length) return;
+        event.preventDefault();
+        const text = event.clipboardData.getData('text/plain');
+        if (text) composer.value = composer.value ? `${composer.value}\n\n${text}` : text;
+        for (const file of files) {
+          const img = document.createElement('img');
+          img.alt = file.name;
+          img.dataset.fileName = file.name;
+          img.src = URL.createObjectURL(file);
+          attachments.append(img);
+        }
+      });
+    </script>
   </body>
 </html>

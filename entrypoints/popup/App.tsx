@@ -6,6 +6,7 @@ import {
   saveSettings,
   type DisplaySettings,
 } from '@/src/ui/roleColors';
+import { resolveLanguage, UI_TEXT, type UiText } from '@/src/ui/i18n';
 
 /** The boolean quick-switches surfaced in the popup. Everything else lives in
  *  the full settings page (詳細設定). */
@@ -15,12 +16,14 @@ type ToggleKey =
   | 'overlayEnabled'
   | 'copyTrayEnabled';
 
-const TOGGLES: { key: ToggleKey; label: string; hint: string }[] = [
-  { key: 'edgePanelEnabled', label: '右緣漂浮面板', hint: '滑鼠靠右邊自動展開擷取清單' },
-  { key: 'selectionToolbarEnabled', label: '反白角色按鈕', hint: '選取文字時浮出角色選項' },
-  { key: 'overlayEnabled', label: '頁面框線', hint: '已擷取項目在頁面上顯示彩色框' },
-  { key: 'copyTrayEnabled', label: 'Copy Tray', hint: 'Library 右側快速複製小把手' },
-];
+function toggles(t: UiText): { key: ToggleKey; label: string; hint: string }[] {
+  return [
+    { key: 'edgePanelEnabled', label: t.edgePanelShort, hint: t.edgePanelHint },
+    { key: 'selectionToolbarEnabled', label: t.selectionToolbarShort, hint: t.selectionToolbarHint },
+    { key: 'overlayEnabled', label: t.pageFrameShort, hint: t.pageFrameHint },
+    { key: 'copyTrayEnabled', label: t.copyTrayShort, hint: t.copyTrayHint },
+  ];
+}
 
 export default function App() {
   const [settings, setSettings] = useState<DisplaySettings>(DEFAULT_SETTINGS);
@@ -35,6 +38,7 @@ export default function App() {
     setSettings(next);
     await saveSettings(next);
   };
+  const t = UI_TEXT[resolveLanguage(settings.language)];
 
   const openPage = (page: string) =>
     chrome.tabs.create({ url: chrome.runtime.getURL(page) });
@@ -49,15 +53,15 @@ export default function App() {
       </div>
 
       <div className="card">
-        <h2>快速開關</h2>
-        {TOGGLES.map((t) => (
-          <label className="spread tog-row" key={t.key} title={t.hint}>
-            <span className="tog-label">{t.label}</span>
+        <h2>{t.quickToggles}</h2>
+        {toggles(t).map((item) => (
+          <label className="spread tog-row" key={item.key} title={item.hint}>
+            <span className="tog-label">{item.label}</span>
             <span className="pt-switch">
               <input
                 type="checkbox"
-                checked={settings[t.key]}
-                onChange={(e) => patch({ [t.key]: e.target.checked } as Partial<DisplaySettings>)}
+                checked={settings[item.key]}
+                onChange={(e) => patch({ [item.key]: e.target.checked } as Partial<DisplaySettings>)}
               />
               <span className="pt-track" />
             </span>
@@ -66,20 +70,20 @@ export default function App() {
       </div>
 
       <div className="card">
-        <h2>角色選項</h2>
+        <h2>{t.roleOptions}</h2>
         <label className="spread tog-row">
-          <span className="tog-label">出現方式</span>
+          <span className="tog-label">{t.triggerMode}</span>
           <select
             style={{ width: 'auto' }}
             value={settings.toolbarTrigger}
             onChange={(e) => patch({ toolbarTrigger: e.target.value as 'auto' | 'hotkey' })}
           >
-            <option value="hotkey">按召喚鍵</option>
-            <option value="auto">選取後立即</option>
+            <option value="hotkey">{t.hotkeyTriggerShort}</option>
+            <option value="auto">{t.autoTriggerShort}</option>
           </select>
         </label>
         <label className="spread tog-row">
-          <span className="tog-label">召喚鍵</span>
+          <span className="tog-label">{t.hotkey}</span>
           <button
             className={recording ? 'primary' : ''}
             onClick={() => setRecording(true)}
@@ -94,11 +98,11 @@ export default function App() {
               }
             }}
           >
-            {recording ? '按下按鍵…' : settings.summonHotkey}
+            {recording ? t.recordingHotkey : settings.summonHotkey}
           </button>
         </label>
-        <label className="spread tog-row" title="調整右緣「P」啟動鈕的上下位置">
-          <span className="tog-label">P 邊欄高度</span>
+        <label className="spread tog-row" title={t.edgeTabHeightHint}>
+          <span className="tog-label">{t.edgeTabHeight}</span>
           <span className="range-row">
             <input
               type="range"
@@ -117,15 +121,15 @@ export default function App() {
                 patch({ edgeTabTop: DEFAULT_SETTINGS.edgeTabTop });
               }}
             >
-              Reset
+              {t.reset}
             </button>
           </span>
         </label>
       </div>
 
       <div className="pop-footer">
-        <button onClick={() => openPage('library.html')}>📚 Library</button>
-        <button onClick={() => openPage('settings.html')}>⚙ 詳細設定</button>
+        <button onClick={() => openPage('library.html')}>📚 {t.goLibrary}</button>
+        <button onClick={() => openPage('settings.html')}>⚙ {t.detailedSettings}</button>
       </div>
     </div>
   );

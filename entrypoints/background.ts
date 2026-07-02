@@ -25,7 +25,8 @@ import {
   recordRepository,
 } from '@/src/storage/repositories';
 import { seedDefaults } from '@/src/storage/seed';
-import { loadSettings } from '@/src/ui/roleColors';
+import { resolveLanguage, UI_TEXT } from '@/src/ui/i18n';
+import { loadSettings, onSettingsChanged } from '@/src/ui/roleColors';
 
 const MENU_TEXT = 'prompttrace-add-selection';
 const MENU_IMAGE = 'prompttrace-add-image';
@@ -51,13 +52,38 @@ export default defineBackground(() => {
     broadcast();
   }
 
+  async function menuTitles() {
+    const settings = await loadSettings();
+    return UI_TEXT[resolveLanguage(settings.language)];
+  }
+
+  async function createContextMenus(): Promise<void> {
+    const t = await menuTitles();
+    chrome.contextMenus.create({ id: MENU_TEXT, title: t.contextAddSelection, contexts: ['selection'] });
+    chrome.contextMenus.create({ id: MENU_IMAGE, title: t.contextAddImage, contexts: ['image'] });
+    chrome.contextMenus.create({ id: MENU_VIDEO, title: t.contextAddVideo, contexts: ['video'] });
+  }
+
+  function updateContextMenus(): void {
+    menuTitles()
+      .then((t) => {
+        try {
+          chrome.contextMenus.update(MENU_TEXT, { title: t.contextAddSelection });
+          chrome.contextMenus.update(MENU_IMAGE, { title: t.contextAddImage });
+          chrome.contextMenus.update(MENU_VIDEO, { title: t.contextAddVideo });
+        } catch {
+          // Context menus may not exist yet in a freshly reloaded service worker.
+        }
+      })
+      .catch(() => {});
+  }
+
   // ---------- setup ----------
   chrome.runtime.onInstalled.addListener(() => {
-    chrome.contextMenus.create({ id: MENU_TEXT, title: 'PromptTrace：加入選取文字', contexts: ['selection'] });
-    chrome.contextMenus.create({ id: MENU_IMAGE, title: 'PromptTrace：加入圖片', contexts: ['image'] });
-    chrome.contextMenus.create({ id: MENU_VIDEO, title: 'PromptTrace：加入影片', contexts: ['video'] });
+    createContextMenus().catch(() => {});
     seedDefaults().catch((e) => console.error('[PromptTrace] seed failed', e));
   });
+  onSettingsChanged(updateContextMenus);
   seedDefaults().catch(() => {});
 
   // Browser-level shortcut: overrides page key handlers, rebindable at
@@ -208,16 +234,12 @@ export default defineBackground(() => {
     const fileRecord = await fileRecordRepository.get(fileRecordId);
     if (!fileRecord) return;
     try {
-      const { promptDownloadLocation } = await loadSettings();
       const downloadId = await chrome.downloads.download({
         url,
         filename: downloadPathFor(recordId, fileRecord),
         conflictAction: 'uniquify',
-        // Explicit false suppresses the "Save as" dialog even when Chrome's
-        // global "Ask where to save each file" setting is on. `=== true` guards
-        // against a missing/legacy setting leaking `undefined` (which would fall
-        // back to the global pref and prompt). Keeps carrying prompts seamless.
-        saveAs: promptDownloadLocation === true,
+        // Keep media capture seamless: files always go under Downloads/PromptTrace.
+        saveAs: false,
       });
       await fileRecordRepository.save({
         ...fileRecord,

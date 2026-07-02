@@ -13,7 +13,7 @@ import {
   tagRepository,
 } from '@/src/storage/repositories';
 import { commitSessionToLibrary, downloadPathFor, isDownloadableUrl } from '@/src/storage/commitSession';
-import { seedDefaults } from '@/src/storage/seed';
+import { BUILTIN_CATEGORY_DEFAULTS, seedDefaults } from '@/src/storage/seed';
 import type { PendingAsset } from '@/src/core/domain/entities';
 
 const pending = (over: Partial<PendingAsset>): PendingAsset => ({
@@ -39,7 +39,7 @@ describe('seed', () => {
     await seedDefaults();
     const cats = await categoryRepository.list();
     const presets = await modelPresetRepository.list();
-    expect(cats.filter((c) => c.isBuiltin)).toHaveLength(7);
+    expect(cats.filter((c) => c.isBuiltin)).toHaveLength(BUILTIN_CATEGORY_DEFAULTS.length);
     expect(cats.map((c) => c.name)).toContain('生文');
     expect(presets.map((p) => p.modelName)).toContain('Claude');
   });
@@ -71,9 +71,7 @@ describe('commit session', () => {
     const { fileRecord, url } = result.pendingDownloads[0];
     expect(url).toBe('https://x.test/a.png');
     expect(fileRecord.downloadStatus).toBe('pending');
-    expect(downloadPathFor(result.record.id, fileRecord)).toBe(
-      `PromptTrace/${result.record.id}/${fileRecord.filename}`,
-    );
+    expect(downloadPathFor(result.record.id, fileRecord)).toBe(`PromptTrace/${result.record.id}/${fileRecord.filename}`);
     const stored = await fileRecordRepository.get(fileRecord.id);
     expect(stored?.assetId).toBe(result.assets[0].id);
   });

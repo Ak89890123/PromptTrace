@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { CaptureSessionState } from '@/src/core/capture/session';
 import { canCommit, emptySession } from '@/src/core/capture/session';
 import type { ModelPreset, PendingAsset, RecordCategory } from '@/src/core/domain/entities';
@@ -11,6 +11,7 @@ import {
   onSettingsChanged,
   type DisplaySettings,
 } from '@/src/ui/roleColors';
+import { assetTypeLabel, categoryLabel, resolveLanguage, roleLabel, UI_TEXT, type ResolvedLanguage, type UiText } from '@/src/ui/i18n';
 import type { OverlayManager } from './overlay';
 import { LOGO_DATA_URL } from './logo';
 import type { GalleryAsset, GalleryRecord, ListRecordsResult } from '@/src/core/messages';
@@ -42,13 +43,15 @@ export default function PanelApp({ overlay }: { overlay: OverlayManager }) {
     chrome.runtime.onMessage.addListener(listener);
     return () => chrome.runtime.onMessage.removeListener(listener);
   }, []);
+  const language = resolveLanguage(settings.language);
+  const t = UI_TEXT[language];
 
   return (
     <>
-      {settings.selectionToolbarEnabled && <SelectionToolbar overlay={overlay} settings={settings} />}
-      {settings.edgePanelEnabled && <CapturePanel session={session} settings={settings} />}
-      {settings.edgePanelEnabled && <GalleryPanel settings={settings} onZoom={setZoom} />}
-      {zoom && <Lightbox zoom={zoom} onClose={() => setZoom(null)} />}
+      {settings.selectionToolbarEnabled && <SelectionToolbar overlay={overlay} settings={settings} language={language} />}
+      {settings.edgePanelEnabled && <CapturePanel session={session} settings={settings} t={t} />}
+      {settings.edgePanelEnabled && <GalleryPanel settings={settings} onZoom={setZoom} t={t} language={language} />}
+      {zoom && <Lightbox zoom={zoom} onClose={() => setZoom(null)} t={t} />}
     </>
   );
 }
@@ -61,7 +64,7 @@ type ToolbarTarget =
   | { kind: 'text'; range: Range }
   | { kind: 'media'; el: HTMLImageElement | HTMLVideoElement; assetType: 'image' | 'video' };
 
-function SelectionToolbar({ overlay, settings }: { overlay: OverlayManager; settings: DisplaySettings }) {
+function SelectionToolbar({ overlay, settings, language }: { overlay: OverlayManager; settings: DisplaySettings; language: ResolvedLanguage }) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const targetRef = useRef<ToolbarTarget | null>(null);
   const [targetType, setTargetType] = useState<'text' | 'image' | 'video'>('text');
@@ -229,7 +232,7 @@ function SelectionToolbar({ overlay, settings }: { overlay: OverlayManager; sett
     >
       {roles.map((role) => (
         <button key={role} style={{ ['--role-color' as string]: settings.roleColors[role] }} onClick={() => capture(role)}>
-          {ROLE_LABELS[role]}
+          {roleLabel(role, language)}
         </button>
       ))}
     </div>
@@ -240,7 +243,7 @@ function SelectionToolbar({ overlay, settings }: { overlay: OverlayManager; sett
 /*  Capture panel: top-right corner, shown only while capturing        */
 /* ------------------------------------------------------------------ */
 
-function CapturePanel({ session, settings }: { session: CaptureSessionState; settings: DisplaySettings }) {
+function CapturePanel({ session, settings, t }: { session: CaptureSessionState; settings: DisplaySettings; t: UiText }) {
   const [open, setOpen] = useState(false);
   const prevCount = useRef(0);
   const [wizard, setWizard] = useState<null | 'category' | 'model'>(null);
@@ -275,25 +278,25 @@ function CapturePanel({ session, settings }: { session: CaptureSessionState; set
             PromptTrace
           </span>
           <span className="pt-links">
-            <a onClick={() => openExtensionPage('library')}>Library</a>
-            <a onClick={() => openExtensionPage('settings')}>Settings</a>
+            <a onClick={() => openExtensionPage('library')}>{t.goLibrary}</a>
+            <a onClick={() => openExtensionPage('settings')}>{t.settings}</a>
           </span>
         </div>
         <div className="pt-panel-body">
-          <CaptureBody session={session} settings={settings} wizard={wizard} setWizard={setWizard} />
+          <CaptureBody session={session} settings={settings} wizard={wizard} setWizard={setWizard} t={t} language={resolveLanguage(settings.language)} />
         </div>
         {count > 0 && !wizard && (
           <div className="pt-footer">
             <button
               className="pt-commit"
               disabled={!canCommit(session)}
-              title={canCommit(session) ? '' : '所有項目都需要先指定角色'}
+              title={canCommit(session) ? '' : t.quickSaveHint}
               onClick={() => setWizard('category')}
             >
-              ✓ 保存（{count}）
+              ✓ {t.add}（{count}）
             </button>
             <button className="pt-cancel" onClick={() => send({ type: 'capture/clearSession', payload: {} })}>
-              ✕ 取消
+              ✕ {t.close}
             </button>
           </div>
         )}
@@ -309,9 +312,13 @@ function CapturePanel({ session, settings }: { session: CaptureSessionState; set
 function GalleryPanel({
   settings,
   onZoom,
+  t,
+  language,
 }: {
   settings: DisplaySettings;
   onZoom: (z: ZoomSrc | null) => void;
+  t: UiText;
+  language: ResolvedLanguage;
 }) {
   const [open, setOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
@@ -368,36 +375,38 @@ function GalleryPanel({
                 PromptTrace
               </span>
               <span className="pt-links">
-                <a onClick={() => openExtensionPage('library')}>紀錄庫</a>
-                <a onClick={() => openExtensionPage('settings')}>設定</a>
+                <a onClick={() => openExtensionPage('library')}>{t.goLibrary}</a>
+                <a onClick={() => openExtensionPage('settings')}>{t.settings}</a>
               </span>
               <span className="pt-panel-actions">
                 <button
                   className={`pt-icon-btn${pinned ? ' is-on' : ''}`}
-                  title={pinned ? '取消固定' : '固定面板'}
+                  title={pinned ? t.unpinTitle : t.pinTitle}
                   onClick={(e) => {
                     e.stopPropagation();
                     setPinned((v) => !v);
                     setOpen(true);
                   }}
                 >
-                  {pinned ? '固定' : '釘選'}
+                  {pinned ? t.pinned : t.pin}
                 </button>
                 <button
                   className="pt-icon-btn"
-                  title="關閉"
+                  title={t.close}
                   onClick={(e) => {
                     e.stopPropagation();
                     dismissGallery();
                   }}
                 >
-                  關閉
+                  {t.close}
                 </button>
               </span>
             </div>
             <div className="pt-panel-body">
               <Gallery
                 settings={settings}
+                t={t}
+                language={language}
                 onZoom={onZoom}
                 onEdit={setEditing}
                 refreshSignal={refreshSignal}
@@ -422,6 +431,8 @@ function GalleryPanel({
         <CardEditor
           record={editing}
           topVh={panelTopVh}
+          t={t}
+          language={language}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
@@ -438,18 +449,22 @@ function CaptureBody({
   settings,
   wizard,
   setWizard,
+  t,
+  language,
 }: {
   session: CaptureSessionState;
   settings: DisplaySettings;
   wizard: null | 'category' | 'model';
   setWizard: (w: null | 'category' | 'model') => void;
+  t: UiText;
+  language: ResolvedLanguage;
 }) {
   const grouped = useMemo(() => {
     const order: (AssetRole | null)[] = [null, 'input', 'input_reference', 'negative', 'output'];
     return order
       .map((role) => ({
         role,
-        label: role ? ROLE_LABELS[role] : 'Pending',
+        label: role ? roleLabel(role, language) : t.uncategorized,
         items: session.assets.filter((a) => a.role === role),
       }))
       .filter((g) => g.items.length > 0);
@@ -462,6 +477,8 @@ function CaptureBody({
         setStage={setWizard}
         sourceUrl={session.assets[0]?.pageUrl}
         outputTypes={session.assets.filter((a) => a.role === 'output').map((a) => a.assetType)}
+        t={t}
+        language={language}
       />
     );
   }
@@ -472,22 +489,22 @@ function CaptureBody({
         <div className="pt-card pt-conflict" key={c.id}>
           <strong>⚠ {c.conflictType}</strong>
           <div className="pt-muted">{c.suggestion}</div>
-          {c.existingPreview && <div className="pt-preview">原：{c.existingPreview}</div>}
-          {c.newPreview && <div className="pt-preview">新：{c.newPreview}</div>}
+          {c.existingPreview && <div className="pt-preview">{language === 'en-US' ? 'Old' : '原'}：{c.existingPreview}</div>}
+          {c.newPreview && <div className="pt-preview">{language === 'en-US' ? 'New' : '新'}：{c.newPreview}</div>}
           <div className="pt-row">
             {c.conflictType === 'OVERLAPPING_SELECTION' && (
               <button
                 className="pt-small-btn"
                 onClick={() => send({ type: 'capture/resolveConflict', payload: { conflictId: c.id, resolution: 'replace' } })}
               >
-                用新範圍取代
+                {language === 'en-US' ? 'Replace with new range' : '用新範圍取代'}
               </button>
             )}
             <button
               className="pt-small-btn"
               onClick={() => send({ type: 'capture/resolveConflict', payload: { conflictId: c.id, resolution: 'cancel' } })}
             >
-              {c.conflictType === 'OVERLAPPING_SELECTION' ? '取消新選取' : '知道了'}
+              {c.conflictType === 'OVERLAPPING_SELECTION' ? (language === 'en-US' ? 'Cancel new selection' : '取消新選取') : (language === 'en-US' ? 'Got it' : '知道了')}
             </button>
           </div>
         </div>
@@ -498,20 +515,20 @@ function CaptureBody({
           <strong>⛔ {e.errorType}</strong>
           <div>{e.message}</div>
           <div className="pt-muted">{e.probableCause}</div>
-          <div className="pt-muted">建議：{e.suggestedAction}</div>
+          <div className="pt-muted">{language === 'en-US' ? 'Suggestion' : '建議'}：{e.suggestedAction}</div>
           <div className="pt-row" style={{ marginTop: 6 }}>
             {e.canRetry && e.assetId && (
               <button className="pt-small-btn" onClick={() => send({ type: 'capture/dismissError', payload: { errorId: e.id, action: 'retry' } })}>
-                重試
+                {language === 'en-US' ? 'Retry' : '重試'}
               </button>
             )}
             {e.canSaveSourceOnly && (
               <button className="pt-small-btn" onClick={() => send({ type: 'capture/dismissError', payload: { errorId: e.id, action: 'save_source_only' } })}>
-                只保存來源
+                {language === 'en-US' ? 'Save source only' : '只保存來源'}
               </button>
             )}
             <button className="pt-small-btn" onClick={() => send({ type: 'capture/dismissError', payload: { errorId: e.id, action: 'cancel' } })}>
-              關閉
+              {t.close}
             </button>
           </div>
         </div>
@@ -522,12 +539,12 @@ function CaptureBody({
         session.errors.length === 0 &&
         session.lastCommittedRecordId && (
           <div className="pt-card">
-            ✅ 已保存。{' '}
+            ✅ {t.saved}{' '}
             <a
               style={{ color: '#8ad7e8', cursor: 'pointer' }}
               onClick={() => openExtensionPage('library', `#record=${session.lastCommittedRecordId}`)}
             >
-              在 Library 查看
+              {t.openInLibrary}
             </a>
           </div>
         )}
@@ -544,7 +561,7 @@ function CaptureBody({
             {items.length}
           </div>
           {items.map((a) => (
-            <PanelAssetCard key={a.id} asset={a} settings={settings} />
+            <PanelAssetCard key={a.id} asset={a} settings={settings} t={t} language={language} />
           ))}
         </div>
       ))}
@@ -553,14 +570,14 @@ function CaptureBody({
   );
 }
 
-function PanelAssetCard({ asset, settings }: { asset: PendingAsset; settings: DisplaySettings }) {
+function PanelAssetCard({ asset, settings, t, language }: { asset: PendingAsset; settings: DisplaySettings; t: UiText; language: ResolvedLanguage }) {
   const allowed = allowedRolesFor(asset.assetType);
   return (
     <div className="pt-card">
       <div className="pt-spread">
-        <strong style={{ fontSize: 11.5, textTransform: 'uppercase', opacity: 0.7 }}>{asset.assetType}</strong>
+        <strong style={{ fontSize: 11.5, textTransform: 'uppercase', opacity: 0.7 }}>{assetTypeLabel(asset.assetType, language)}</strong>
         <button className="pt-small-btn" onClick={() => send({ type: 'capture/removeAsset', payload: { pendingAssetId: asset.id } })}>
-          移除
+          {language === 'en-US' ? 'Remove' : '移除'}
         </button>
       </div>
       {asset.assetType === 'text' ? (
@@ -568,7 +585,7 @@ function PanelAssetCard({ asset, settings }: { asset: PendingAsset; settings: Di
       ) : asset.assetType === 'image' ? (
         <img className="pt-thumb" src={asset.originalUrl} alt="" />
       ) : (
-        <div className="pt-preview">🎞 {asset.originalUrl ?? '（無可下載 URL，僅保存來源）'}</div>
+        <div className="pt-preview">🎞 {asset.originalUrl ?? (language === 'en-US' ? '(No downloadable URL, source only)' : '（無可下載 URL，僅保存來源）')}</div>
       )}
       <div className="pt-rolerow">
         {(Object.keys(ROLE_LABELS) as AssetRole[]).map((role) => {
@@ -582,7 +599,7 @@ function PanelAssetCard({ asset, settings }: { asset: PendingAsset; settings: Di
               style={{ ['--role-color' as string]: settings.roleColors[role] }}
               onClick={() => send({ type: 'capture/assignAssetRole', payload: { pendingAssetId: asset.id, role } })}
             >
-              {ROLE_LABELS[role]}
+              {roleLabel(role, language)}
             </button>
           );
         })}
@@ -598,13 +615,349 @@ function PanelAssetCard({ asset, settings }: { asset: PendingAsset; settings: Di
 /** Best-quality source first, durable fallback second (for the zoom view). */
 type ZoomSrc = { primary?: string; fallback?: string };
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function galleryAssetRef(asset: GalleryAsset): string {
+  return asset.previewRef ?? asset.originalUrl ?? '';
+}
+
+function galleryAssetComposerRef(asset: GalleryAsset): string {
+  if (asset.originalUrl) return asset.originalUrl;
+  if (asset.previewRef && !asset.previewRef.startsWith('data:')) return asset.previewRef;
+  return '';
+}
+
+function galleryAssetsPlainText(assets: GalleryAsset[]): string {
+  return assets
+    .map((asset) => {
+      if (asset.assetType === 'text' && asset.textContent) return asset.textContent.trim();
+      const ref = galleryAssetRef(asset);
+      return ref ? `[${asset.assetType}] ${ref}` : `[${asset.assetType}]`;
+    })
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function galleryAssetsComposerText(assets: GalleryAsset[]): string {
+  return assets
+    .map((asset) => {
+      if (asset.assetType === 'text' && asset.textContent) return asset.textContent.trim();
+      if (asset.assetType === 'image') return '';
+      const ref = galleryAssetComposerRef(asset);
+      return ref ? `[${asset.assetType}] ${ref}` : '';
+    })
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function galleryAssetsHtml(assets: GalleryAsset[]): string {
+  const body = assets
+    .map((asset) => {
+      if (asset.assetType === 'text' && asset.textContent) {
+        return `<p>${escapeHtml(asset.textContent.trim()).replaceAll('\n', '<br>')}</p>`;
+      }
+      const src = galleryAssetRef(asset);
+      if (asset.assetType === 'image' && src) {
+        return `<p><img src="${escapeHtml(src)}" alt="" style="max-width:100%;height:auto;"></p>`;
+      }
+      return src ? `<p><a href="${escapeHtml(src)}">${escapeHtml(src)}</a></p>` : '';
+    })
+    .filter(Boolean)
+    .join('');
+  return `<div>${body}</div>`;
+}
+
+async function copyGalleryAssets(assets: GalleryAsset[]): Promise<'rich' | 'text'> {
+  const text = galleryAssetsPlainText(assets);
+  const hasImage = assets.some((asset) => asset.assetType === 'image' && galleryAssetRef(asset));
+  if (hasImage && 'ClipboardItem' in window && navigator.clipboard.write) {
+    try {
+      const [file] = await imageFilesFromAssets(assets);
+      if (file) {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'image/png': file,
+            'text/plain': new Blob([text], { type: 'text/plain' }),
+            'text/html': new Blob([galleryAssetsHtml(assets)], { type: 'text/html' }),
+          }),
+        ]);
+        return 'rich';
+      }
+    } catch {
+      // Some sites/browsers reject mixed image + text clipboard items.
+    }
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/plain': new Blob([text], { type: 'text/plain' }),
+          'text/html': new Blob([galleryAssetsHtml(assets)], { type: 'text/html' }),
+        }),
+      ]);
+      return 'rich';
+    } catch {
+      // Rich clipboard is best-effort; plain text still carries the media refs.
+    }
+  }
+  await navigator.clipboard.writeText(text);
+  return 'text';
+}
+
+type ComposerTarget = HTMLInputElement | HTMLTextAreaElement | HTMLElement;
+type PromptInsertResult = 'uploaded' | 'pasted' | 'imageClipboard' | 'filled' | 'none';
+
+function isVisibleComposerCandidate(el: Element | null): el is ComposerTarget {
+  if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLElement)) return false;
+  if (el instanceof HTMLInputElement && el.type !== 'text' && el.type !== 'search') return false;
+  if ((el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) && el.disabled) return false;
+  if (el instanceof HTMLElement && el.isContentEditable === false && !(el instanceof HTMLInputElement) && !(el instanceof HTMLTextAreaElement)) return false;
+  const rect = el.getBoundingClientRect();
+  return rect.width > 120 && rect.height > 16 && rect.bottom > 0 && rect.top < window.innerHeight;
+}
+
+function findPromptComposer(): ComposerTarget | null {
+  const strongSelectors = [
+    'textarea#prompt-textarea',
+    '#prompt-textarea[contenteditable="true"]',
+    '[data-testid="prompt-textarea"]',
+    'rich-textarea textarea',
+    'rich-textarea [contenteditable="true"]',
+    '[aria-label*="Message"][contenteditable="true"]',
+    '[aria-label*="訊息"][contenteditable="true"]',
+    '[role="textbox"][contenteditable="true"]',
+  ];
+  for (const selector of strongSelectors) {
+    const target = document.querySelector(selector);
+    if (isVisibleComposerCandidate(target)) return target;
+  }
+
+  const detected = detectProvider(window.location.href);
+  if (detected?.modelName !== 'GPT' && detected?.modelName !== 'Gemini') return null;
+
+  return [...document.querySelectorAll('textarea, input[type="text"], input[type="search"], [contenteditable="true"]')]
+    .filter(isVisibleComposerCandidate)
+    .sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom)[0] ?? null;
+}
+
+function appendWithSeparator(current: string, text: string): string {
+  return current.trim() ? `${current.trimEnd()}\n\n${text}` : text;
+}
+
+function setTextInputValue(target: HTMLInputElement | HTMLTextAreaElement, text: string): void {
+  const start = target.selectionStart ?? target.value.length;
+  const end = target.selectionEnd ?? target.value.length;
+  const insertion = target.value ? text : text;
+  const next =
+    start !== end || start < target.value.length
+      ? `${target.value.slice(0, start)}${insertion}${target.value.slice(end)}`
+      : appendWithSeparator(target.value, insertion);
+  const proto = target instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto, 'value')?.set?.call(target, next);
+  target.focus();
+  const cursor = next.length;
+  target.setSelectionRange(cursor, cursor);
+  target.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, inputType: 'insertText', data: text }));
+  target.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function setContentEditableText(target: HTMLElement, text: string): void {
+  target.focus();
+  const current = target.innerText;
+  const next = appendWithSeparator(current, text);
+  target.textContent = next;
+  const range = document.createRange();
+  range.selectNodeContents(target);
+  range.collapse(false);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  target.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, inputType: 'insertText', data: text }));
+}
+
+async function imageFileFromAsset(asset: GalleryAsset, index: number): Promise<File | null> {
+  if (asset.assetType !== 'image') return null;
+  const sources = [asset.originalUrl, asset.previewRef].filter((src): src is string => Boolean(src));
+  for (const src of sources) {
+    try {
+      const resp = await fetch(src, { credentials: 'include' });
+      if (!resp.ok) continue;
+      const png = await blobToPng(await resp.blob());
+      return new File([png], `prompttrace-image-${index + 1}.png`, { type: 'image/png' });
+    } catch {
+      // Try the next source. Original URLs can expire; previewRef is the fallback.
+    }
+  }
+  return null;
+}
+
+async function imageFilesFromAssets(assets: GalleryAsset[]): Promise<File[]> {
+  const files = await Promise.all(assets.map((asset, index) => imageFileFromAsset(asset, index)));
+  return files.filter((file): file is File => file !== null);
+}
+
+function pasteEventTargetForComposer(target: ComposerTarget): ComposerTarget {
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return target;
+  return (
+    target.querySelector('p') ??
+    target.querySelector('[contenteditable="true"]') ??
+    target
+  ) as ComposerTarget;
+}
+
+function insertTextIntoPromptTarget(target: ComposerTarget, text: string): void {
+  if (!text) return;
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+    setTextInputValue(target, text);
+  } else {
+    setContentEditableText(target, text);
+  }
+}
+
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+function fileListFromFiles(files: File[]): FileList {
+  const transfer = new DataTransfer();
+  for (const file of files) transfer.items.add(file);
+  return transfer.files;
+}
+
+function isUsableImageFileInput(input: HTMLInputElement): boolean {
+  if (input.disabled) return false;
+  const accept = input.accept.toLowerCase();
+  return (
+    accept === '' ||
+    accept.includes('image') ||
+    accept.includes('*/*') ||
+    accept.includes('.png') ||
+    accept.includes('.jpg') ||
+    accept.includes('.jpeg') ||
+    accept.includes('.webp')
+  );
+}
+
+function findComposerFileInput(target: ComposerTarget): HTMLInputElement | null {
+  const scopes: ParentNode[] = [];
+  if (target instanceof HTMLElement) {
+    const form = target.closest('form');
+    if (form) scopes.push(form);
+    const dialog = target.closest('[role="dialog"]');
+    if (dialog && dialog !== form) scopes.push(dialog);
+  }
+  scopes.push(document);
+
+  for (const scope of scopes) {
+    const input = [...scope.querySelectorAll<HTMLInputElement>('input[type="file"]')].find(isUsableImageFileInput);
+    if (input) return input;
+  }
+  return null;
+}
+
+function uploadFilesThroughComposerInput(target: ComposerTarget, files: File[]): boolean {
+  if (files.length === 0) return false;
+  const input = findComposerFileInput(target);
+  if (!input) return false;
+  input.files = fileListFromFiles(files);
+  input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+  return true;
+}
+
+function pasteGalleryFilesIntoPrompt(target: ComposerTarget, files: File[]): boolean {
+  if (files.length === 0) return false;
+  const transfer = new DataTransfer();
+  for (const file of files) transfer.items.add(file);
+  const pasteTarget = pasteEventTargetForComposer(target);
+  target.focus();
+  const event = new ClipboardEvent('paste', {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    clipboardData: transfer,
+  });
+  const notCanceled = pasteTarget.dispatchEvent(event);
+  return !notCanceled || event.defaultPrevented;
+}
+
+async function blobToPng(blob: Blob): Promise<Blob> {
+  if (blob.type === 'image/png') return blob;
+  const url = URL.createObjectURL(blob);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('IMAGE_DECODE_FAILED'));
+      img.src = url;
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth || image.width;
+    canvas.height = image.naturalHeight || image.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx || canvas.width === 0 || canvas.height === 0) throw new Error('CANVAS_FAILED');
+    ctx.drawImage(image, 0, 0);
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((out) => (out ? resolve(out) : reject(new Error('PNG_ENCODE_FAILED'))), 'image/png');
+    });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function writeGalleryImageToClipboard(assets: GalleryAsset[], text: string): Promise<boolean> {
+  const [file] = await imageFilesFromAssets(assets);
+  if (!file || !('ClipboardItem' in window) || !navigator.clipboard.write) return false;
+  const item: Record<string, Blob> = { 'image/png': file };
+  if (text) item['text/plain'] = new Blob([text], { type: 'text/plain' });
+  await navigator.clipboard.write([new ClipboardItem(item)]);
+  return true;
+}
+
+async function insertGalleryAssetsIntoPrompt(assets: GalleryAsset[]): Promise<PromptInsertResult> {
+  const text = galleryAssetsComposerText(assets);
+  const target = findPromptComposer();
+  if (!target) return 'none';
+  if (assets.some((asset) => asset.assetType === 'image')) {
+    const files = await imageFilesFromAssets(assets);
+    if (uploadFilesThroughComposerInput(target, files)) {
+      await nextFrame();
+      insertTextIntoPromptTarget(target, text);
+      return 'uploaded';
+    }
+    if (pasteGalleryFilesIntoPrompt(target, files)) {
+      await nextFrame();
+      insertTextIntoPromptTarget(target, text);
+      return 'pasted';
+    }
+    if (await writeGalleryImageToClipboard(assets, '')) {
+      target.focus();
+      insertTextIntoPromptTarget(target, text);
+      return 'imageClipboard';
+    }
+    return 'none';
+  }
+  if (!text) return 'none';
+  insertTextIntoPromptTarget(target, text);
+  return 'filled';
+}
+
 function Gallery({
   settings,
+  t,
+  language,
   onZoom,
   onEdit,
   refreshSignal,
 }: {
   settings: DisplaySettings;
+  t: UiText;
+  language: ResolvedLanguage;
   onZoom: (z: ZoomSrc) => void;
   onEdit: (r: GalleryRecord) => void;
   refreshSignal: number;
@@ -620,14 +973,14 @@ function Gallery({
     refresh();
   }, [refresh, refreshSignal]);
 
-  if (records === null) return <div className="pt-empty">載入中…</div>;
+  if (records === null) return <div className="pt-empty">{t.loading}</div>;
   if (records.length === 0) {
     return (
       <div className="pt-empty">
         <img className="pt-logo" src={LOGO_DATA_URL} alt="" />
-        還沒有保存任何 prompt。
+        {t.emptyPrompt}
         <br />
-        反白文字 → <kbd>{settings.summonHotkey}</kbd> → 選角色保存。
+        {language === 'en-US' ? 'Select text' : '選取文字'} → <kbd>{settings.summonHotkey}</kbd> → {language === 'en-US' ? 'choose a save button.' : '選按鈕保存。'}
       </div>
     );
   }
@@ -638,6 +991,8 @@ function Gallery({
           key={r.id}
           record={r}
           settings={settings}
+          t={t}
+          language={language}
           onZoom={onZoom}
           onEdit={onEdit}
           onChanged={refresh}
@@ -648,7 +1003,7 @@ function Gallery({
 }
 
 /** Full-screen image preview. Click anywhere or press Esc to dismiss. */
-function Lightbox({ zoom, onClose }: { zoom: ZoomSrc; onClose: () => void }) {
+function Lightbox({ zoom, onClose, t }: { zoom: ZoomSrc; onClose: () => void; t: UiText }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -675,7 +1030,7 @@ function Lightbox({ zoom, onClose }: { zoom: ZoomSrc; onClose: () => void }) {
           }
         }}
       />
-      <button className="pt-lightbox-close" type="button" aria-label="關閉" onClick={onClose}>
+      <button className="pt-lightbox-close" type="button" aria-label={t.close} onClick={onClose}>
         ✕
       </button>
     </div>
@@ -685,12 +1040,16 @@ function Lightbox({ zoom, onClose }: { zoom: ZoomSrc; onClose: () => void }) {
 function GalleryCard({
   record,
   settings,
+  t,
+  language,
   onZoom,
   onEdit,
   onChanged,
 }: {
   record: GalleryRecord;
   settings: DisplaySettings;
+  t: UiText;
+  language: ResolvedLanguage;
   onZoom: (z: ZoomSrc) => void;
   onEdit: (r: GalleryRecord) => void;
   onChanged: () => void;
@@ -730,27 +1089,9 @@ function GalleryCard({
       )}
       <div className="pt-gcols">
         {settings.cardLayout !== 'output-only' && (
-          <div className="pt-gcol">
-            <div className="pt-gcol-label">Input · Reference</div>
-            {left.length === 0 ? (
-              <div className="pt-gcol-empty">—</div>
-            ) : (
-              left.map((a, i) => (
-                <GalleryAssetView key={i} asset={a} settings={settings} onZoom={onZoom} />
-              ))
-            )}
-          </div>
+          <GalleryColumn label={t.inputReference} assets={left} settings={settings} onZoom={onZoom} t={t} language={language} />
         )}
-        <div className="pt-gcol">
-          <div className="pt-gcol-label">Output</div>
-          {right.length === 0 ? (
-            <div className="pt-gcol-empty">—</div>
-          ) : (
-            right.map((a, i) => (
-              <GalleryAssetView key={i} asset={a} settings={settings} onZoom={onZoom} />
-            ))
-          )}
-        </div>
+        <GalleryColumn label={t.output} assets={right} settings={settings} onZoom={onZoom} t={t} language={language} />
       </div>
 
       {menu && <div className="pt-menu-backdrop" onClick={closeMenu} role="presentation" />}
@@ -769,27 +1110,105 @@ function GalleryCard({
                   onEdit(record);
                 }}
               >
-                編輯標籤
+                {language === 'en-US' ? 'Edit tags' : '編輯標籤'}
               </button>
               <button
                 className="pt-gmenu-item pt-gmenu-item--danger"
                 onClick={() => setConfirmDel(true)}
               >
-                刪除
+                {t.delete}
               </button>
             </>
           ) : (
             <>
-              <div className="pt-gmenu-confirm">刪除這筆？本機檔案也會移除。</div>
+              <div className="pt-gmenu-confirm">{language === 'en-US' ? 'Delete this record? Local files will be removed too.' : '刪除這筆？本機檔案也會移除。'}</div>
               <button className="pt-gmenu-item pt-gmenu-item--danger" onClick={remove}>
-                確定刪除
+                {language === 'en-US' ? 'Delete' : '確定刪除'}
               </button>
               <button className="pt-gmenu-item" onClick={() => setConfirmDel(false)}>
-                取消
+                {language === 'en-US' ? 'Cancel' : '取消'}
               </button>
             </>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+function GalleryColumn({
+  label,
+  assets,
+  settings,
+  onZoom,
+  t,
+  language,
+}: {
+  label: string;
+  assets: GalleryAsset[];
+  settings: DisplaySettings;
+  onZoom: (z: ZoomSrc) => void;
+  t: UiText;
+  language: ResolvedLanguage;
+}) {
+  const [copyState, setCopyState] = useState<'idle' | 'uploaded' | 'pasted' | 'imageClipboard' | 'filled' | 'text' | 'rich'>('idle');
+
+  const copy = async () => {
+    if (assets.length === 0) return;
+    try {
+      const clipboardResult = await copyGalleryAssets(assets);
+      const insertResult = await insertGalleryAssetsIntoPrompt(assets);
+      if (insertResult !== 'none') {
+        setCopyState(insertResult);
+        window.setTimeout(() => setCopyState('idle'), 1400);
+        return;
+      }
+      setCopyState(clipboardResult);
+      window.setTimeout(() => setCopyState('idle'), 1400);
+    } catch {
+      setCopyState('idle');
+    }
+  };
+
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    copy();
+  };
+
+  return (
+    <div
+      className={assets.length > 0 ? 'pt-gcol pt-gcol--copyable' : 'pt-gcol'}
+      onClick={copy}
+      onKeyDown={onKeyDown}
+      role={assets.length > 0 ? 'button' : undefined}
+      tabIndex={assets.length > 0 ? 0 : undefined}
+      title={assets.length > 0 ? t.clickCopyColumn : undefined}
+    >
+      <div className="pt-gcol-label">
+        <span>{label}</span>
+        {assets.length > 0 && (
+          <span className="pt-gcol-copy">
+            {copyState === 'uploaded'
+              ? t.copiedAndAttached
+              : copyState === 'pasted'
+              ? t.copiedAndPasted
+              : copyState === 'imageClipboard'
+              ? t.pressCtrlV
+              : copyState === 'filled'
+              ? t.copiedAndFilled
+              : copyState === 'rich'
+                ? t.richCopied
+                : copyState === 'text'
+                  ? t.copied
+                  : t.copy}
+          </span>
+        )}
+      </div>
+      {assets.length === 0 ? (
+        <div className="pt-gcol-empty">—</div>
+      ) : (
+        assets.map((a, i) => <GalleryAssetView key={i} asset={a} settings={settings} onZoom={onZoom} language={language} />)
       )}
     </div>
   );
@@ -800,11 +1219,15 @@ function GalleryCard({
 function CardEditor({
   record,
   topVh,
+  t,
+  language,
   onClose,
   onSaved,
 }: {
   record: GalleryRecord;
   topVh: number;
+  t: UiText;
+  language: ResolvedLanguage;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -858,14 +1281,14 @@ function CardEditor({
       style={{ top: `${topVh}vh` }}
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="pt-geditor-title">編輯標籤</div>
-      <div className="pt-geditor-label">分類</div>
+      <div className="pt-geditor-title">{language === 'en-US' ? 'Edit labels' : '編輯標籤'}</div>
+      <div className="pt-geditor-label">{t.category}</div>
       <div className="pt-choices">
         <button
           className={categoryId === null ? 'pt-choice pt-choice--on' : 'pt-choice'}
           onClick={() => setCategoryId(null)}
         >
-          未分類
+          {t.uncategorized}
         </button>
         {categories
           .filter((c) => c.isActive)
@@ -875,17 +1298,17 @@ function CardEditor({
               className={categoryId === c.id ? 'pt-choice pt-choice--on' : 'pt-choice'}
               onClick={() => setCategoryId(c.id)}
             >
-              {c.name}
+              {categoryLabel(c, language)}
             </button>
           ))}
       </div>
-      <div className="pt-geditor-label">Model</div>
+      <div className="pt-geditor-label">{t.model}</div>
       <div className="pt-choices">
         <button
           className={modelTouched && presetId === null ? 'pt-choice pt-choice--on' : 'pt-choice'}
           onClick={() => pickModel(null)}
         >
-          未指定
+          {language === 'en-US' ? 'Not specified' : '未指定'}
         </button>
         {presets
           .filter((p) => p.isActive)
@@ -904,10 +1327,10 @@ function CardEditor({
       </div>
       <div className="pt-geditor-actions">
         <button className="pt-choice pt-choice--sub" onClick={onClose}>
-          取消
+          {language === 'en-US' ? 'Cancel' : '取消'}
         </button>
         <button className="pt-choice pt-choice--detected" onClick={save}>
-          儲存
+          {language === 'en-US' ? 'Save' : '儲存'}
         </button>
       </div>
     </div>
@@ -918,13 +1341,15 @@ function GalleryAssetView({
   asset,
   settings,
   onZoom,
+  language,
 }: {
   asset: GalleryAsset;
   settings: DisplaySettings;
   onZoom: (z: ZoomSrc) => void;
+  language: ResolvedLanguage;
 }) {
   if (asset.assetType === 'text' && asset.textContent) {
-    return <GalleryPrompt role={asset.role} text={asset.textContent} color={settings.roleColors[asset.role]} />;
+    return <GalleryPrompt role={asset.role} text={asset.textContent} color={settings.roleColors[asset.role]} language={language} />;
   }
   // Prefer the durable local thumbnail; the remote originalUrl (e.g. ChatGPT's
   // signed URL) can expire or be blocked by the page CSP, leaving OUTPUT blank.
@@ -936,9 +1361,12 @@ function GalleryAssetView({
         src={src}
         alt=""
         loading="lazy"
-        title="點擊放大"
+        title={language === 'en-US' ? 'Click to enlarge' : '點擊放大'}
         // Zoom prefers the full-res original; falls back to the durable thumbnail.
-        onClick={() => onZoom({ primary: asset.originalUrl ?? asset.previewRef, fallback: asset.previewRef })}
+        onClick={(e) => {
+          e.stopPropagation();
+          onZoom({ primary: asset.originalUrl ?? asset.previewRef, fallback: asset.previewRef });
+        }}
         onError={(e) => {
           if (asset.previewRef && e.currentTarget.src !== asset.previewRef) {
             e.currentTarget.src = asset.previewRef;
@@ -952,24 +1380,13 @@ function GalleryAssetView({
   return null;
 }
 
-function GalleryPrompt({ role, text, color }: { role: AssetRole; text: string; color: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1200);
-    } catch {
-      /* clipboard blocked on this page */
-    }
-  };
+function GalleryPrompt({ role, text, color, language }: { role: AssetRole; text: string; color: string; language: ResolvedLanguage }) {
   return (
-    <div className="pt-gprompt" onClick={copy} title="點擊複製">
+    <div className="pt-gprompt">
       <div className="pt-gprompt-head">
         <span className="pt-pill" style={{ background: color }}>
-          {ROLE_LABELS[role]}
+          {roleLabel(role, language)}
         </span>
-        <span className="pt-gcopy">{copied ? '已複製 ✓' : '複製'}</span>
       </div>
       <div className="pt-gtext">{text}</div>
     </div>
@@ -992,11 +1409,15 @@ function Wizard({
   setStage,
   sourceUrl,
   outputTypes,
+  t,
+  language,
 }: {
   stage: 'category' | 'model';
   setStage: (w: null | 'category' | 'model') => void;
   sourceUrl?: string;
   outputTypes?: PendingAsset['assetType'][];
+  t: UiText;
+  language: ResolvedLanguage;
 }) {
   const [categories, setCategories] = useState<RecordCategory[]>([]);
   const [presets, setPresets] = useState<ModelPreset[]>([]);
@@ -1076,10 +1497,10 @@ function Wizard({
   if (stage === 'category') {
     return (
       <div className="pt-card pt-wizard">
-        <strong>分類（選填）</strong>
+        <strong>{t.category}（{language === 'en-US' ? 'optional' : '選填'}）</strong>
         <div className="pt-choices">
           <button className="pt-choice" onClick={() => pickCategory(null)}>
-            未分類
+            {t.uncategorized}
           </button>
           {tree.map(({ c, depth }) => {
             const suggested = c.id === suggestedCategoryId;
@@ -1091,8 +1512,8 @@ function Wizard({
                 onClick={() => pickCategory(c.id)}
               >
                 {suggested ? '✨ ' : ''}
-                {c.name}
-                {suggested ? ' · 依產出建議' : ''}
+                {categoryLabel(c, language)}
+                {suggested ? (language === 'en-US' ? ' · suggested' : ' · 依產出建議') : ''}
               </button>
             );
           })}
@@ -1100,7 +1521,7 @@ function Wizard({
         <div className="pt-row" style={{ marginTop: 8 }}>
           <input
             type="text"
-            placeholder="快速新增分類…"
+            placeholder={language === 'en-US' ? 'Quick add category…' : '快速新增分類…'}
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => {
@@ -1109,15 +1530,15 @@ function Wizard({
             style={{ flex: 1, width: 'auto' }}
           />
           <button className="pt-small-btn" disabled={!newName.trim()} onClick={quickAdd}>
-            新增
+            {t.add}
           </button>
         </div>
         <div className="pt-wizard-foot">
           <button className="pt-link-btn" onClick={() => setStage(null)}>
-            ← 返回
+            ← {language === 'en-US' ? 'Back' : '返回'}
           </button>
-          <button className="pt-link-btn pt-wizard-x" onClick={() => setStage(null)} title="取消保存">
-            ✕ 取消
+          <button className="pt-link-btn pt-wizard-x" onClick={() => setStage(null)} title={language === 'en-US' ? 'Cancel save' : '取消保存'}>
+            ✕ {language === 'en-US' ? 'Cancel' : '取消'}
           </button>
         </div>
       </div>
@@ -1126,10 +1547,10 @@ function Wizard({
 
   return (
     <div className="pt-card pt-wizard">
-      <strong>Model（選填）</strong>
+      <strong>{t.model}（{language === 'en-US' ? 'optional' : '選填'}）</strong>
       <div className="pt-choices">
         <button className="pt-choice" onClick={() => commit({})}>
-          不填（直接保存）
+          {language === 'en-US' ? 'Skip and save' : '不填（直接保存）'}
         </button>
         {detected && (
           <button
@@ -1144,7 +1565,7 @@ function Wizard({
                 : commit({ modelName: detected.modelName, modelProvider: detected.provider })
             }
           >
-            ✨ {detected.modelName}（{detected.provider}）· 偵測自頁面
+            ✨ {detected.modelName}（{detected.provider}）· {language === 'en-US' ? 'detected from page' : '偵測自頁面'}
           </button>
         )}
         {presets
@@ -1167,13 +1588,13 @@ function Wizard({
         </button>
         {!customOpen ? (
           <button className="pt-choice pt-choice--sub" onClick={() => setCustomOpen(true)}>
-            自訂…
+            {language === 'en-US' ? 'Custom…' : '自訂…'}
           </button>
         ) : (
           <div className="pt-row">
             <input
               type="text"
-              placeholder="自訂 model 名稱"
+              placeholder={language === 'en-US' ? 'Custom model name' : '自訂模型名稱'}
               value={customLabel}
               autoFocus
               onChange={(e) => setCustomLabel(e.target.value)}
@@ -1183,17 +1604,17 @@ function Wizard({
               style={{ flex: 1, width: 'auto' }}
             />
             <button className="pt-small-btn" disabled={!customLabel.trim()} onClick={() => commit({ modelLabel: customLabel.trim() })}>
-              保存
+              {language === 'en-US' ? 'Save' : '保存'}
             </button>
           </div>
         )}
       </div>
       <div className="pt-wizard-foot">
         <button className="pt-link-btn" onClick={() => setStage('category')}>
-          ← 上一步
+          ← {language === 'en-US' ? 'Previous' : '上一步'}
         </button>
-        <button className="pt-link-btn pt-wizard-x" onClick={() => setStage(null)} title="取消保存">
-          ✕ 取消
+        <button className="pt-link-btn pt-wizard-x" onClick={() => setStage(null)} title={language === 'en-US' ? 'Cancel save' : '取消保存'}>
+          ✕ {language === 'en-US' ? 'Cancel' : '取消'}
         </button>
       </div>
     </div>

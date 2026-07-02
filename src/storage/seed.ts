@@ -51,6 +51,12 @@ export const BUILTIN_CATEGORY_DEFAULTS = [
   { id: BUILTIN_CATEGORY_IDS.music, name: '生音樂', sortOrder: 3, color: '#FBBF24' },
 ] as const;
 
+export const BUILTIN_MODEL_PRESET_DEFAULTS = [
+  { id: 'preset-gpt', modelName: 'ChatGPT', provider: 'OpenAI', categoryId: null, sortOrder: 0 },
+  { id: 'preset-claude', modelName: 'Claude', provider: 'Anthropic', categoryId: null, sortOrder: 1 },
+  { id: 'preset-gemini', modelName: 'Gemini', provider: 'Google', categoryId: null, sortOrder: 2 },
+] as const;
+
 /** Seed built-in categories and starter model presets, once. Idempotent. */
 export async function seedDefaults(): Promise<void> {
   const existing = await categoryRepository.list();
@@ -61,18 +67,8 @@ export async function seedDefaults(): Promise<void> {
   );
   for (const c of cats) await categoryRepository.save(c);
 
-  const presets: ModelPreset[] = [
-    preset('preset-gpt', 'GPT', 'OpenAI', BUILTIN_CATEGORY_IDS.text, 0),
-    preset('preset-claude', 'Claude', 'Anthropic', BUILTIN_CATEGORY_IDS.text, 1),
-    preset('preset-gemini', 'Gemini', 'Google', BUILTIN_CATEGORY_IDS.text, 2),
-    preset('preset-midjourney', 'Midjourney', 'Midjourney', BUILTIN_CATEGORY_IDS.image, 10),
-    preset('preset-sd', 'Stable Diffusion', 'Stability AI', BUILTIN_CATEGORY_IDS.image, 11),
-    preset('preset-flux', 'Flux', 'Black Forest Labs', BUILTIN_CATEGORY_IDS.image, 12),
-    preset('preset-dalle', 'DALL·E', 'OpenAI', BUILTIN_CATEGORY_IDS.image, 13),
-    preset('preset-runway', 'Runway', 'Runway', BUILTIN_CATEGORY_IDS.video, 20),
-    preset('preset-sora', 'Sora', 'OpenAI', BUILTIN_CATEGORY_IDS.video, 21),
-    preset('preset-kling', 'Kling', 'Kuaishou', BUILTIN_CATEGORY_IDS.video, 22),
-    preset('preset-pika', 'Pika', 'Pika', BUILTIN_CATEGORY_IDS.video, 23),
-  ];
+  const presets: ModelPreset[] = BUILTIN_MODEL_PRESET_DEFAULTS.map((p) =>
+    preset(p.id, p.modelName, p.provider, p.categoryId, p.sortOrder),
+  );
   for (const p of presets) await modelPresetRepository.save(p);
 }
