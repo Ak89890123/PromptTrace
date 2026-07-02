@@ -20,6 +20,9 @@
   --pt-color-text-secondary: rgba(245, 245, 247, 0.72);
   --pt-color-text-muted: rgba(245, 245, 247, 0.55);
   --pt-color-text-faint: rgba(245, 245, 247, 0.4);
+  --pt-color-text-disabled: rgba(245, 245, 247, 0.28);
+  --pt-color-text-empty: rgba(245, 245, 247, 0.22);
+  --pt-color-text-static-white: #fff;
   --pt-color-text-inverse: #0b1220;
   --pt-color-text-on-accent: #06231f;
 
@@ -27,9 +30,19 @@
   --pt-color-accent-hover: rgba(34, 211, 238, 0.55);
   --pt-color-accent-soft: rgba(34, 211, 238, 0.16);
   --pt-color-accent-softer: rgba(34, 211, 238, 0.08);
+  --pt-color-accent-text: #dffaff;
+  --pt-color-accent-text-soft: #d6f6fd;
+  --pt-color-accent-text-strong: #eafbff;
+  --pt-color-accent-text-muted: #a8e8f3;
+  --pt-color-role-fallback: #94a3b8;
   --pt-color-success: #34d399;
   --pt-color-danger: #f87171;
   --pt-color-danger-soft: rgba(248, 113, 113, 0.55);
+  --pt-color-danger-text: #fca5a5;
+  --pt-color-danger-hover: #ff8a8a;
+  --pt-color-danger-muted: rgba(245, 130, 130, 0.7);
+  --pt-color-danger-border: rgba(248, 113, 113, 0.4);
+  --pt-color-danger-hover-bg: rgba(255, 90, 90, 0.16);
   --pt-color-warning-soft: rgba(251, 191, 36, 0.55);
   --pt-color-link: #8ad7e8;
 
@@ -46,6 +59,8 @@
   --pt-surface-control-hover: rgba(255, 255, 255, 0.15);
   --pt-surface-input: rgba(0, 0, 0, 0.3);
   --pt-surface-input-strong: rgba(0, 0, 0, 0.32);
+  --pt-surface-record-hover: rgba(32, 36, 43, 0.78);
+  --pt-surface-record-selected: rgba(32, 36, 43, 0.86);
   --pt-surface-menu: rgba(40, 40, 46, 0.98);
   --pt-surface-close: rgba(20, 20, 24, 0.92);
   --pt-surface-rail: rgba(8, 8, 12, 0.76);
@@ -60,6 +75,12 @@
   --pt-stroke-subtle: rgba(255, 255, 255, 0.08);
   --pt-stroke-accent: rgba(34, 211, 238, 0.72);
   --pt-stroke-accent-strong: rgba(34, 211, 238, 0.82);
+  --pt-stroke-accent-muted: rgba(34, 211, 238, 0.66);
+  --pt-stroke-accent-focus: rgba(34, 211, 238, 0.42);
+  --pt-stroke-success-strong: rgba(52, 211, 153, 0.76);
+  --pt-stroke-neutral: rgba(148, 163, 184, 0.54);
+  --pt-stroke-swatch-strong: rgba(255, 255, 255, 0.72);
+  --pt-stroke-swatch-muted: rgba(255, 255, 255, 0.42);
   --pt-glass-inner: rgba(255, 255, 255, 0.07);
   --pt-glass-highlight: rgba(255, 255, 255, 0.12);
 
@@ -90,6 +111,9 @@
   --pt-shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.35);
   --pt-shadow-card: 0 4px 24px rgba(0, 0, 0, 0.25);
   --pt-shadow-menu: 0 8px 28px rgba(0, 0, 0, 0.5);
+  --pt-shadow-popover: 0 18px 48px rgba(0, 0, 0, 0.42);
+  --pt-shadow-record-selected: 0 0 0 1px var(--pt-stroke-accent-focus), 0 16px 44px rgba(0, 0, 0, 0.34);
+  --pt-shadow-toolbar-button: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 1px 4px rgba(0, 0, 0, 0.25);
   --pt-shadow-lightbox: 0 12px 48px rgba(0, 0, 0, 0.6);
   --pt-shadow-floating-control: 0 2px 8px rgba(0, 0, 0, 0.5);
   --pt-shadow-focus: 0 0 0 1px rgba(34, 211, 238, 0.18);

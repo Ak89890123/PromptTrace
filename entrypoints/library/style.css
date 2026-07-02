@@ -236,18 +236,16 @@ body {
 
 .record-card:hover {
   border-color: var(--pt-stroke-hover);
-  background: rgba(32, 36, 43, 0.78);
+  background: var(--pt-surface-record-hover);
 }
 
 .record-card.is-selected {
   border-color: var(--pt-stroke-accent-strong);
-  background: rgba(32, 36, 43, 0.86);
+  background: var(--pt-surface-record-selected);
 }
 
 .record-card.is-selected {
-  box-shadow:
-    0 0 0 1px rgba(34, 211, 238, 0.42),
-    0 16px 44px rgba(0, 0, 0, 0.34);
+  box-shadow: var(--pt-shadow-record-selected);
 }
 
 .record-card-topline,
@@ -267,7 +265,7 @@ body {
   max-height: 92px;
   overflow: hidden;
   padding: var(--pt-space-4);
-  border-left: 3px solid rgba(52, 211, 153, 0.76);
+  border-left: 3px solid var(--pt-stroke-success-strong);
   border-radius: var(--pt-radius-kbd);
   background: var(--pt-surface-card-faint);
   color: var(--pt-color-text-primary);
@@ -276,7 +274,7 @@ body {
 }
 
 .record-card-summary.is-muted {
-  border-left-color: rgba(148, 163, 184, 0.54);
+  border-left-color: var(--pt-stroke-neutral);
   color: var(--pt-color-text-muted);
 }
 
@@ -339,7 +337,7 @@ body {
   max-height: 114px;
   overflow: hidden;
   padding: var(--pt-space-4);
-  border-left: 3px solid rgba(34, 211, 238, 0.66);
+  border-left: 3px solid var(--pt-stroke-accent-muted);
   border-radius: var(--pt-radius-kbd);
   background: var(--pt-surface-input);
   color: var(--pt-color-text-secondary);
@@ -360,7 +358,7 @@ body {
   min-height: 70px;
   border: 1px dashed var(--pt-stroke-muted);
   border-radius: var(--pt-radius-thumb);
-  color: rgba(245, 245, 247, 0.28);
+  color: var(--pt-color-text-disabled);
   display: grid;
   place-items: center;
 }
