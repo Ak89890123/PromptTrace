@@ -136,6 +136,28 @@ MIT — 見 [LICENSE](LICENSE)。
 
 ## 開發日誌
 
+### 2026-07-01 收工
+
+**做了什麼：**（commit `6f7195b`）
+- 初始化 repo-local agent guidance：新增 `AGENTS.md`，並把 `.codegraph/` 加入 ignore；CodeGraph 已可用。
+- 修右側 P / gallery 浮窗體驗：overlay root 改成 0x0 fixed，避免頁面右側多出一條 scrollbar；Gallery 支援 hover-open、釘選、關閉與 Escape；右鍵選單去掉 emoji。
+- Popup 增加 `P 邊欄高度` reset，滑出控制框後立即消失。
+- Library 改為工作台布局：左 filter、中央大卡片、右側 detail inspector；detail 改為點擊 / focus 固定選取，不再 hover 到哪張右邊就跳哪張；空狀態區分「尚無紀錄」與「沒有符合篩選」。
+- Settings 改寬版布局：互動設定與分類並排、Model Presets 全寬表格化、顯示 / 匯出並排、權限說明全寬；分類 icon 移除，只保留顏色。
+- 原廠分類收斂為 4 個：生文 / 生圖 / 生影 / 生音樂，並提供「重置原廠分類」。
+- 修 content panel 的 Library / Settings 導航：改由 background 開 extension page，避免 `ERR_BLOCKED_BY_CLIENT`。
+- 補 `src/ui/base.css` surface / stroke / radius / shadow token，讓後續統一 UI 有基礎。
+
+**驗證：**
+- `npm run compile`
+- `npm run build`
+- Playwright 載入 `.output/chrome-mv3` 檢查 Library / Settings 真 extension 頁面截圖。
+
+**下次方向：**
+- 用真資料 profile 看 Library 卡片與右側 detail 的視覺密度；必要時微調卡片比例與 output 圖片優先級。
+- 對 content panel 的釘選 / 關閉 / Escape 做一輪 e2e 或手動 Chrome 驗證。
+- Settings 下一輪可把 taxonomy / model presets 收成 Advanced，進一步降低第一屏壓力。
+
 ### 2026-06-18 收工
 
 **做了什麼：**（commit 本次一坨；主題：gallery/擷取 UX 打磨，讓「攜帶 prompt」真的站得住）
