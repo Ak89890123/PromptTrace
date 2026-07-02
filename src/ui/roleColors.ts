@@ -1,4 +1,5 @@
 import type { AssetRole } from '../core/domain/enums';
+import { DEFAULT_SUMMARY_SETTINGS, mergeSummarySettings, type SummarySettings } from '../core/summary';
 
 export type RoleColorMap = Record<AssetRole | 'pending', string>;
 
@@ -34,6 +35,7 @@ export type DisplaySettings = {
   cardLayout: 'split' | 'output-only';
   /** Vertical position of the right-edge gallery tab, 0 (top)–100 (bottom). */
   edgeTabTop: number;
+  summary: SummarySettings;
 };
 
 export const DEFAULT_SETTINGS: DisplaySettings = {
@@ -49,6 +51,7 @@ export const DEFAULT_SETTINGS: DisplaySettings = {
   toolbarRoles: ['input', 'input_reference', 'negative', 'output'],
   cardLayout: 'split',
   edgeTabTop: 50,
+  summary: DEFAULT_SUMMARY_SETTINGS,
 };
 
 const SETTINGS_KEY = 'prompttrace:settings';
@@ -68,6 +71,7 @@ function withDefaults(stored: Partial<DisplaySettings> | undefined): DisplaySett
       stored.toolbarRoles && stored.toolbarRoles.length >= 2
         ? stored.toolbarRoles
         : DEFAULT_SETTINGS.toolbarRoles,
+    summary: mergeSummarySettings(stored.summary),
   };
 }
 

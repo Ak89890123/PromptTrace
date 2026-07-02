@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react';
-import type { RecordCategory } from '@/src/core/domain/entities';
+import type { LibraryRecord, RecordCategory } from '@/src/core/domain/entities';
 import { ROLE_LABELS, type AssetRole } from '@/src/core/domain/enums';
 import { validateCategoryName } from '@/src/core/domain/validation';
 import { formatHotkeyFromEvent } from '@/src/core/hotkeys';
-import { categoryRepository } from '@/src/storage/repositories';
+import {
+  maskApiKey,
+  SUMMARY_PROVIDER_LABELS,
+  SUMMARY_PROVIDER_MODELS,
+  SUMMARY_SYSTEM_PROMPT,
+  type SummaryProvider,
+} from '@/src/core/summary';
+import { categoryRepository, recordRepository } from '@/src/storage/repositories';
 import { BUILTIN_CATEGORY_DEFAULTS } from '@/src/storage/seed';
 import { categoryLabel, resolveLanguage, roleLabel, UI_TEXT, type ResolvedLanguage, type UiText } from '@/src/ui/i18n';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type DisplaySettings } from '@/src/ui/roleColors';
@@ -94,6 +101,7 @@ export default function App() {
         <DisplaySettingsSection settings={settings} onPatch={patchSettings} t={t} language={language} />
         <InteractionSettings settings={settings} onPatch={patchSettings} t={t} language={language} />
         <LibraryRulesSettings categories={categories} onChanged={reload} t={t} language={language} />
+        <SummarySettingsSection settings={settings} onPatch={patchSettings} />
         <FileSettingsSection t={t} />
       </div>
     </div>
@@ -508,6 +516,260 @@ function DisplaySettingsSection({
       </div>
     </section>
   );
+}
+
+function SummarySettingsSection({
+  settings,
+  onPatch,
+}: {
+  settings: DisplaySettings;
+  onPatch: (p: Partial<DisplaySettings>) => void;
+}) {
+  const summary = settings.summary;
+  const provider = summary.provider;
+  const knownModels = SUMMARY_PROVIDER_MODELS[provider];
+  const currentModel = summary.models[provider] ?? '';
+  const isCustomModel = currentModel.length > 0 && !knownModels.includes(currentModel);
+  const [usageRecords, setUsageRecords] = useState<LibraryRecord[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    recordRepository.list().then((records) => {
+      if (active) setUsageRecords(records);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const summarizedRecords = usageRecords.filter((record) => record.summaryGeneratedAt || record.summaryTokenUsage);
+  const usageRecordsWithTokens = summarizedRecords.filter((record) => record.summaryTokenUsage);
+  const usageTotals = summarizedRecords.reduce(
+    (totals, record) => {
+      const usage = record.summaryTokenUsage;
+      return {
+        input: totals.input + (usage?.inputTokens ?? 0),
+        output: totals.output + (usage?.outputTokens ?? 0),
+        total: totals.total + (usage?.totalTokens ?? 0),
+      };
+    },
+    { input: 0, output: 0, total: 0 },
+  );
+  const recentUsageRecords = summarizedRecords
+    .slice()
+    .sort((a, b) => (b.summaryGeneratedAt ?? '').localeCompare(a.summaryGeneratedAt ?? ''))
+    .slice(0, 5);
+
+  const patchSummary = (patch: Partial<typeof summary>) => {
+    onPatch({ summary: { ...summary, ...patch } });
+  };
+
+  const updateProvider = (nextProvider: SummaryProvider) => {
+    patchSummary({
+      provider: nextProvider,
+      models: {
+        ...summary.models,
+        [nextProvider]: summary.models[nextProvider] ?? SUMMARY_PROVIDER_MODELS[nextProvider][0],
+      },
+    });
+  };
+
+  const updateModel = (value: string) => {
+    patchSummary({
+      models: {
+        ...summary.models,
+        [provider]: value === '__custom' ? '' : value,
+      },
+    });
+  };
+
+  return (
+    <section className="card settings-section">
+      <div className="spread">
+        <h2>摘要</h2>
+        <label className="row" style={{ gap: 6 }}>
+          <input
+            type="checkbox"
+            style={{ width: 'auto' }}
+            checked={summary.enabled}
+            onChange={(e) => patchSummary({ enabled: e.target.checked })}
+          />
+          啟用
+        </label>
+      </div>
+      <p className="muted">
+        用你自己的 API key，替保存的 prompt 產生一段簡短中文摘要；只送「輸入」文字，不送圖片、影片、網址或檔案路徑。
+      </p>
+      <div className="settings-summary-grid">
+        <label className="settings-field">
+          <span className="muted">供應商</span>
+          <select value={provider} onChange={(e) => updateProvider(e.target.value as SummaryProvider)}>
+            {(Object.keys(SUMMARY_PROVIDER_LABELS) as SummaryProvider[]).map((item) => (
+              <option key={item} value={item}>
+                {SUMMARY_PROVIDER_LABELS[item]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="settings-field">
+          <span className="muted">API key</span>
+          <input
+            type="password"
+            value={summary.apiKeys[provider] ?? ''}
+            placeholder="貼上你的 API key"
+            onChange={(e) =>
+              patchSummary({
+                apiKeys: {
+                  ...summary.apiKeys,
+                  [provider]: e.target.value,
+                },
+              })
+            }
+          />
+        </label>
+        <label className="settings-field">
+          <span className="muted">模型</span>
+          <select value={isCustomModel ? '__custom' : currentModel} onChange={(e) => updateModel(e.target.value)}>
+            {knownModels.map((model) => (
+              <option key={model} value={model}>
+                {model}
+              </option>
+            ))}
+            <option value="__custom">自填</option>
+          </select>
+        </label>
+        {isCustomModel || currentModel === '' ? (
+          <label className="settings-field">
+            <span className="muted">自填模型</span>
+            <input
+              value={currentModel}
+              placeholder="例如 provider/model-id"
+              onChange={(e) =>
+                patchSummary({
+                  models: {
+                    ...summary.models,
+                    [provider]: e.target.value,
+                  },
+                })
+              }
+            />
+          </label>
+        ) : (
+          <div className="settings-field">
+            <span className="muted">已保存</span>
+            <span className="settings-secret-preview">{maskApiKey(summary.apiKeys[provider]) || '尚未設定 API key'}</span>
+          </div>
+        )}
+      </div>
+      <div className="settings-inner-divider" />
+      <div className="settings-summary-grid">
+        <label className="row" style={{ gap: 6 }}>
+          <input
+            type="checkbox"
+            style={{ width: 'auto' }}
+            checked={summary.autoEnabled}
+            onChange={(e) => patchSummary({ autoEnabled: e.target.checked })}
+          />
+          自動摘要沒摘要過的卡片
+        </label>
+        <label className="settings-field">
+          <span className="muted">掃描間隔（分鐘）</span>
+          <input
+            type="number"
+            min={1}
+            value={summary.scanIntervalMinutes}
+            onChange={(e) => patchSummary({ scanIntervalMinutes: Number(e.target.value) })}
+            placeholder="例如 15"
+          />
+        </label>
+        <label className="settings-field">
+          <span className="muted">每次最多</span>
+          <input
+            type="number"
+            min={1}
+            max={50}
+            value={summary.maxPerRun}
+            onChange={(e) => patchSummary({ maxPerRun: Number(e.target.value) })}
+          />
+        </label>
+        <label className="settings-field">
+          <span className="muted">逾時秒數</span>
+          <input
+            type="number"
+            min={5}
+            max={120}
+            value={Math.round(summary.timeoutMs / 1000)}
+            onChange={(e) => patchSummary({ timeoutMs: Number(e.target.value) * 1000 })}
+          />
+        </label>
+      </div>
+      <div className="settings-inner-divider" />
+      <label className="settings-field settings-field-full">
+        <span className="muted">System prompt</span>
+        <textarea
+          rows={6}
+          value={summary.systemPrompt}
+          onChange={(e) => patchSummary({ systemPrompt: e.target.value })}
+        />
+      </label>
+      <div className="row" style={{ marginTop: 8 }}>
+        <button type="button" onClick={() => patchSummary({ systemPrompt: SUMMARY_SYSTEM_PROMPT })}>
+          還原預設 system prompt
+        </button>
+      </div>
+      <div className="settings-inner-divider" />
+      <div className="settings-summary-dashboard">
+        <div className="settings-summary-dashboard-head">
+          <h2>Token 儀表板</h2>
+          <span className="muted">使用 API 回傳的 token usage；沒回傳的紀錄會顯示 --。</span>
+        </div>
+        <div className="settings-summary-metrics">
+          <div>
+            <span className="muted">已摘要</span>
+            <strong>{summarizedRecords.length}</strong>
+          </div>
+          <div>
+            <span className="muted">有 usage</span>
+            <strong>{usageRecordsWithTokens.length}</strong>
+          </div>
+          <div>
+            <span className="muted">輸入 token</span>
+            <strong>{formatTokenCount(usageTotals.input)}</strong>
+          </div>
+          <div>
+            <span className="muted">輸出 token</span>
+            <strong>{formatTokenCount(usageTotals.output)}</strong>
+          </div>
+          <div>
+            <span className="muted">總 token</span>
+            <strong>{formatTokenCount(usageTotals.total)}</strong>
+          </div>
+        </div>
+        <div className="settings-summary-usage-list">
+          {recentUsageRecords.length === 0 ? (
+            <div className="muted">還沒有摘要 token 紀錄。</div>
+          ) : (
+            recentUsageRecords.map((record) => (
+              <div key={record.id} className="settings-summary-usage-row">
+                <span title={record.title || record.id}>{record.title || '未命名卡片'}</span>
+                <span>輸入 {formatTokenMaybe(record.summaryTokenUsage?.inputTokens)}</span>
+                <span>輸出 {formatTokenMaybe(record.summaryTokenUsage?.outputTokens)}</span>
+                <span>總計 {formatTokenMaybe(record.summaryTokenUsage?.totalTokens)}</span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function formatTokenCount(value: number): string {
+  return value.toLocaleString('zh-TW');
+}
+
+function formatTokenMaybe(value: number | null | undefined): string {
+  return value == null ? '--' : value.toLocaleString('zh-TW');
 }
 
 const PROMPTTRACE_ROOT_FILE_REGEX = '[\\\\/]PromptTrace[\\\\/][^\\\\/]+$';

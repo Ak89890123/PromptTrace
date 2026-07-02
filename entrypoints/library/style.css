@@ -263,6 +263,48 @@ body {
   margin: 14px 0 12px;
 }
 
+.record-card-summary {
+  max-height: 92px;
+  overflow: hidden;
+  padding: 10px 11px;
+  border-left: 3px solid rgba(52, 211, 153, 0.76);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(245, 245, 247, 0.9);
+  font-size: 12px;
+  line-height: 1.48;
+}
+
+.record-card-summary.is-muted {
+  border-left-color: rgba(148, 163, 184, 0.54);
+  color: var(--muted);
+}
+
+.record-summary-panel {
+  margin-top: 10px;
+}
+
+.record-summary-panel p {
+  margin: 8px 0 0;
+  color: rgba(245, 245, 247, 0.9);
+  line-height: 1.5;
+}
+
+.record-summary-token-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.record-summary-token-row span {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
 .record-card-footer {
   margin-top: auto;
   padding-top: 14px;

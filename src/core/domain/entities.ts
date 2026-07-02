@@ -1,3 +1,4 @@
+import type { SummaryProvider, SummaryStatus, SummaryTokenUsage } from '../summary';
 import type { AssetRole, AssetType, DeleteStatus, DownloadStatus } from './enums';
 
 export type RecordCategory = {
@@ -40,6 +41,13 @@ export type LibraryRecord = {
 
   title?: string;
   notes?: string;
+  summary?: string;
+  summaryStatus?: SummaryStatus;
+  summaryError?: string;
+  summaryProvider?: SummaryProvider;
+  summaryModel?: string;
+  summaryTokenUsage?: SummaryTokenUsage;
+  summaryGeneratedAt?: string;
   sourcePageUrl?: string;
   sourcePageTitle?: string;
 

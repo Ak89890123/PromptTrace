@@ -10,6 +10,7 @@ export default defineConfig({
       'contextMenus',
       'downloads',
       'storage',
+      'alarms',
       'activeTab',
       'scripting',
       'clipboardWrite',

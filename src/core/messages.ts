@@ -170,6 +170,16 @@ export type UpdateRecordMetaMessage = {
   };
 };
 
+export type SummarizeRecordMessage = {
+  type: 'summary/summarizeRecord';
+  payload: { recordId: string };
+};
+
+export type RunAutoSummaryMessage = {
+  type: 'summary/runAuto';
+  payload: Record<string, never>;
+};
+
 export type ExtensionMessage =
   | CreatePendingAssetMessage
   | AssignAssetRoleMessage
@@ -190,7 +200,9 @@ export type ExtensionMessage =
   | TaxonomyQuickAddCategoryMessage
   | ListRecordsMessage
   | DeleteRecordMessage
-  | UpdateRecordMetaMessage;
+  | UpdateRecordMetaMessage
+  | SummarizeRecordMessage
+  | RunAutoSummaryMessage;
 
 export function sendMessage<T = unknown>(message: ExtensionMessage): Promise<T> {
   return chrome.runtime.sendMessage(message);

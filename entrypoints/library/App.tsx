@@ -143,6 +143,7 @@ export default function App() {
           r.sourcePageUrl,
           r.modelLabel,
           r.modelName,
+          r.summary,
           ...assets.map((a) => a.textContent ?? ''),
           ...assets.map((a) => a.originalUrl ?? ''),
         ]
@@ -323,7 +324,17 @@ function RecordCard(props: {
         <span>{category ? categoryLabel(category, language) : t.uncategorized}</span>
         <span>{assets.length} {t.assets}</span>
       </div>
-      <div className="record-card-summary-slot" aria-label={language === 'en-US' ? 'Summary area' : '摘要保留區'} />
+      <div className="record-card-summary-slot" aria-label={language === 'en-US' ? 'Summary area' : '摘要保留區'}>
+        {record.summary ? (
+          <div className="record-card-summary">{record.summary}</div>
+        ) : record.summaryStatus === 'pending' ? (
+          <div className="record-card-summary is-muted">摘要中...</div>
+        ) : record.summaryStatus === 'failed' ? (
+          <div className="record-card-summary is-muted">摘要失敗</div>
+        ) : (
+          <div className="record-card-summary is-muted">尚未摘要</div>
+        )}
+      </div>
       <CardPreview assets={assets} layout={layout} t={t} />
       <div className="record-card-footer">
         <span>{modelLabelOf(record)}</span>
@@ -350,6 +361,7 @@ function RecordDetail(props: {
   const [newTextRole, setNewTextRole] = useState<AssetRole>('input');
   const [tagInput, setTagInput] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [summarizing, setSummarizing] = useState(false);
 
   const load = useCallback(async () => {
     const record = await recordRepository.get(props.recordId);
@@ -400,6 +412,27 @@ function RecordDetail(props: {
     await recordRepository.save({ ...record, ...patch, updatedAt: new Date().toISOString() });
     await load();
     props.onChanged();
+  };
+
+  const summarize = async () => {
+    setSummarizing(true);
+    try {
+      const result = await chrome.runtime.sendMessage({
+        type: 'summary/summarizeRecord',
+        payload: { recordId: record.id },
+      });
+      await load();
+      props.onChanged();
+      if (!result?.ok) {
+        say(language === 'en-US' ? `Summary skipped: ${result?.reason ?? 'unknown'}` : `摘要未完成：${result?.reason ?? 'unknown'}`);
+      } else {
+        say(language === 'en-US' ? 'Summary updated.' : '摘要已更新。');
+      }
+    } catch {
+      say(language === 'en-US' ? 'Summary request failed.' : '摘要請求失敗。');
+    } finally {
+      setSummarizing(false);
+    }
   };
 
   const addTextAsset = async (text: string, role: AssetRole, type: AssetType = 'text', url?: string) => {
@@ -623,6 +656,31 @@ function RecordDetail(props: {
         </div>
       )}
 
+      <div className="card record-summary-panel">
+        <div className="spread">
+          <strong>{language === 'en-US' ? 'Summary' : '摘要'}</strong>
+          <button type="button" disabled={summarizing} onClick={summarize}>
+            {summarizing ? (language === 'en-US' ? 'Summarizing...' : '摘要中...') : (record.summary ? (language === 'en-US' ? 'Resummarize' : '重新摘要') : (language === 'en-US' ? 'Summarize' : '產生摘要'))}
+          </button>
+        </div>
+        {record.summary ? (
+          <p>{record.summary}</p>
+        ) : record.summaryStatus === 'failed' ? (
+          <p className="muted">{language === 'en-US' ? 'Last summary failed.' : '上次摘要失敗。'}</p>
+        ) : record.summaryStatus === 'skipped' ? (
+          <p className="muted">{language === 'en-US' ? 'No prompt text was found.' : '沒有找到可摘要的 prompt 文字。'}</p>
+        ) : (
+          <p className="muted">{language === 'en-US' ? 'No summary yet.' : '尚未摘要。'}</p>
+        )}
+        {record.summaryTokenUsage && (
+          <div className="record-summary-token-row">
+            <span>{language === 'en-US' ? 'Input' : '輸入'} {formatTokenMaybe(record.summaryTokenUsage.inputTokens)}</span>
+            <span>{language === 'en-US' ? 'Output' : '輸出'} {formatTokenMaybe(record.summaryTokenUsage.outputTokens)}</span>
+            <span>{language === 'en-US' ? 'Total' : '總計'} {formatTokenMaybe(record.summaryTokenUsage.totalTokens)}</span>
+          </div>
+        )}
+      </div>
+
       <div className="row" style={{ margin: '10px 0' }}>
         <button onClick={() => copyBundle(composeInputBundle(assets, fileRecords), roleLabel('input', language))}>
           {t.copy} {roleLabel('input', language)}
@@ -807,6 +865,10 @@ function RecordDetail(props: {
       </div>
     </div>
   );
+}
+
+function formatTokenMaybe(value: number | null | undefined): string {
+  return value == null ? '--' : value.toLocaleString();
 }
 
 /** Compact left/right (or output-only) preview of a record's assets on its list card. */

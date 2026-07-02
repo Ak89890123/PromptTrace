@@ -15,6 +15,7 @@ import { isRoleAllowed } from '@/src/core/domain/validation';
 import { createConflict } from '@/src/core/errors/conflictTypes';
 import { createCaptureError, mapDownloadError } from '@/src/core/errors/errorTypes';
 import type { ExtensionMessage } from '@/src/core/messages';
+import { requestPromptSummary, selectedSummaryModel } from '@/src/core/summary';
 import { commitSessionToLibrary, downloadPathFor } from '@/src/storage/commitSession';
 import {
   assetRepository,
@@ -31,6 +32,7 @@ import { loadSettings, onSettingsChanged } from '@/src/ui/roleColors';
 const MENU_TEXT = 'prompttrace-add-selection';
 const MENU_IMAGE = 'prompttrace-add-image';
 const MENU_VIDEO = 'prompttrace-add-video';
+const SUMMARY_ALARM = 'prompttrace-summary-auto';
 
 export default defineBackground(() => {
   let session: CaptureSessionState = emptySession();
@@ -64,6 +66,16 @@ export default defineBackground(() => {
     chrome.contextMenus.create({ id: MENU_VIDEO, title: t.contextAddVideo, contexts: ['video'] });
   }
 
+  async function syncSummaryAlarm(): Promise<void> {
+    const settings = await loadSettings();
+    await chrome.alarms.clear(SUMMARY_ALARM);
+    if (!settings.summary.enabled || !settings.summary.autoEnabled) return;
+    chrome.alarms.create(SUMMARY_ALARM, {
+      periodInMinutes: Math.max(1, settings.summary.scanIntervalMinutes),
+      delayInMinutes: Math.max(1, settings.summary.scanIntervalMinutes),
+    });
+  }
+
   function updateContextMenus(): void {
     menuTitles()
       .then((t) => {
@@ -82,9 +94,20 @@ export default defineBackground(() => {
   chrome.runtime.onInstalled.addListener(() => {
     createContextMenus().catch(() => {});
     seedDefaults().catch((e) => console.error('[PromptTrace] seed failed', e));
+    syncSummaryAlarm().catch(() => {});
   });
-  onSettingsChanged(updateContextMenus);
+  chrome.runtime.onStartup.addListener(() => {
+    syncSummaryAlarm().catch(() => {});
+  });
+  onSettingsChanged(() => {
+    updateContextMenus();
+    syncSummaryAlarm().catch(() => {});
+  });
   seedDefaults().catch(() => {});
+
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === SUMMARY_ALARM) runAutoSummary().catch(() => {});
+  });
 
   // Browser-level shortcut: overrides page key handlers, rebindable at
   // chrome://extensions/shortcuts.
@@ -313,6 +336,96 @@ export default defineBackground(() => {
       if (fresh) await assetRepository.save({ ...fresh, previewRef });
     } catch {
       // best-effort; the gallery falls back to the original URL
+    }
+  }
+
+  function promptTextForSummary(assets: Awaited<ReturnType<typeof assetRepository.byRecord>>): string {
+    return assets
+      .filter((asset) => asset.assetType === 'text' && asset.role === 'input')
+      .map((asset) => asset.textContent?.trim() ?? '')
+      .filter(Boolean)
+      .join('\n\n---\n\n')
+      .trim();
+  }
+
+  async function summarizeRecord(recordId: string): Promise<{ ok: boolean; reason?: string }> {
+    const settings = await loadSettings();
+    const summarySettings = settings.summary;
+    const record = await recordRepository.get(recordId);
+    if (!record) return { ok: false, reason: 'record_not_found' };
+    if (!summarySettings.enabled) return { ok: false, reason: 'summary_disabled' };
+
+    const model = selectedSummaryModel(summarySettings);
+    const apiKey = summarySettings.apiKeys[summarySettings.provider]?.trim() ?? '';
+    if (!apiKey) return { ok: false, reason: 'api_key_required' };
+    if (!model) return { ok: false, reason: 'model_required' };
+
+    const assets = await assetRepository.byRecord(recordId);
+    const promptText = promptTextForSummary(assets);
+    if (!promptText) {
+      await recordRepository.save({
+        ...record,
+        summaryStatus: 'skipped',
+        summaryError: 'NO_PROMPT_TEXT',
+        updatedAt: new Date().toISOString(),
+      });
+      return { ok: false, reason: 'no_prompt_text' };
+    }
+
+    await recordRepository.save({
+      ...record,
+      summaryStatus: 'pending',
+      summaryError: undefined,
+      updatedAt: new Date().toISOString(),
+    });
+
+    try {
+      const result = await requestPromptSummary({
+        provider: summarySettings.provider,
+        apiKey,
+        model,
+        promptText,
+        systemPrompt: summarySettings.systemPrompt,
+        timeoutMs: summarySettings.timeoutMs,
+      });
+      const fresh = await recordRepository.get(recordId);
+      if (!fresh) return { ok: false, reason: 'record_not_found' };
+      await recordRepository.save({
+        ...fresh,
+        summary: result.summary,
+        summaryStatus: 'completed',
+        summaryError: undefined,
+        summaryProvider: summarySettings.provider,
+        summaryModel: model,
+        summaryTokenUsage: result.usage,
+        summaryGeneratedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      return { ok: true };
+    } catch (error) {
+      const fresh = await recordRepository.get(recordId);
+      if (fresh) {
+        await recordRepository.save({
+          ...fresh,
+          summaryStatus: 'failed',
+          summaryError: error instanceof Error ? error.message : String(error),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+      return { ok: false, reason: 'provider_failed' };
+    }
+  }
+
+  async function runAutoSummary(): Promise<void> {
+    const settings = await loadSettings();
+    if (!settings.summary.enabled || !settings.summary.autoEnabled) return;
+    const records = await recordRepository.list();
+    const candidates = records
+      .filter((record) => !record.summaryStatus && !record.summaryGeneratedAt)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .slice(0, settings.summary.maxPerRun);
+    for (const record of candidates) {
+      await summarizeRecord(record.id);
     }
   }
 
@@ -668,6 +781,16 @@ export default defineBackground(() => {
             modelLabel: updateModel ? p.modelLabel : rec.modelLabel,
             updatedAt: new Date().toISOString(),
           });
+          return sendResponse({ ok: true });
+        }
+
+        case 'summary/summarizeRecord': {
+          const result = await summarizeRecord(message.payload.recordId);
+          return sendResponse(result);
+        }
+
+        case 'summary/runAuto': {
+          await runAutoSummary();
           return sendResponse({ ok: true });
         }
 
