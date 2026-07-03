@@ -135,6 +135,24 @@ MIT — 見 [LICENSE](LICENSE)。
 
 ## 開發日誌
 
+### 2026-07-03 收工
+
+**做了什麼：**（commit `7e3a057`）
+- Settings 重新整理成更少卡片與更一致的標題/間距：互動與畫面顯示合併，Files / 備份匯入匯出合併，摘要設定與定時摘要設定並排。
+- Library detail 大幅簡化：移除單筆複製/匯出、notes/tags/插入內容、標題編輯、模型切換、來源長網址與檔案記錄區，只保留分類、摘要、角色內容、圖片預覽與檔案位置入口。
+- 摘要設定移除「摘要輸出語言」，並改成使用者自訂 system prompt 不會因介面語言切換而被覆蓋。
+- 新增 Settings 的紀錄庫 ZIP 匯出 / 匯入：標準 JSON manifest + records，並盡量包含 extension 可取得的媒體檔。
+- 更新 README、demo script、manual e2e 與 unit test，讓文件跟新的 Settings / Library UX 對齊。
+
+**驗證：**
+- `npm run compile`
+- `npm run build`
+- `npm test -- tests/unit/backup.test.ts tests/unit/export.test.ts`
+
+**下次方向：**
+- 重新載入 `.output/chrome-mv3/` 後做一輪真 Chrome 手動檢查：Settings 卡片排列、Library detail 簡化後的操作路徑、ZIP 匯出/匯入後圖片位置是否符合預期。
+- 若 Library detail 還覺得資訊偏多，下一步優先看 summary panel 與角色 section 的預設展開密度。
+
 ### 2026-07-01 收工
 
 **做了什麼：**（commit `6f7195b`）
