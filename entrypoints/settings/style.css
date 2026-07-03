@@ -37,6 +37,12 @@
   gap: var(--pt-space-6);
 }
 
+.settings-column {
+  display: grid;
+  align-content: start;
+  gap: var(--pt-space-6);
+}
+
 .settings-section {
   margin-bottom: 0;
 }
@@ -50,13 +56,6 @@
   max-width: 644px;
 }
 
-.settings-wide-section {
-  grid-column: 2;
-  width: 100%;
-  max-width: none;
-  justify-self: stretch;
-}
-
 .settings-subsection {
   margin-top: var(--pt-space-6);
   max-width: 644px;
@@ -67,7 +66,6 @@
 }
 
 .settings-subsection h2 {
-  font-size: var(--pt-font-size-body);
   margin-bottom: var(--pt-space-1);
 }
 
@@ -78,10 +76,34 @@
   background: var(--pt-stroke-soft);
 }
 
+.settings-dashed-divider {
+  border-top: 1px dashed var(--pt-stroke-muted);
+  margin: var(--pt-space-6) 0;
+  max-width: 644px;
+}
+
 .settings-summary-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--pt-space-5);
+}
+
+.settings-summary-config-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--pt-space-8);
+  max-width: 980px;
+}
+
+.settings-summary-config-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pt-space-5);
+  min-width: 0;
+}
+
+.settings-summary-config-panel h2 {
+  margin-bottom: 0;
 }
 
 .settings-secret-preview {
@@ -105,7 +127,6 @@
 
 .settings-summary-dashboard-head h2 {
   margin: 0;
-  font-size: var(--pt-font-size-body);
 }
 
 .settings-summary-metrics {
@@ -159,8 +180,20 @@
   padding-top: var(--pt-space-4);
 }
 
+.settings-section h2 {
+  color: var(--pt-color-text-muted);
+  font-size: var(--pt-font-size-caption);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
 .settings-section > h2:first-child,
-.settings-subsection .spread h2 {
+.settings-section > .spread:first-child h2,
+.settings-subsection h2,
+.settings-subsection .spread h2,
+.settings-summary-dashboard-head h2 {
   margin-top: 0;
 }
 
@@ -300,7 +333,12 @@
   }
 
   .settings-layout {
-    display: block;
+    grid-template-columns: 1fr;
+    gap: var(--pt-space-4);
+  }
+
+  .settings-column {
+    gap: var(--pt-space-4);
   }
 
   .settings-header {
@@ -313,16 +351,16 @@
     width: 100%;
   }
 
-  .settings-section {
-    margin-bottom: var(--pt-space-4);
-  }
-
   .settings-category-row {
     grid-template-columns: 1fr;
     max-width: none;
   }
 
   .settings-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-summary-config-row {
     grid-template-columns: 1fr;
   }
 

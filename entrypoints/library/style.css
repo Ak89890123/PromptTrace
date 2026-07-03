@@ -187,23 +187,6 @@ body {
   padding: var(--pt-space-10) clamp(var(--pt-space-8), 2.6vw, 42px) 56px;
 }
 
-.library-hero {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--pt-space-10);
-  align-items: flex-end;
-  max-width: 1460px;
-  margin: 0 auto var(--pt-space-6);
-}
-
-.library-hero-stats {
-  display: flex;
-  gap: var(--pt-space-3);
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.library-hero-stats span,
 .record-card-topline span,
 .record-card-footer span {
   border: 1px solid var(--pt-stroke-muted);
@@ -301,6 +284,23 @@ body {
   color: var(--pt-color-text-muted);
   font-size: var(--pt-font-size-caption);
   padding: 3px 8px;
+}
+
+.file-record-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--pt-space-2);
+  margin-top: var(--pt-space-3);
+}
+
+.file-record-line {
+  min-width: 0;
+}
+
+.file-record-meta {
+  color: var(--pt-color-text-muted);
+  font-size: var(--pt-font-size-caption);
 }
 
 .record-card-footer {
@@ -465,15 +465,6 @@ body {
   .library-main {
     overflow: visible;
     padding: var(--pt-space-10) var(--pt-space-6) var(--pt-space-14);
-  }
-
-  .library-hero {
-    display: block;
-  }
-
-  .library-hero-stats {
-    justify-content: flex-start;
-    margin-top: 14px;
   }
 
   .library-card-grid {

@@ -14,7 +14,7 @@
 | 6 | 選「生文」或快速新增自訂分類 | 可下一步 |
 | 7 | Model 選「不填」 | 保存成功，session 清空，框線消失 |
 | 8 | 開 Library | record 存在，Input / Input Reference 內容正確 |
-| 9 | Export Markdown | 下載 .md，含 Category 與兩段文字；Model 為 Not specified |
+| 9 | 開 record detail | 顯示摘要、角色內容與圖片位置按鈕；不顯示單筆複製 / 匯出 / notes-tags 編輯區 |
 
 ## Flow 2：圖片工作流
 
@@ -25,7 +25,7 @@
 | 3 | ✓ → 分類選「生圖」→ Model 選 Custom 輸入名稱 | 保存成功 |
 | 4 | 檢查 Downloads/PromptTrace/{recordId}/ | 圖片檔存在 |
 | 5 | Library 開 record | 圖片 preview 顯示；FileRecord 狀態 completed 且有路徑 |
-| 6 | Copy Input Bundle | 剪貼簿有文字（含檔案參照）；Copy Tray 顯示縮圖 |
+| 6 | Library 開 record | 圖片角色、preview 與「位置」按鈕顯示正常，不直接顯示長路徑 |
 
 ## Flow 3：影片失敗工作流
 
@@ -69,3 +69,5 @@
 | 3 | 新增自訂 model → 回 capture 流程 | Step 2 可選到 |
 | 4 | 改 Input 角色顏色 | 新框線用新顏色 |
 | 5 | 關閉 overlay 開關 | 頁面不再畫框（session 照常運作） |
+| 6 | 備份與還原 → 匯出紀錄庫 ZIP | 下載 `prompttrace-backup-YYYY-MM-DD.zip`，內含 `prompttrace-manifest.json`、`records.json` 與可取得的 media 檔 |
+| 7 | 備份與還原 → 匯入剛剛的 ZIP | 紀錄合併回 IndexedDB；media 檔重新寫入 `Downloads/PromptTrace/{recordId}/` |

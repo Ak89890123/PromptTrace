@@ -18,7 +18,7 @@
 3. 標記 **Input** → 按 ✓ → 分類選「生圖」→ Model 選 Custom 輸入任意名稱 → 保存。
 4. 確認 `Downloads/PromptTrace/{recordId}/` 出現圖片檔。
 5. Library 中該 record 顯示圖片 preview 與下載狀態 completed。
-6. 按 **Copy Input Bundle**：文字（含本地路徑）進剪貼簿。
+6. 開 Library 確認圖片 preview、下載狀態與本地路徑。
 
 ## Demo 3：影片失敗 fallback
 
@@ -37,14 +37,14 @@
 ## Demo 5：Library 操作
 
 1. 開 Library → 用搜尋框找關鍵字、用分類 / Model / 角色下拉篩選。
-2. 點 record → 修改標題、notes、新增 tags。
-3. 在右欄貼一段文字選角色按「新增文字」；把一張本機圖片拖進頁面 → 變成 asset。
-4. 修改某 asset 的角色（注意圖片的 Negative 選項 disabled）。
+2. 點 record → 修改標題、分類或模型。
+3. 修改某 asset 的角色（注意圖片的 Negative 選項 disabled）。
+4. 產生摘要，確認摘要區顯示結果或錯誤狀態。
 
-## Demo 6：Copy Bundle 與 Export
+## Demo 6：備份與還原
 
-1. 在 record detail 按 **Copy Full Record** → 含媒體時出現 Floating Copy Tray，可逐張複製連結。
-2. 按 **Export Markdown** / **Export JSON** → 下載對應檔案，未填分類 / Model 時顯示 Uncategorized / Not specified。
+1. 到 Settings → **備份與還原** → **匯出紀錄庫 ZIP**，下載包含 `prompttrace-manifest.json`、`records.json` 與可取得 media 檔的備份包。
+2. 用 **匯入紀錄庫 ZIP** 選剛剛的備份包 → 紀錄合併回 IndexedDB，media 檔重新寫入 `Downloads/PromptTrace/{recordId}/`。
 
 ## Demo 7：刪除連動
 

@@ -57,6 +57,28 @@ button.primary {
 }
 button.danger { border-color: var(--pt-color-danger-soft); color: var(--pt-color-danger); }
 
+.button-like {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--pt-surface-control);
+  color: var(--pt-color-text-primary);
+  border: 1px solid var(--pt-stroke-glass);
+  border-radius: var(--pt-radius-control);
+  padding: 5px var(--pt-space-5);
+  font-size: var(--pt-font-size-control);
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: all 0.15s ease;
+}
+.button-like:hover {
+  background: var(--pt-surface-control-hover);
+  border-color: var(--pt-color-accent-hover);
+}
+.button-like {
+  text-decoration: none;
+}
+
 input, select, textarea {
   background: var(--pt-surface-input-strong);
   color: var(--pt-color-text-primary);

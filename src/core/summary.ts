@@ -2,6 +2,8 @@ export type SummaryProvider = 'openai' | 'gemini' | 'claude' | 'openrouter';
 
 export type SummaryStatus = 'pending' | 'completed' | 'failed' | 'skipped';
 
+export type SummaryPromptLanguage = 'zh-TW' | 'en-US';
+
 export type PromptSummary = {
   summary: string;
   usage?: SummaryTokenUsage;
@@ -19,6 +21,7 @@ export type SummarySettings = {
   apiKeys: Partial<Record<SummaryProvider, string>>;
   models: Partial<Record<SummaryProvider, string>>;
   systemPrompt: string;
+  systemPromptCustomized: boolean;
   autoEnabled: boolean;
   scanIntervalMinutes: number;
   maxPerRun: number;
@@ -49,8 +52,14 @@ export const SUMMARY_PROVIDER_MODELS: Record<SummaryProvider, string[]> = {
   openrouter: ['openai/gpt-5.2', 'anthropic/claude-sonnet-4.5', 'google/gemini-2.5-flash'],
 };
 
-export const SUMMARY_SYSTEM_PROMPT =
-  '你是 prompt 摘要器，負責把使用者保存的 prompt 文字整理成簡短摘要。\n\n請根據原始 prompt 文字，產生一段簡潔、明確、方便搜尋的繁體中文摘要。摘要要讓使用者快速理解這段 prompt 的用途、預期產出，以及原文中明確提到的重要限制或風格要求。\n\n規則：\n1. 只根據原始 prompt 文字摘要，不要改寫原 prompt。\n2. 不要補充原文沒有出現或無法合理判斷的資訊。\n3. 如果用途不明確，摘要開頭直接寫「用途不明確」。\n4. 優先保留對搜尋有幫助的關鍵詞，例如任務類型、輸出格式、平台、風格、限制、角色、工具或模型名稱。\n5. 摘要使用繁體中文，長度控制在 1 到 2 句。\n6. 不要輸出 Markdown、解釋、前言或多餘文字。\n\n只輸出符合 JSON schema 的結果：\n\n{"summary":"這裡放摘要文字"}';
+export const SUMMARY_SYSTEM_PROMPTS: Record<SummaryPromptLanguage, string> = {
+  'zh-TW':
+    '你是 prompt 摘要器，負責把使用者保存的 prompt 文字整理成簡短摘要。\n\n請根據原始 prompt 文字，產生一段簡潔、明確、方便搜尋的繁體中文摘要。摘要要讓使用者快速理解這段 prompt 的用途、預期產出，以及原文中明確提到的重要限制或風格要求。\n\n規則：\n1. 只根據原始 prompt 文字摘要，不要改寫原 prompt。\n2. 不要補充原文沒有出現或無法合理判斷的資訊。\n3. 如果用途不明確，摘要開頭直接寫「用途不明確」。\n4. 優先保留對搜尋有幫助的關鍵詞，例如任務類型、輸出格式、平台、風格、限制、角色、工具或模型名稱。\n5. 摘要使用繁體中文，長度控制在 1 到 2 句。\n6. 不要輸出 Markdown、解釋、前言或多餘文字。\n\n只輸出符合 JSON schema 的結果：\n\n{"summary":"這裡放摘要文字"}',
+  'en-US':
+    'You are a prompt summarizer. Your job is to turn saved prompt text into a short summary.\n\nBased only on the original prompt text, produce a concise, clear, searchable English summary. The summary should help the user quickly understand the prompt purpose, expected output, and any important constraints or style requirements explicitly mentioned in the source prompt.\n\nRules:\n1. Summarize only from the original prompt text. Do not rewrite the prompt.\n2. Do not add information that is not present or reasonably inferable from the original text.\n3. If the purpose is unclear, start the summary with "Purpose unclear".\n4. Prefer searchable keywords such as task type, output format, platform, style, constraints, role, tool, or model name.\n5. Use English and keep the summary to 1 or 2 sentences.\n6. Do not output Markdown, explanations, prefaces, or extra text.\n\nOnly output a result that matches this JSON schema:\n\n{"summary":"summary text goes here"}',
+};
+
+export const SUMMARY_SYSTEM_PROMPT = SUMMARY_SYSTEM_PROMPTS['zh-TW'];
 
 export const DEFAULT_SUMMARY_SETTINGS: SummarySettings = {
   enabled: false,
@@ -63,6 +72,7 @@ export const DEFAULT_SUMMARY_SETTINGS: SummarySettings = {
     openrouter: 'openai/gpt-5.2',
   },
   systemPrompt: SUMMARY_SYSTEM_PROMPT,
+  systemPromptCustomized: false,
   autoEnabled: false,
   scanIntervalMinutes: 15,
   maxPerRun: 5,
@@ -74,7 +84,7 @@ export const SUMMARY_SCHEMA = {
   properties: {
     summary: {
       type: 'string',
-      description: '用繁體中文，用一到兩句話說明這段 prompt 的主要用途與預期產出。',
+      description: 'A one- to two-sentence summary of the prompt purpose and expected output.',
     },
   },
   required: ['summary'],
@@ -82,16 +92,30 @@ export const SUMMARY_SCHEMA = {
 } as const;
 
 export function mergeSummarySettings(stored: Partial<SummarySettings> | undefined): SummarySettings {
+  const storedPrompt = stored?.systemPrompt?.trim();
+  const systemPrompt = storedPrompt || DEFAULT_SUMMARY_SETTINGS.systemPrompt;
+  const systemPromptCustomized = typeof stored?.systemPromptCustomized === 'boolean'
+    ? stored.systemPromptCustomized
+    : Boolean(storedPrompt && !isDefaultSummarySystemPrompt(storedPrompt));
   return {
     ...DEFAULT_SUMMARY_SETTINGS,
     ...(stored ?? {}),
     apiKeys: { ...DEFAULT_SUMMARY_SETTINGS.apiKeys, ...(stored?.apiKeys ?? {}) },
     models: { ...DEFAULT_SUMMARY_SETTINGS.models, ...(stored?.models ?? {}) },
-    systemPrompt: stored?.systemPrompt?.trim() || DEFAULT_SUMMARY_SETTINGS.systemPrompt,
+    systemPrompt,
+    systemPromptCustomized,
     scanIntervalMinutes: clampNumber(stored?.scanIntervalMinutes, 1, 525600, DEFAULT_SUMMARY_SETTINGS.scanIntervalMinutes),
     maxPerRun: clampNumber(stored?.maxPerRun, 1, 50, DEFAULT_SUMMARY_SETTINGS.maxPerRun),
     timeoutMs: clampNumber(stored?.timeoutMs, 5000, 120000, DEFAULT_SUMMARY_SETTINGS.timeoutMs),
   };
+}
+
+export function defaultSummarySystemPrompt(language: SummaryPromptLanguage): string {
+  return SUMMARY_SYSTEM_PROMPTS[language];
+}
+
+export function isDefaultSummarySystemPrompt(value: string): boolean {
+  return Object.values(SUMMARY_SYSTEM_PROMPTS).includes(value);
 }
 
 export function selectedSummaryModel(settings: SummarySettings): string {
@@ -264,7 +288,7 @@ async function callClaude(
     body: JSON.stringify({
       model: request.model,
       max_tokens: 512,
-      system: `${systemPrompt}\n請只回傳 JSON：{"summary":"..."}`,
+      system: `${systemPrompt}\nReturn JSON only: {"summary":"..."}`,
       messages: [{ role: 'user', content: request.promptText }],
     }),
   });

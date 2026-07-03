@@ -1,16 +1,31 @@
 import { useEffect, useState } from 'react';
-import type { LibraryRecord, RecordCategory } from '@/src/core/domain/entities';
+import type { Asset, FileRecord, LibraryRecord, RecordCategory } from '@/src/core/domain/entities';
+import {
+  backupFilename,
+  createPromptTraceBackupZip,
+  parsePromptTraceBackupZip,
+  sanitizeBackupFileRecord,
+  type BackupMediaEntry,
+} from '@/src/core/backup/archive';
 import { ROLE_LABELS, type AssetRole } from '@/src/core/domain/enums';
 import { validateCategoryName } from '@/src/core/domain/validation';
 import { formatHotkeyFromEvent } from '@/src/core/hotkeys';
 import {
+  defaultSummarySystemPrompt,
   maskApiKey,
   SUMMARY_PROVIDER_LABELS,
   SUMMARY_PROVIDER_MODELS,
-  SUMMARY_SYSTEM_PROMPT,
+  type SummaryPromptLanguage,
   type SummaryProvider,
 } from '@/src/core/summary';
-import { categoryRepository, recordRepository } from '@/src/storage/repositories';
+import {
+  assetRepository,
+  categoryRepository,
+  fileRecordRepository,
+  modelPresetRepository,
+  recordRepository,
+  tagRepository,
+} from '@/src/storage/repositories';
 import { BUILTIN_CATEGORY_DEFAULTS } from '@/src/storage/seed';
 import { categoryLabel, resolveLanguage, roleLabel, UI_TEXT, type ResolvedLanguage, type UiText } from '@/src/ui/i18n';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type DisplaySettings } from '@/src/ui/roleColors';
@@ -97,12 +112,15 @@ export default function App() {
         </button>
       </header>
       <div className="settings-layout">
-        <LanguageSettings settings={settings} onPatch={patchSettings} t={t} />
-        <DisplaySettingsSection settings={settings} onPatch={patchSettings} t={t} language={language} />
-        <InteractionSettings settings={settings} onPatch={patchSettings} t={t} language={language} />
-        <LibraryRulesSettings categories={categories} onChanged={reload} t={t} language={language} />
-        <SummarySettingsSection settings={settings} onPatch={patchSettings} />
-        <FileSettingsSection t={t} />
+        <div className="settings-column">
+          <LanguageSettings settings={settings} onPatch={patchSettings} t={t} />
+          <InteractionDisplaySettings settings={settings} onPatch={patchSettings} t={t} language={language} />
+          <LibraryRulesSettings categories={categories} onChanged={reload} t={t} language={language} />
+          <DataFilesSettingsSection t={t} />
+        </div>
+        <div className="settings-column">
+          <SummarySettingsSection settings={settings} onPatch={patchSettings} t={t} language={language} />
+        </div>
       </div>
     </div>
   );
@@ -139,15 +157,20 @@ function ColorSwatchPicker({
   value,
   label,
   onChange,
+  t,
+  language,
 }: {
   value: string;
   label: string;
   onChange: (color: string) => void;
+  t: UiText;
+  language: ResolvedLanguage;
 }) {
   const [open, setOpen] = useState(false);
   const [activeFamily, setActiveFamily] = useState(() => colorFamilyFor(value));
   const normalizedValue = value.toUpperCase();
   const activePalette = COLOR_PALETTES.find((palette) => palette.id === activeFamily) ?? COLOR_PALETTES[0];
+  const paletteLabel = (palette: (typeof COLOR_PALETTES)[number]) => language === 'en-US' ? palette.id : palette.label;
 
   useEffect(() => {
     setActiveFamily(colorFamilyFor(value));
@@ -165,13 +188,13 @@ function ColorSwatchPicker({
       />
       {open && (
         <div className="settings-color-popover">
-          <div className="settings-color-grid" aria-label={`${activePalette.label}色系`}>
+          <div className="settings-color-grid" aria-label={`${paletteLabel(activePalette)} ${t.colorFamily}`}>
             {activePalette.shades.map((color) => (
               <button
                 type="button"
                 key={color}
                 className={normalizedValue === color ? 'settings-color-dot is-active' : 'settings-color-dot'}
-                aria-label={`選擇 ${color}`}
+                aria-label={`${t.selectColor} ${color}`}
                 title={color}
                 style={{ backgroundColor: color }}
                 onClick={() => {
@@ -181,14 +204,14 @@ function ColorSwatchPicker({
               />
             ))}
           </div>
-          <div className="settings-color-family-row" aria-label="色系">
+          <div className="settings-color-family-row" aria-label={t.colorFamily}>
             {COLOR_PALETTES.map((palette) => (
               <button
                 type="button"
                 key={palette.id}
                 className={activeFamily === palette.id ? 'settings-color-family is-active' : 'settings-color-family'}
-                aria-label={`${palette.label}色系`}
-                title={`${palette.label}色系`}
+                aria-label={`${paletteLabel(palette)} ${t.colorFamily}`}
+                title={`${paletteLabel(palette)} ${t.colorFamily}`}
                 style={{ backgroundColor: palette.base }}
                 onClick={() => setActiveFamily(palette.id)}
               />
@@ -223,6 +246,26 @@ function HotkeyRecorder({ value, onChange, t }: { value: string | undefined; onC
   );
 }
 
+function InteractionDisplaySettings({
+  settings,
+  onPatch,
+  t,
+  language,
+}: {
+  settings: DisplaySettings;
+  onPatch: (p: Partial<DisplaySettings>) => void;
+  t: UiText;
+  language: ResolvedLanguage;
+}) {
+  return (
+    <section className="card settings-section">
+      <InteractionSettings settings={settings} onPatch={onPatch} t={t} language={language} />
+      <div className="settings-dashed-divider" />
+      <DisplaySettingsSection settings={settings} onPatch={onPatch} t={t} language={language} />
+    </section>
+  );
+}
+
 function InteractionSettings({
   settings,
   onPatch,
@@ -244,7 +287,7 @@ function InteractionSettings({
   };
 
   return (
-    <section className="card settings-section">
+    <div className="settings-subsection">
       <h2>{t.interaction}</h2>
       <div className="row" style={{ marginBottom: 8 }}>
         <label className="row" style={{ gap: 4 }}>
@@ -283,9 +326,6 @@ function InteractionSettings({
           t={t}
         />
       </div>
-      <p className="muted">
-        {t.hotkeyBlocked} <code>chrome://extensions/shortcuts</code> {t.hotkeyBlockedSuffix}
-      </p>
       <h2>{t.quickSaveButtons}</h2>
       <p className="muted">{t.quickSaveHint}</p>
       <div className="row">
@@ -301,7 +341,7 @@ function InteractionSettings({
           </label>
         ))}
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -377,6 +417,8 @@ function CategorySettings({
             <ColorSwatchPicker
               value={c.color ?? '#94a3b8'}
               label={`${displayName} ${t.color}`}
+              t={t}
+              language={language}
               onChange={(color) => save(c, { color })}
             />
             <input
@@ -450,7 +492,7 @@ function LibraryRulesSettings({
   language: ResolvedLanguage;
 }) {
   return (
-    <section className="card settings-section settings-wide-section">
+    <section className="card settings-section">
       <CategorySettings categories={categories} onChanged={onChanged} t={t} language={language} />
     </section>
   );
@@ -468,7 +510,7 @@ function DisplaySettingsSection({
   language: ResolvedLanguage;
 }) {
   return (
-    <section className="card settings-section">
+    <div className="settings-subsection">
       <h2>{t.display}</h2>
       <div className="row">
         {(['pending', ...Object.keys(ROLE_LABELS)] as (AssetRole | 'pending')[]).map((role) => (
@@ -476,6 +518,8 @@ function DisplaySettingsSection({
             <ColorSwatchPicker
               value={settings.roleColors[role]}
               label={`${role === 'pending' ? t.uncategorized : roleLabel(role as AssetRole, language)} ${t.color}`}
+              t={t}
+              language={language}
               onChange={(color) => onPatch({ roleColors: { ...settings.roleColors, [role]: color } })}
             />
             <span className="muted">{role === 'pending' ? t.uncategorized : roleLabel(role as AssetRole, language)}</span>
@@ -514,16 +558,20 @@ function DisplaySettingsSection({
         </select>
         <span className="muted">{t.layoutApplies}</span>
       </div>
-    </section>
+    </div>
   );
 }
 
 function SummarySettingsSection({
   settings,
   onPatch,
+  t,
+  language,
 }: {
   settings: DisplaySettings;
   onPatch: (p: Partial<DisplaySettings>) => void;
+  t: UiText;
+  language: ResolvedLanguage;
 }) {
   const summary = settings.summary;
   const provider = summary.provider;
@@ -582,11 +630,18 @@ function SummarySettingsSection({
       },
     });
   };
+  const defaultPromptForCurrentLanguage = defaultSummarySystemPrompt(language as SummaryPromptLanguage);
+  const applyDefaultPrompt = (promptLanguage: SummaryPromptLanguage) => {
+    patchSummary({
+      systemPrompt: defaultSummarySystemPrompt(promptLanguage),
+      systemPromptCustomized: false,
+    });
+  };
 
   return (
     <section className="card settings-section">
       <div className="spread">
-        <h2>摘要</h2>
+        <h2>{t.summary}</h2>
         <label className="row" style={{ gap: 6 }}>
           <input
             type="checkbox"
@@ -594,167 +649,175 @@ function SummarySettingsSection({
             checked={summary.enabled}
             onChange={(e) => patchSummary({ enabled: e.target.checked })}
           />
-          啟用
+          {t.enabled}
         </label>
       </div>
-      <p className="muted">
-        用你自己的 API key，替保存的 prompt 產生一段簡短中文摘要；只送「輸入」文字，不送圖片、影片、網址或檔案路徑。
-      </p>
-      <div className="settings-summary-grid">
-        <label className="settings-field">
-          <span className="muted">供應商</span>
-          <select value={provider} onChange={(e) => updateProvider(e.target.value as SummaryProvider)}>
-            {(Object.keys(SUMMARY_PROVIDER_LABELS) as SummaryProvider[]).map((item) => (
-              <option key={item} value={item}>
-                {SUMMARY_PROVIDER_LABELS[item]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="settings-field">
-          <span className="muted">API key</span>
-          <input
-            type="password"
-            value={summary.apiKeys[provider] ?? ''}
-            placeholder="貼上你的 API key"
-            onChange={(e) =>
-              patchSummary({
-                apiKeys: {
-                  ...summary.apiKeys,
-                  [provider]: e.target.value,
-                },
-              })
-            }
-          />
-        </label>
-        <label className="settings-field">
-          <span className="muted">模型</span>
-          <select value={isCustomModel ? '__custom' : currentModel} onChange={(e) => updateModel(e.target.value)}>
-            {knownModels.map((model) => (
-              <option key={model} value={model}>
-                {model}
-              </option>
-            ))}
-            <option value="__custom">自填</option>
-          </select>
-        </label>
-        {isCustomModel || currentModel === '' ? (
+      <p className="muted">{t.summaryHint}</p>
+      <div className="settings-summary-config-row">
+        <div className="settings-summary-config-panel">
+          <h2>{t.summarySettings}</h2>
           <label className="settings-field">
-            <span className="muted">自填模型</span>
+            <span className="muted">{t.provider}</span>
+            <select value={provider} onChange={(e) => updateProvider(e.target.value as SummaryProvider)}>
+              {(Object.keys(SUMMARY_PROVIDER_LABELS) as SummaryProvider[]).map((item) => (
+                <option key={item} value={item}>
+                  {SUMMARY_PROVIDER_LABELS[item]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="settings-field">
+            <span className="muted">{t.model}</span>
+            <select value={isCustomModel ? '__custom' : currentModel} onChange={(e) => updateModel(e.target.value)}>
+              {knownModels.map((model) => (
+                <option key={model} value={model}>
+                  {model}
+                </option>
+              ))}
+              <option value="__custom">{t.custom}</option>
+            </select>
+          </label>
+          <label className="settings-field">
+            <span className="muted">API key</span>
             <input
-              value={currentModel}
-              placeholder="例如 provider/model-id"
+              type="password"
+              value={summary.apiKeys[provider] ?? ''}
+              placeholder={t.apiKeyPlaceholder}
               onChange={(e) =>
                 patchSummary({
-                  models: {
-                    ...summary.models,
+                  apiKeys: {
+                    ...summary.apiKeys,
                     [provider]: e.target.value,
                   },
                 })
               }
             />
           </label>
-        ) : (
-          <div className="settings-field">
-            <span className="muted">已保存</span>
-            <span className="settings-secret-preview">{maskApiKey(summary.apiKeys[provider]) || '尚未設定 API key'}</span>
-          </div>
-        )}
-      </div>
-      <div className="settings-inner-divider" />
-      <div className="settings-summary-grid">
-        <label className="row" style={{ gap: 6 }}>
-          <input
-            type="checkbox"
-            style={{ width: 'auto' }}
-            checked={summary.autoEnabled}
-            onChange={(e) => patchSummary({ autoEnabled: e.target.checked })}
-          />
-          自動摘要沒摘要過的卡片
-        </label>
-        <label className="settings-field">
-          <span className="muted">掃描間隔（分鐘）</span>
-          <input
-            type="number"
-            min={1}
-            value={summary.scanIntervalMinutes}
-            onChange={(e) => patchSummary({ scanIntervalMinutes: Number(e.target.value) })}
-            placeholder="例如 15"
-          />
-        </label>
-        <label className="settings-field">
-          <span className="muted">每次最多</span>
-          <input
-            type="number"
-            min={1}
-            max={50}
-            value={summary.maxPerRun}
-            onChange={(e) => patchSummary({ maxPerRun: Number(e.target.value) })}
-          />
-        </label>
-        <label className="settings-field">
-          <span className="muted">逾時秒數</span>
-          <input
-            type="number"
-            min={5}
-            max={120}
-            value={Math.round(summary.timeoutMs / 1000)}
-            onChange={(e) => patchSummary({ timeoutMs: Number(e.target.value) * 1000 })}
-          />
-        </label>
+          {isCustomModel || currentModel === '' ? (
+            <label className="settings-field">
+              <span className="muted">{t.customModel}</span>
+              <input
+                value={currentModel}
+                placeholder={t.exampleModel}
+                onChange={(e) =>
+                  patchSummary({
+                    models: {
+                      ...summary.models,
+                      [provider]: e.target.value,
+                    },
+                  })
+                }
+              />
+            </label>
+          ) : (
+            <div className="settings-field">
+              <span className="muted">{t.savedApiKey}</span>
+              <span className="settings-secret-preview">{maskApiKey(summary.apiKeys[provider]) || t.apiKeyNotSet}</span>
+            </div>
+          )}
+        </div>
+        <div className="settings-summary-config-panel">
+          <h2>{t.scheduledSummarySettings}</h2>
+          <label className="row" style={{ gap: 6 }}>
+            <input
+              type="checkbox"
+              style={{ width: 'auto' }}
+              checked={summary.autoEnabled}
+              onChange={(e) => patchSummary({ autoEnabled: e.target.checked })}
+            />
+            {t.autoSummary}
+          </label>
+          <label className="settings-field">
+            <span className="muted">{t.scanIntervalMinutes}</span>
+            <input
+              type="number"
+              min={1}
+              value={summary.scanIntervalMinutes}
+              onChange={(e) => patchSummary({ scanIntervalMinutes: Number(e.target.value) })}
+              placeholder={t.exampleMinutes}
+            />
+          </label>
+          <label className="settings-field">
+            <span className="muted">{t.maxPerRun}</span>
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={summary.maxPerRun}
+              onChange={(e) => patchSummary({ maxPerRun: Number(e.target.value) })}
+            />
+          </label>
+          <label className="settings-field">
+            <span className="muted">{t.timeoutSeconds}</span>
+            <input
+              type="number"
+              min={5}
+              max={120}
+              value={Math.round(summary.timeoutMs / 1000)}
+              onChange={(e) => patchSummary({ timeoutMs: Number(e.target.value) * 1000 })}
+            />
+          </label>
+        </div>
       </div>
       <div className="settings-inner-divider" />
       <label className="settings-field settings-field-full">
-        <span className="muted">System prompt</span>
+        <span className="muted">{t.systemPrompt}</span>
         <textarea
           rows={6}
           value={summary.systemPrompt}
-          onChange={(e) => patchSummary({ systemPrompt: e.target.value })}
+          onChange={(e) => patchSummary({ systemPrompt: e.target.value, systemPromptCustomized: true })}
         />
       </label>
+      <p className="muted">{summary.systemPromptCustomized ? t.customPromptNotice : t.defaultPromptNotice}</p>
       <div className="row" style={{ marginTop: 8 }}>
-        <button type="button" onClick={() => patchSummary({ systemPrompt: SUMMARY_SYSTEM_PROMPT })}>
-          還原預設 system prompt
+        <button type="button" onClick={() => patchSummary({ systemPrompt: defaultPromptForCurrentLanguage, systemPromptCustomized: false })}>
+          {t.resetSystemPrompt}
+        </button>
+        <button type="button" onClick={() => applyDefaultPrompt('zh-TW')}>
+          {t.applyChinesePrompt}
+        </button>
+        <button type="button" onClick={() => applyDefaultPrompt('en-US')}>
+          {t.applyEnglishPrompt}
         </button>
       </div>
       <div className="settings-inner-divider" />
       <div className="settings-summary-dashboard">
         <div className="settings-summary-dashboard-head">
-          <h2>Token 儀表板</h2>
-          <span className="muted">使用 API 回傳的 token usage；沒回傳的紀錄會顯示 --。</span>
+          <h2>{t.tokenDashboard}</h2>
+          <span className="muted">{t.tokenDashboardHint}</span>
         </div>
         <div className="settings-summary-metrics">
           <div>
-            <span className="muted">已摘要</span>
+            <span className="muted">{t.summarized}</span>
             <strong>{summarizedRecords.length}</strong>
           </div>
           <div>
-            <span className="muted">有 usage</span>
+            <span className="muted">{t.withUsage}</span>
             <strong>{usageRecordsWithTokens.length}</strong>
           </div>
           <div>
-            <span className="muted">輸入 token</span>
-            <strong>{formatTokenCount(usageTotals.input)}</strong>
+            <span className="muted">{t.inputToken}</span>
+            <strong>{formatTokenCount(usageTotals.input, language)}</strong>
           </div>
           <div>
-            <span className="muted">輸出 token</span>
-            <strong>{formatTokenCount(usageTotals.output)}</strong>
+            <span className="muted">{t.outputToken}</span>
+            <strong>{formatTokenCount(usageTotals.output, language)}</strong>
           </div>
           <div>
-            <span className="muted">總 token</span>
-            <strong>{formatTokenCount(usageTotals.total)}</strong>
+            <span className="muted">{t.totalToken}</span>
+            <strong>{formatTokenCount(usageTotals.total, language)}</strong>
           </div>
         </div>
         <div className="settings-summary-usage-list">
           {recentUsageRecords.length === 0 ? (
-            <div className="muted">還沒有摘要 token 紀錄。</div>
+            <div className="muted">{t.noSummaryTokenRecords}</div>
           ) : (
             recentUsageRecords.map((record) => (
               <div key={record.id} className="settings-summary-usage-row">
-                <span title={record.title || record.id}>{record.title || '未命名卡片'}</span>
-                <span>輸入 {formatTokenMaybe(record.summaryTokenUsage?.inputTokens)}</span>
-                <span>輸出 {formatTokenMaybe(record.summaryTokenUsage?.outputTokens)}</span>
-                <span>總計 {formatTokenMaybe(record.summaryTokenUsage?.totalTokens)}</span>
+                <span title={record.title || record.id}>{record.title || t.untitledCard}</span>
+                <span>{t.inputTokenShort} {formatTokenMaybe(record.summaryTokenUsage?.inputTokens, language)}</span>
+                <span>{t.outputTokenShort} {formatTokenMaybe(record.summaryTokenUsage?.outputTokens, language)}</span>
+                <span>{t.totalTokenShort} {formatTokenMaybe(record.summaryTokenUsage?.totalTokens, language)}</span>
               </div>
             ))
           )}
@@ -764,12 +827,238 @@ function SummarySettingsSection({
   );
 }
 
-function formatTokenCount(value: number): string {
-  return value.toLocaleString('zh-TW');
+function formatTokenCount(value: number, language: ResolvedLanguage): string {
+  return value.toLocaleString(language);
 }
 
-function formatTokenMaybe(value: number | null | undefined): string {
-  return value == null ? '--' : value.toLocaleString('zh-TW');
+function formatTokenMaybe(value: number | null | undefined, language: ResolvedLanguage): string {
+  return value == null ? '--' : value.toLocaleString(language);
+}
+
+function downloadBlob(filename: string, blob: Blob): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function mediaExtension(asset: Asset, blob?: Blob): string {
+  if (blob?.type === 'image/webp') return 'webp';
+  if (blob?.type === 'image/jpeg') return 'jpg';
+  if (blob?.type === 'image/png') return 'png';
+  if (blob?.type === 'video/webm') return 'webm';
+  if (blob?.type === 'video/mp4') return 'mp4';
+  return asset.assetType === 'image' ? 'png' : 'mp4';
+}
+
+async function blobFromRef(ref: string | undefined): Promise<{ blob: Blob; source: BackupMediaEntry['source'] } | null> {
+  if (!ref) return null;
+  if (ref.startsWith('data:')) {
+    return { blob: await (await fetch(ref)).blob(), source: 'data-url' };
+  }
+  if (/^https?:/i.test(ref)) {
+    try {
+      return { blob: await (await fetch(ref)).blob(), source: 'original' };
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+async function mediaBlobForBackup(asset: Asset): Promise<{ blob: Blob; source: BackupMediaEntry['source'] } | null> {
+  return (await blobFromRef(asset.originalUrl)) ?? (await blobFromRef(asset.previewRef));
+}
+
+async function exportPromptTraceBackup(): Promise<{ records: number; mediaFiles: number }> {
+  const [records, assets, originalFileRecords, tags, categories, modelPresets] = await Promise.all([
+    recordRepository.list(),
+    assetRepository.list(),
+    fileRecordRepository.list(),
+    tagRepository.list(),
+    categoryRepository.list(),
+    modelPresetRepository.list(),
+  ]);
+  const originalFileByAsset = new Map<string, FileRecord>();
+  for (const fileRecord of originalFileRecords) {
+    if (!originalFileByAsset.has(fileRecord.assetId)) originalFileByAsset.set(fileRecord.assetId, fileRecord);
+  }
+
+  const fileRecords = new Map<string, FileRecord>();
+  for (const fileRecord of originalFileRecords) {
+    fileRecords.set(fileRecord.id, {
+      ...sanitizeBackupFileRecord(fileRecord),
+      downloadStatus: 'not_required',
+    });
+  }
+
+  const media: BackupMediaEntry[] = [];
+  const mediaFiles = new Map<string, Blob>();
+  for (const asset of assets) {
+    if (asset.assetType === 'text') continue;
+    const mediaBlob = await mediaBlobForBackup(asset);
+    if (!mediaBlob) continue;
+    const existing = originalFileByAsset.get(asset.id);
+    const fileRecord: FileRecord = existing
+      ? sanitizeBackupFileRecord(existing)
+      : {
+          id: `backup-file-${asset.id}`,
+          assetId: asset.id,
+          filename: `${asset.id}.${mediaExtension(asset, mediaBlob.blob)}`,
+          downloadStatus: 'pending',
+          deleteStatus: 'not_deleted',
+          updatedAt: new Date().toISOString(),
+        };
+    const filename = existing?.filename ?? fileRecord.filename;
+    const path = `media/${asset.recordId}/${filename}`;
+    fileRecords.set(fileRecord.id, {
+      ...fileRecord,
+      filename,
+      downloadStatus: 'pending',
+      mimeType: mediaBlob.blob.type || fileRecord.mimeType,
+      fileSize: mediaBlob.blob.size,
+    });
+    media.push({
+      assetId: asset.id,
+      fileRecordId: fileRecord.id,
+      recordId: asset.recordId,
+      path,
+      filename,
+      mimeType: mediaBlob.blob.type || undefined,
+      source: mediaBlob.source,
+    });
+    mediaFiles.set(path, mediaBlob.blob);
+  }
+
+  const zip = await createPromptTraceBackupZip(
+    {
+      records,
+      assets,
+      fileRecords: Array.from(fileRecords.values()),
+      tags,
+      categories,
+      modelPresets,
+      media,
+    },
+    mediaFiles,
+  );
+  downloadBlob(backupFilename(), zip);
+  return { records: records.length, mediaFiles: mediaFiles.size };
+}
+
+async function restorePromptTraceBackup(file: File): Promise<{ records: number; mediaFiles: number }> {
+  const parsed = await parsePromptTraceBackupZip(file);
+  const mediaByFileRecord = new Map(parsed.data.media.map((entry) => [entry.fileRecordId, entry]));
+
+  for (const category of parsed.data.categories ?? []) await categoryRepository.save(category);
+  for (const modelPreset of parsed.data.modelPresets ?? []) await modelPresetRepository.save(modelPreset);
+  for (const record of parsed.data.records) await recordRepository.save(record);
+  for (const asset of parsed.data.assets) await assetRepository.save(asset);
+  for (const tag of parsed.data.tags ?? []) await tagRepository.save(tag);
+
+  let restoredMedia = 0;
+  for (const fileRecord of parsed.data.fileRecords ?? []) {
+    const mediaEntry = mediaByFileRecord.get(fileRecord.id);
+    const mediaFile = mediaEntry ? parsed.files.get(mediaEntry.path) : undefined;
+    const baseRecord: FileRecord = {
+      ...fileRecord,
+      localPath: undefined,
+      downloadId: undefined,
+      downloadStatus: mediaFile ? 'pending' : 'not_required',
+      updatedAt: new Date().toISOString(),
+    };
+    await fileRecordRepository.save(baseRecord);
+    if (!mediaEntry || !mediaFile) continue;
+
+    const url = URL.createObjectURL(mediaFile);
+    try {
+      const downloadId = await chrome.downloads.download({
+        url,
+        filename: `PromptTrace/${mediaEntry.recordId}/${mediaEntry.filename}`,
+        conflictAction: 'uniquify',
+        saveAs: false,
+      });
+      await fileRecordRepository.save({
+        ...baseRecord,
+        downloadId,
+        downloadStatus: 'downloading',
+        updatedAt: new Date().toISOString(),
+      });
+      restoredMedia += 1;
+    } finally {
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    }
+  }
+
+  return { records: parsed.data.records.length, mediaFiles: restoredMedia };
+}
+
+function DataFilesSettingsSection({ t }: { t: UiText }) {
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState('');
+
+  return (
+    <section className="card settings-section">
+      <h2>{t.files}</h2>
+      <div className="row settings-file-actions">
+        <button
+          type="button"
+          onClick={() => {
+            openPromptTraceFolder().catch((error) => {
+              alert(error instanceof Error && error.message === 'NO_PROMPTTRACE_DOWNLOADS' ? t.noDownloads : t.openFolderFailed);
+            });
+          }}
+        >
+          {t.openFileFolder}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            setStatus('');
+            try {
+              const result = await exportPromptTraceBackup();
+              setStatus(t.backupExported.replace('{records}', String(result.records)).replace('{media}', String(result.mediaFiles)));
+            } catch {
+              setStatus(t.backupExportFailed);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          {busy ? t.processing : t.exportBackup}
+        </button>
+        <label className="button-like">
+          {t.importBackup}
+          <input
+            type="file"
+            accept=".zip,application/zip"
+            style={{ display: 'none' }}
+            disabled={busy}
+            onChange={async (e) => {
+              const file = e.currentTarget.files?.[0];
+              e.currentTarget.value = '';
+              if (!file) return;
+              setBusy(true);
+              setStatus('');
+              try {
+                const result = await restorePromptTraceBackup(file);
+                setStatus(t.backupImported.replace('{records}', String(result.records)).replace('{media}', String(result.mediaFiles)));
+              } catch {
+                setStatus(t.backupImportFailed);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
+        </label>
+      </div>
+      {status && <p className="muted">{status}</p>}
+    </section>
+  );
 }
 
 const PROMPTTRACE_ROOT_FILE_REGEX = '[\\\\/]PromptTrace[\\\\/][^\\\\/]+$';
@@ -803,22 +1092,3 @@ async function openPromptTraceFolder(): Promise<void> {
   throw new Error('NO_PROMPTTRACE_DOWNLOADS');
 }
 
-function FileSettingsSection({ t }: { t: UiText }) {
-  return (
-    <section className="card settings-section">
-      <h2>{t.files}</h2>
-      <div className="row">
-        <button
-          type="button"
-          onClick={() => {
-            openPromptTraceFolder().catch((error) => {
-              alert(error instanceof Error && error.message === 'NO_PROMPTTRACE_DOWNLOADS' ? t.noDownloads : t.openFolderFailed);
-            });
-          }}
-        >
-          {t.openFileFolder}
-        </button>
-      </div>
-    </section>
-  );
-}

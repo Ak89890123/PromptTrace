@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  defaultSummarySystemPrompt,
   extractJsonObject,
   maskApiKey,
+  mergeSummarySettings,
   parsePromptSummary,
   requestPromptSummary,
+  SUMMARY_SYSTEM_PROMPT,
 } from '../../src/core/summary';
 
 describe('summary helpers', () => {
@@ -18,6 +21,20 @@ describe('summary helpers', () => {
     expect(parsePromptSummary(extractJsonObject(raw))).toEqual({
       summary: '用來整理產品需求。',
     });
+  });
+
+  it('detects customized legacy system prompts during settings migration', () => {
+    const migratedDefault = mergeSummarySettings({ systemPrompt: SUMMARY_SYSTEM_PROMPT });
+    expect(migratedDefault.systemPromptCustomized).toBe(false);
+
+    const migratedCustom = mergeSummarySettings({ systemPrompt: 'Always summarize in Japanese.' });
+    expect(migratedCustom.systemPromptCustomized).toBe(true);
+    expect(migratedCustom.systemPrompt).toBe('Always summarize in Japanese.');
+  });
+
+  it('provides default summary prompts by language', () => {
+    expect(defaultSummarySystemPrompt('en-US')).toContain('Use English');
+    expect(defaultSummarySystemPrompt('zh-TW')).toContain('繁體中文');
   });
 
   it('rejects empty prompt text before calling the provider', async () => {

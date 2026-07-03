@@ -1,28 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Asset, FileRecord, LibraryRecord, Tag } from '@/src/core/domain/entities';
-import { ROLE_LABELS, type AssetRole, type AssetType } from '@/src/core/domain/enums';
+import type { Asset, FileRecord, LibraryRecord } from '@/src/core/domain/entities';
+import { ROLE_LABELS, type AssetRole } from '@/src/core/domain/enums';
 import {
   allowedRolesFor,
-  categoryPath,
   ROLE_NOT_ALLOWED_MESSAGE,
   validateCategoryName,
 } from '@/src/core/domain/validation';
-import {
-  composeFullRecord,
-  composeInputBundle,
-  composeOutputBundle,
-  type CopyBundle,
-} from '@/src/core/copy-bundle/compose';
-import { exportMarkdown, modelLabelOf, type ExportContext } from '@/src/core/export/markdown';
-import { exportJsonString } from '@/src/core/export/json';
+import { modelLabelOf } from '@/src/core/export/markdown';
 import {
   assetRepository,
   categoryRepository,
-  deleteRecordCascade,
-  exportRecordRepository,
   fileRecordRepository,
   recordRepository,
-  tagRepository,
 } from '@/src/storage/repositories';
 import { assetTypeLabel, categoryLabel, resolveLanguage, roleLabel, UI_TEXT, type ResolvedLanguage, type UiText } from '@/src/ui/i18n';
 import { DEFAULT_ROLE_COLORS, DEFAULT_SETTINGS, loadSettings, onSettingsChanged } from '@/src/ui/roleColors';
@@ -32,7 +21,6 @@ type RecordBundle = {
   record: LibraryRecord;
   assets: Asset[];
   fileRecords: FileRecord[];
-  tags: Tag[];
 };
 
 type CategoryDraft = {
@@ -44,18 +32,7 @@ async function loadBundle(record: LibraryRecord): Promise<RecordBundle> {
   const assets = await assetRepository.byRecord(record.id);
   const fileRecords: FileRecord[] = [];
   for (const a of assets) fileRecords.push(...(await fileRecordRepository.byAsset(a.id)));
-  const tags = await tagRepository.byRecord(record.id);
-  return { record, assets, fileRecords, tags };
-}
-
-function downloadText(filename: string, content: string, mime: string) {
-  const blob = new Blob([content], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+  return { record, assets, fileRecords };
 }
 
 export default function App() {
@@ -68,7 +45,7 @@ export default function App() {
   const [categoryDrafts, setCategoryDrafts] = useState<CategoryDraft[]>([]);
   const [assetIndex, setAssetIndex] = useState<Map<string, Asset[]>>(new Map());
   const [refresh, setRefresh] = useState(0);
-  const { categories, presets } = useTaxonomy(refresh);
+  const { categories } = useTaxonomy(refresh);
   const reload = () => setRefresh((x) => x + 1);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   useEffect(() => {
@@ -235,13 +212,6 @@ export default function App() {
       </aside>
 
       <main className="library-main">
-        <header className="library-hero">
-          <div className="library-hero-stats">
-            <span>{records.length} {t.records}</span>
-            <span>{Array.from(assetIndex.values()).reduce((sum, items) => sum + items.length, 0)} {t.assets}</span>
-          </div>
-        </header>
-
         {filtered.length === 0 ? (
           <div className="library-empty">
             {records.length === 0 ? (
@@ -282,20 +252,14 @@ export default function App() {
               key={`${selectedId}-${refresh}`}
               recordId={selectedId}
               categories={categories}
-              presets={presets}
-              onClose={() => setSelectedId(null)}
               onChanged={reload}
               t={t}
               language={language}
-              onDeleted={() => {
-                setSelectedId(null);
-                reload();
-              }}
             />
           ) : (
             <div className="library-detail-empty">
               <h2>{language === 'en-US' ? 'Select a record' : '選取一筆紀錄'}</h2>
-              <p>{language === 'en-US' ? 'Select a card to see its full text, media, notes, tags, and files here.' : '點選中央卡片後，這裡會固定顯示完整文字、圖片、notes、tags 與檔案紀錄。'}</p>
+              <p>{language === 'en-US' ? 'Select a card to see its full text, media, and summary here.' : '點選中央卡片後，這裡會固定顯示完整文字、圖片與摘要。'}</p>
             </div>
           )}
         </div>
@@ -328,11 +292,11 @@ function RecordCard(props: {
         {record.summary ? (
           <div className="record-card-summary">{record.summary}</div>
         ) : record.summaryStatus === 'pending' ? (
-          <div className="record-card-summary is-muted">摘要中...</div>
+          <div className="record-card-summary is-muted">{language === 'en-US' ? 'Summarizing...' : '摘要中...'}</div>
         ) : record.summaryStatus === 'failed' ? (
-          <div className="record-card-summary is-muted">摘要失敗</div>
+          <div className="record-card-summary is-muted">{language === 'en-US' ? 'Summary failed' : '摘要失敗'}</div>
         ) : (
-          <div className="record-card-summary is-muted">尚未摘要</div>
+          <div className="record-card-summary is-muted">{language === 'en-US' ? 'No summary yet' : '尚未摘要'}</div>
         )}
       </div>
       <CardPreview assets={assets} layout={layout} t={t} />
@@ -347,20 +311,12 @@ function RecordCard(props: {
 function RecordDetail(props: {
   recordId: string;
   categories: ReturnType<typeof useTaxonomy>['categories'];
-  presets: ReturnType<typeof useTaxonomy>['presets'];
-  onClose: () => void;
   onChanged: () => void;
-  onDeleted: () => void;
   t: UiText;
   language: ResolvedLanguage;
 }) {
   const [bundle, setBundle] = useState<RecordBundle | null>(null);
-  const [tray, setTray] = useState<CopyBundle | null>(null);
   const [toast, setToast] = useState('');
-  const [newText, setNewText] = useState('');
-  const [newTextRole, setNewTextRole] = useState<AssetRole>('input');
-  const [tagInput, setTagInput] = useState('');
-  const [deleting, setDeleting] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
 
   const load = useCallback(async () => {
@@ -373,39 +329,11 @@ function RecordDetail(props: {
 
   const { t, language } = props;
   if (!bundle) return <div className="muted">{t.loading}</div>;
-  const { record, assets, fileRecords, tags } = bundle;
-  const catPath = categoryPath(props.categories, record.categoryId);
+  const { record, assets, fileRecords } = bundle;
 
   const say = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(''), 2500);
-  };
-
-  const copyBundle = async (b: CopyBundle, label: string) => {
-    try {
-      await navigator.clipboard.writeText(b.text);
-      if (b.needsTrayFallback) {
-        setTray(b);
-        say(language === 'en-US' ? `${label} text copied. Handle media from the copy tray below.` : `${label} 文字已複製；媒體請從下方快速複製列逐項處理。`);
-      } else {
-        say(language === 'en-US' ? `${label} copied.` : `${label} 已複製。`);
-      }
-    } catch {
-      setTray(b);
-      say(language === 'en-US' ? 'Clipboard write failed. Copy items from the copy tray below.' : '剪貼簿寫入失敗；請從快速複製列逐項複製。');
-    }
-  };
-
-  const exportCtx = async (): Promise<ExportContext> => {
-    return {
-      record,
-      assets,
-      fileRecords,
-      tags,
-      categoryPath: catPath,
-      includeSource: true,
-      includeFilePath: true,
-    };
   };
 
   const updateRecord = async (patch: Partial<LibraryRecord>) => {
@@ -432,42 +360,6 @@ function RecordDetail(props: {
       say(language === 'en-US' ? 'Summary request failed.' : '摘要請求失敗。');
     } finally {
       setSummarizing(false);
-    }
-  };
-
-  const addTextAsset = async (text: string, role: AssetRole, type: AssetType = 'text', url?: string) => {
-    await assetRepository.save({
-      id: crypto.randomUUID(),
-      recordId: record.id,
-      assetType: type,
-      role,
-      textContent: type === 'text' ? text : undefined,
-      originalUrl: url,
-      previewRef: url,
-      orderIndex: assets.length,
-      capturedAt: new Date().toISOString(),
-    });
-    await load();
-    props.onChanged();
-  };
-
-  const onDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    for (const file of Array.from(e.dataTransfer.files)) {
-      const type: AssetType | null = file.type.startsWith('image/')
-        ? 'image'
-        : file.type.startsWith('video/')
-          ? 'video'
-          : null;
-      if (!type) continue;
-      // Store dropped/uploaded local media as a data URL preview (kept in IndexedDB).
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(file);
-      });
-      await addTextAsset('', 'input', type, dataUrl);
     }
   };
 
@@ -530,32 +422,7 @@ function RecordDetail(props: {
               ) : (
                 <div className="preview-text">🎞 {language === 'en-US' ? 'Video file' : '影片檔案'}</div>
               )}
-              {a.originalUrl && !a.originalUrl.startsWith('data:') && (
-                <div className="muted" style={{ wordBreak: 'break-all' }}>
-                  {language === 'en-US' ? 'Source' : '來源'}：<a href={a.originalUrl} target="_blank" rel="noreferrer">{a.originalUrl}</a>
-                </div>
-              )}
-              {file && (
-                <div className="muted">
-                  {language === 'en-US' ? 'Download' : '下載'}：{file.downloadStatus}
-                  {file.localPath ? ` · ${file.localPath}` : ''}
-                  {file.deleteStatus !== 'not_deleted' ? ` · 檔案狀態：${file.deleteStatus}` : ''}
-                  {file.downloadStatus === 'failed' && (
-                    <>
-                      {' '}
-                      <button
-                        onClick={() =>
-                          chrome.runtime
-                            .sendMessage({ type: 'media/retryDownload', payload: { fileRecordId: file.id } })
-                            .then(() => say(language === 'en-US' ? 'Download retried.' : '已重試下載。'))
-                        }
-                      >
-                        {language === 'en-US' ? 'Retry download' : '重試下載'}
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
+              {file && <FileRecordLine file={file} language={language} onSay={say} />}
             </div>
           );
         })}
@@ -564,54 +431,12 @@ function RecordDetail(props: {
   };
 
   return (
-    <div onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+    <div>
       {toast && (
         <div className="card" style={{ borderColor: 'var(--ok)', position: 'sticky', top: 0, zIndex: 10 }}>
           {toast}
         </div>
       )}
-      <div className="spread">
-        <input
-          style={{ fontSize: 16, fontWeight: 600, flex: 1 }}
-          value={record.title ?? ''}
-          placeholder={language === 'en-US' ? '(Untitled record - type a title)' : '（未命名紀錄，點此輸入標題）'}
-          onChange={(e) => setBundle({ ...bundle, record: { ...record, title: e.target.value } })}
-          onBlur={(e) => updateRecord({ title: e.target.value })}
-        />
-        {!deleting ? (
-          <button className="danger" onClick={() => setDeleting(true)}>{language === 'en-US' ? 'Delete record' : '刪除紀錄'}</button>
-        ) : (
-          <div className="row">
-            <button
-              className="danger"
-              onClick={async () => {
-                await deleteRecordCascade(record.id);
-                props.onDeleted();
-              }}
-            >
-              {language === 'en-US' ? 'Delete record only' : '只刪紀錄（保留檔案）'}
-            </button>
-            <button
-              className="danger"
-              onClick={async () => {
-                const res = await chrome.runtime
-                  .sendMessage({ type: 'media/deleteRecordFiles', payload: { recordId: record.id } })
-                  .catch(() => ({ ok: false }));
-                await deleteRecordCascade(record.id);
-                if (res && !res.ok) {
-                  alert(language === 'en-US' ? 'Some local files could not be deleted. The record was deleted.' : '部分本地檔案刪除失敗，請手動處理。紀錄已刪除。');
-                }
-                props.onDeleted();
-              }}
-            >
-              {language === 'en-US' ? 'Delete record and files' : '連同本地檔案刪除'}
-            </button>
-            <button onClick={() => setDeleting(false)}>{language === 'en-US' ? 'Cancel' : '取消'}</button>
-          </div>
-        )}
-        <button onClick={props.onClose} aria-label={language === 'en-US' ? 'Close details' : '關閉詳情'}>{t.close}</button>
-      </div>
-
       <div className="row" style={{ margin: '8px 0' }}>
         <label className="muted">{t.category}</label>
         <select
@@ -626,35 +451,7 @@ function RecordDetail(props: {
             </option>
           ))}
         </select>
-        <label className="muted">{t.model}</label>
-        <select
-          style={{ width: 'auto' }}
-          value={record.modelPresetId ?? (record.modelLabel ? '__label' : '')}
-          onChange={(e) => {
-            const v = e.target.value;
-            if (v === '') updateRecord({ modelPresetId: null, modelLabel: undefined, modelName: undefined, modelProvider: undefined });
-            else if (v !== '__label') {
-              const p = props.presets.find((x) => x.id === v);
-              updateRecord({ modelPresetId: v, modelName: p?.modelName, modelProvider: p?.provider, modelLabel: undefined });
-            }
-          }}
-        >
-          <option value="">{language === 'en-US' ? 'Not specified' : '未指定'}</option>
-          {record.modelLabel && <option value="__label">{record.modelLabel}</option>}
-          {props.presets.map((p) => (
-            <option key={p.id} value={p.id}>{p.alias || p.modelName}</option>
-          ))}
-        </select>
       </div>
-
-      {record.sourcePageUrl && (
-        <div className="muted" style={{ wordBreak: 'break-all' }}>
-          Source：
-          <a href={record.sourcePageUrl} target="_blank" rel="noreferrer">
-            {record.sourcePageTitle || record.sourcePageUrl}
-          </a>
-        </div>
-      )}
 
       <div className="card record-summary-panel">
         <div className="spread">
@@ -674,201 +471,71 @@ function RecordDetail(props: {
         )}
         {record.summaryTokenUsage && (
           <div className="record-summary-token-row">
-            <span>{language === 'en-US' ? 'Input' : '輸入'} {formatTokenMaybe(record.summaryTokenUsage.inputTokens)}</span>
-            <span>{language === 'en-US' ? 'Output' : '輸出'} {formatTokenMaybe(record.summaryTokenUsage.outputTokens)}</span>
-            <span>{language === 'en-US' ? 'Total' : '總計'} {formatTokenMaybe(record.summaryTokenUsage.totalTokens)}</span>
+            <span>{language === 'en-US' ? 'Input' : '輸入'} {formatTokenMaybe(record.summaryTokenUsage.inputTokens, language)}</span>
+            <span>{language === 'en-US' ? 'Output' : '輸出'} {formatTokenMaybe(record.summaryTokenUsage.outputTokens, language)}</span>
+            <span>{language === 'en-US' ? 'Total' : '總計'} {formatTokenMaybe(record.summaryTokenUsage.totalTokens, language)}</span>
           </div>
         )}
       </div>
 
-      <div className="row" style={{ margin: '10px 0' }}>
-        <button onClick={() => copyBundle(composeInputBundle(assets, fileRecords), roleLabel('input', language))}>
-          {t.copy} {roleLabel('input', language)}
-        </button>
-        <button onClick={() => copyBundle(composeOutputBundle(assets, fileRecords), roleLabel('output', language))}>
-          {t.copy} {roleLabel('output', language)}
-        </button>
-        <button onClick={() => copyBundle(composeFullRecord(record, assets, fileRecords, catPath), language === 'en-US' ? 'Full record' : '完整紀錄')}>
-          {language === 'en-US' ? 'Copy full record' : '複製完整紀錄'}
-        </button>
-        <button
-          onClick={async () => {
-            downloadText(`prompttrace-${record.id.slice(0, 8)}.md`, exportMarkdown(await exportCtx()), 'text/markdown');
-            await exportRecordRepository.save({
-              id: crypto.randomUUID(),
-              recordId: record.id,
-              format: 'markdown',
-              exportedAt: new Date().toISOString(),
-            });
-          }}
-        >
-          {language === 'en-US' ? 'Export Markdown' : '匯出 Markdown'}
-        </button>
-        <button
-          onClick={async () => {
-            downloadText(`prompttrace-${record.id.slice(0, 8)}.json`, exportJsonString(await exportCtx()), 'application/json');
-            await exportRecordRepository.save({
-              id: crypto.randomUUID(),
-              recordId: record.id,
-              format: 'json',
-              exportedAt: new Date().toISOString(),
-            });
-          }}
-        >
-          {language === 'en-US' ? 'Export JSON' : '匯出 JSON'}
-        </button>
-      </div>
-
-      {tray && (
-        <div className="card" style={{ borderColor: 'var(--accent)' }}>
-          <div className="spread">
-            <strong>{t.copyTrayShort}</strong>
-            <button onClick={() => setTray(null)}>{t.close}</button>
-          </div>
-          <div className="muted">
-            {language === 'en-US'
-              ? 'Text was copied. Copy the media below one by one, or drag it into the target chat.'
-              : '文字已複製。以下媒體無法與文字一起寫入剪貼簿，請逐項複製或直接拖進目標聊天框。'}
-          </div>
-          <div className="row" style={{ marginTop: 6 }}>
-            {tray.mediaAssets.map((m) => (
-              <div key={m.id} style={{ maxWidth: 140 }}>
-                {m.assetType === 'image' ? (
-                  <img className="thumb" src={m.previewRef ?? m.originalUrl} alt="tray" draggable />
-                ) : (
-                  <div className="preview-text">🎞 video</div>
-                )}
-                <button
-                  style={{ width: '100%' }}
-                  onClick={async () => {
-                    const url = m.originalUrl ?? m.previewRef ?? '';
-                    await navigator.clipboard.writeText(url);
-                    say(language === 'en-US' ? 'Media link copied.' : '已複製媒體連結。');
-                  }}
-                >
-                  {language === 'en-US' ? 'Copy link' : '複製連結'}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       <div className="row" style={{ alignItems: 'flex-start' }}>
         <div style={{ flex: 2, minWidth: 320 }}>
           {(['input', 'input_reference', 'negative', 'output'] as AssetRole[]).map(roleSection)}
-        </div>
-        <div style={{ flex: 1, minWidth: 240 }}>
-          <h2>Notes</h2>
-          <textarea
-            rows={4}
-            value={record.notes ?? ''}
-            onChange={(e) => setBundle({ ...bundle, record: { ...record, notes: e.target.value } })}
-            onBlur={(e) => updateRecord({ notes: e.target.value })}
-          />
-          <h2>Tags</h2>
-          <div className="row">
-            {tags.map((t) => (
-              <span key={t.id} className="pill" style={{ background: 'var(--panel-2)', color: 'var(--text)' }}>
-                #{t.name}{' '}
-                <a
-                  style={{ cursor: 'pointer' }}
-                  onClick={async () => {
-                    await tagRepository.delete(t.id);
-                    await load();
-                  }}
-                >
-                  ×
-                </a>
-              </span>
-            ))}
-          </div>
-          <div className="row" style={{ marginTop: 4 }}>
-            <input
-              placeholder={language === 'en-US' ? 'Add tag…' : '新增標籤…'}
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={async (e) => {
-                if (e.key === 'Enter' && tagInput.trim()) {
-                  await tagRepository.save({ id: crypto.randomUUID(), recordId: record.id, name: tagInput.trim() });
-                  setTagInput('');
-                  await load();
-                }
-              }}
-            />
-          </div>
-          <h2>{language === 'en-US' ? 'Add content' : '補充內容'}</h2>
-          <textarea
-            rows={3}
-            placeholder={language === 'en-US' ? 'Paste text, then click Add text' : '貼上文字後按「新增文字」'}
-            value={newText}
-            onChange={(e) => setNewText(e.target.value)}
-          />
-          <div className="row" style={{ marginTop: 4 }}>
-            <select value={newTextRole} style={{ width: 'auto' }} onChange={(e) => setNewTextRole(e.target.value as AssetRole)}>
-              {(Object.keys(ROLE_LABELS) as AssetRole[]).map((r) => (
-                <option key={r} value={r}>{roleLabel(r, language)}</option>
-              ))}
-            </select>
-            <button
-              disabled={!newText.trim()}
-              onClick={async () => {
-                await addTextAsset(newText.trim(), newTextRole);
-                setNewText('');
-              }}
-            >
-              {language === 'en-US' ? 'Add text' : '新增文字'}
-            </button>
-          </div>
-          <div className="muted" style={{ marginTop: 6 }}>
-            {language === 'en-US'
-              ? 'You can also drag images or videos here. They are added as Input first and can be changed later.'
-              : '也可以直接把圖片或影片拖放到這裡。會先用輸入角色加入，之後可以再調整。'}
-          </div>
-          <label className="row" style={{ marginTop: 6 }}>
-            <input
-              type="file"
-              accept="image/*,video/*"
-              multiple
-              onChange={async (e) => {
-                for (const file of Array.from(e.target.files ?? [])) {
-                  const type: AssetType | null = file.type.startsWith('image/')
-                    ? 'image'
-                    : file.type.startsWith('video/')
-                      ? 'video'
-                      : null;
-                  if (!type) continue;
-                  const dataUrl = await new Promise<string>((resolve) => {
-                    const reader = new FileReader();
-                    reader.onload = () => resolve(String(reader.result));
-                    reader.readAsDataURL(file);
-                  });
-                  await addTextAsset('', 'input', type, dataUrl);
-                }
-                e.target.value = '';
-              }}
-            />
-          </label>
-          <h2>{language === 'en-US' ? 'Files' : '檔案紀錄'}</h2>
-          {fileRecords.length === 0 && <div className="muted">{language === 'en-US' ? 'None' : '無'}</div>}
-          {fileRecords.map((f) => (
-            <div className="card" key={f.id}>
-              <div style={{ wordBreak: 'break-all' }}>{f.filename}</div>
-              <div className="muted">
-                {f.downloadStatus}
-                {f.localPath ? ` · ${f.localPath}` : ''}
-                {f.deleteStatus !== 'not_deleted' ? ` · ${f.deleteStatus}` : ''}
-              </div>
-            </div>
-          ))}
         </div>
       </div>
     </div>
   );
 }
 
-function formatTokenMaybe(value: number | null | undefined): string {
-  return value == null ? '--' : value.toLocaleString();
+function formatTokenMaybe(value: number | null | undefined, language: ResolvedLanguage): string {
+  return value == null ? '--' : value.toLocaleString(language);
+}
+
+function FileRecordLine({
+  file,
+  language,
+  onSay,
+}: {
+  file: FileRecord;
+  language: ResolvedLanguage;
+  onSay: (message: string) => void;
+}) {
+  const openLocation = () => {
+    if (file.downloadId == null) return;
+    try {
+      chrome.downloads.show(file.downloadId);
+    } catch {
+      onSay(language === 'en-US' ? 'Could not open the file location.' : '無法開啟檔案位置。');
+    }
+  };
+
+  return (
+    <div className="file-record-line">
+      <div className="file-record-meta">
+        {file.deleteStatus !== 'not_deleted' && (
+          <span>
+            {language === 'en-US' ? 'File status' : '檔案狀態'}：{file.deleteStatus}
+          </span>
+        )}
+        {file.downloadStatus === 'failed' ? (
+          <button
+            type="button"
+            onClick={() =>
+              chrome.runtime
+                .sendMessage({ type: 'media/retryDownload', payload: { fileRecordId: file.id } })
+                .then(() => onSay(language === 'en-US' ? 'Retried.' : '已重試。'))
+            }
+          >
+            {language === 'en-US' ? 'Retry' : '重試'}
+          </button>
+        ) : (
+          <button type="button" disabled={file.downloadId == null} onClick={openLocation}>
+            {language === 'en-US' ? 'Location' : '位置'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /** Compact left/right (or output-only) preview of a record's assets on its list card. */
