@@ -1,8 +1,8 @@
-# PromptTrace Agent Instructions
+﻿# PrompTrace Agent Instructions
 
 ## Project Structure & Module Organization
 
-PromptTrace is a local-first WXT Chrome extension using TypeScript, React, Manifest V3, IndexedDB, `chrome.storage`, context menus, downloads, and clipboard APIs. It has no backend, account system, cloud sync, LLM API calls, or analytics.
+PrompTrace is a local-first WXT Chrome extension using TypeScript, React, Manifest V3, IndexedDB, `chrome.storage`, context menus, downloads, and clipboard APIs. It has no backend, account system, cloud sync, LLM API calls, or analytics.
 
 - `entrypoints/background.ts`: service worker, context menus, capture session source of truth, download tracking, message routing, and library mutation actions.
 - `entrypoints/content/`: content script, shadow-root UI, overlay frames, selection/media capture, and the right-edge in-page panel/gallery.
@@ -47,7 +47,7 @@ After changing manifest, background, content script, popup, library, settings, s
 
 ## Security & Configuration Tips
 
-- Treat `Downloads/PromptTrace/`, IndexedDB, and exported Markdown/JSON as local user data. Do not upload or log captured content.
+- Treat `Downloads/PrompTrace/`, IndexedDB, and exported Markdown/JSON as local user data. Do not upload or log captured content.
 - `chrome.downloads.removeFile` can only remove files the extension downloaded; preserve fallback/error behavior when editing delete flows.
 - Some media URLs are not downloadable (`blob:`, MediaSource, DRM, authenticated or cross-origin URLs). Keep source-only fallback paths intact.
 - Host-page CSP can affect content-script-rendered remote media; prefer existing preview/cache behavior over assuming remote thumbnails always load.

@@ -1,4 +1,4 @@
-# PromptTrace Architecture
+﻿# PrompTrace Architecture
 
 ## 系統架構
 
@@ -83,7 +83,7 @@ Migration 在 `src/storage/db.ts` 的 `migrate(db, oldVersion)`；未來 schema 
 
 ```
 commit → FileRecord(status: pending)
-       → chrome.downloads.download({ url, filename: PromptTrace/{recordId}/{assetId前8}-{safe} })
+       → chrome.downloads.download({ url, filename: PrompTrace/{recordId}/{assetId前8}-{safe} })
        → status: downloading
        → onChanged complete  → status: completed（補 localPath）
        → onChanged interrupted / error → status: failed → Error Card（重試 / 只保存來源）

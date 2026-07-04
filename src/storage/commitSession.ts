@@ -39,11 +39,6 @@ export async function commitSessionToLibrary(
   const record: LibraryRecord = {
     id: crypto.randomUUID(),
     categoryId: meta.categoryId ?? null,
-    modelPresetId: meta.modelPresetId ?? null,
-    modelProvider: meta.modelProvider,
-    modelName: meta.modelName,
-    modelVersion: meta.modelVersion,
-    modelLabel: meta.modelLabel,
     title: meta.title,
     sourcePageUrl: first?.pageUrl,
     sourcePageTitle: first?.pageTitle,
@@ -102,5 +97,5 @@ export function isDownloadableUrl(url: string): boolean {
 
 /** Relative download path under the user's Downloads folder. */
 export function downloadPathFor(recordId: string, fileRecord: FileRecord): string {
-  return `PromptTrace/${recordId}/${fileRecord.filename}`;
+  return `PrompTrace/${recordId}/${fileRecord.filename}`;
 }

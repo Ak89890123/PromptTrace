@@ -1,5 +1,5 @@
 import type { AssetRole, AssetType } from './enums';
-import type { ModelPreset, PendingAsset, RecordCategory } from './entities';
+import type { PendingAsset, RecordCategory } from './entities';
 
 /** Roles allowed per asset type. Images/videos can only be Input Reference or Output. */
 const ALLOWED_ROLES: Record<AssetType, AssetRole[]> = {
@@ -84,13 +84,6 @@ export function wouldCreateCycle(
     cur = byId.get(cur)?.parentId ?? null;
   }
   return false;
-}
-
-export function validateModelPreset(preset: Pick<ModelPreset, 'modelName'>): ValidationResult {
-  if (!preset.modelName || preset.modelName.trim().length === 0) {
-    return { ok: false, reason: 'Model 名稱不能為空。' };
-  }
-  return { ok: true };
 }
 
 /** Resolve the display path of a category, e.g. 生文 / 改寫 / 正式語氣. */

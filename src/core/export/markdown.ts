@@ -11,12 +11,6 @@ export type ExportContext = {
   includeFilePath?: boolean;
 };
 
-export function modelLabelOf(record: LibraryRecord): string {
-  if (record.modelLabel) return record.modelLabel;
-  const parts = [record.modelProvider, record.modelName, record.modelVersion].filter(Boolean);
-  return parts.length > 0 ? parts.join(' ') : 'Not specified';
-}
-
 function sortedByOrder(assets: Asset[]): Asset[] {
   return [...assets].sort((a, b) => a.orderIndex - b.orderIndex);
 }
@@ -48,7 +42,7 @@ export function exportMarkdown(ctx: ExportContext): string {
   const includeSource = ctx.includeSource ?? true;
   const includeFilePath = ctx.includeFilePath ?? true;
 
-  const title = record.title?.trim() || `PromptTrace Record ${record.id.slice(0, 8)}`;
+  const title = record.title?.trim() || `PrompTrace Record ${record.id.slice(0, 8)}`;
   const assetLines = sortedByOrder(assets).map((a) => assetLine(a, fileRecords, includeFilePath));
   const sourceBlock = includeSource
     ? [record.sourcePageTitle, record.sourcePageUrl].filter(Boolean).join('\n') || '_None_'
@@ -61,9 +55,6 @@ export function exportMarkdown(ctx: ExportContext): string {
     '',
     '## Category',
     ctx.categoryPath || 'Uncategorized',
-    '',
-    '## Model',
-    modelLabelOf(record),
     '',
     '## Input',
     textsForRole(assets, 'input'),

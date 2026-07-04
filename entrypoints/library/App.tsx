@@ -6,7 +6,6 @@ import {
   ROLE_NOT_ALLOWED_MESSAGE,
   validateCategoryName,
 } from '@/src/core/domain/validation';
-import { modelLabelOf } from '@/src/core/export/markdown';
 import {
   assetRepository,
   categoryRepository,
@@ -118,8 +117,6 @@ export default function App() {
           r.notes,
           r.sourcePageTitle,
           r.sourcePageUrl,
-          r.modelLabel,
-          r.modelName,
           r.summary,
           ...assets.map((a) => a.textContent ?? ''),
           ...assets.map((a) => a.originalUrl ?? ''),
@@ -281,9 +278,29 @@ function RecordCard(props: {
   const { record, assets, categories, selected, layout, t, language, onOpen } = props;
   const outputCount = assets.filter((a) => a.role === 'output').length;
   const category = categories.find((c) => c.id === record.categoryId);
+  const copyAssets = async (pickedAssets: Asset[]) => {
+    onOpen();
+    try {
+      await copyPreviewAssetsToClipboard(pickedAssets);
+    } catch {
+      // Clipboard availability depends on browser focus/permissions; selecting the record still succeeds.
+    }
+  };
 
   return (
-    <button className={`record-card ${selected ? 'is-selected' : ''}`} onFocus={onOpen} onClick={onOpen}>
+    <article
+      className={`record-card ${selected ? 'is-selected' : ''}`}
+      role="button"
+      tabIndex={0}
+      onFocus={onOpen}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+    >
       <div className="record-card-topline">
         <span>{category ? categoryLabel(category, language) : t.uncategorized}</span>
         <span>{assets.length} {t.assets}</span>
@@ -299,12 +316,12 @@ function RecordCard(props: {
           <div className="record-card-summary is-muted">{language === 'en-US' ? 'No summary yet' : '尚未摘要'}</div>
         )}
       </div>
-      <CardPreview assets={assets} layout={layout} t={t} />
+      <CardPreview assets={assets} layout={layout} t={t} onAssetPick={copyAssets} />
       <div className="record-card-footer">
-        <span>{modelLabelOf(record)}</span>
+        <span />
         <span>{outputCount > 0 ? `${outputCount} ${t.output}` : language === 'en-US' ? 'no output' : '無輸出'}</span>
       </div>
-    </button>
+    </article>
   );
 }
 
@@ -338,6 +355,13 @@ function RecordDetail(props: {
 
   const updateRecord = async (patch: Partial<LibraryRecord>) => {
     await recordRepository.save({ ...record, ...patch, updatedAt: new Date().toISOString() });
+    await load();
+    props.onChanged();
+  };
+
+  const updateTextAsset = async (asset: Asset, textContent: string) => {
+    await assetRepository.save({ ...asset, textContent });
+    await recordRepository.save({ ...record, updatedAt: new Date().toISOString() });
     await load();
     props.onChanged();
   };
@@ -392,6 +416,7 @@ function RecordDetail(props: {
                       }
                       await assetRepository.save({ ...a, role: next });
                       await load();
+                      props.onChanged();
                     }}
                   >
                     {(Object.keys(ROLE_LABELS) as AssetRole[]).map((r) => (
@@ -400,6 +425,7 @@ function RecordDetail(props: {
                       </option>
                     ))}
                   </select>
+                  {file && <FileRecordLine file={file} language={language} onSay={say} />}
                   <button
                     className="danger"
                     onClick={async () => {
@@ -414,7 +440,7 @@ function RecordDetail(props: {
                 </div>
               </div>
               {a.assetType === 'text' ? (
-                <div className="preview-text">{a.textContent}</div>
+                <TextAssetEditor asset={a} language={language} onSave={(textContent) => updateTextAsset(a, textContent)} />
               ) : a.assetType === 'image' ? (
                 <img className="thumb" src={a.previewRef ?? a.originalUrl} alt="asset" />
               ) : a.previewRef?.startsWith('data:') ? (
@@ -422,7 +448,6 @@ function RecordDetail(props: {
               ) : (
                 <div className="preview-text">🎞 {language === 'en-US' ? 'Video file' : '影片檔案'}</div>
               )}
-              {file && <FileRecordLine file={file} language={language} onSay={say} />}
             </div>
           );
         })}
@@ -491,6 +516,52 @@ function formatTokenMaybe(value: number | null | undefined, language: ResolvedLa
   return value == null ? '--' : value.toLocaleString(language);
 }
 
+function TextAssetEditor({
+  asset,
+  language,
+  onSave,
+}: {
+  asset: Asset;
+  language: ResolvedLanguage;
+  onSave: (textContent: string) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState(asset.textContent ?? '');
+  const [status, setStatus] = useState('');
+
+  useEffect(() => {
+    setDraft(asset.textContent ?? '');
+    setStatus('');
+  }, [asset.id, asset.textContent]);
+
+  const save = async () => {
+    if (draft === (asset.textContent ?? '')) return;
+    await onSave(draft);
+    setStatus(language === 'en-US' ? 'Saved' : '已保存');
+    window.setTimeout(() => setStatus(''), 1600);
+  };
+
+  return (
+    <div className="asset-text-edit">
+      <textarea
+        className="preview-text asset-text-editor"
+        value={draft}
+        rows={Math.min(8, Math.max(3, draft.split('\n').length))}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          setStatus(language === 'en-US' ? 'Editing' : '編輯中');
+        }}
+        onBlur={save}
+        onKeyDown={(e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+            e.currentTarget.blur();
+          }
+        }}
+      />
+      {status && <span className="asset-text-edit-status">{status}</span>}
+    </div>
+  );
+}
+
 function FileRecordLine({
   file,
   language,
@@ -510,62 +581,99 @@ function FileRecordLine({
   };
 
   return (
-    <div className="file-record-line">
-      <div className="file-record-meta">
-        {file.deleteStatus !== 'not_deleted' && (
-          <span>
-            {language === 'en-US' ? 'File status' : '檔案狀態'}：{file.deleteStatus}
-          </span>
-        )}
-        {file.downloadStatus === 'failed' ? (
-          <button
-            type="button"
-            onClick={() =>
-              chrome.runtime
-                .sendMessage({ type: 'media/retryDownload', payload: { fileRecordId: file.id } })
-                .then(() => onSay(language === 'en-US' ? 'Retried.' : '已重試。'))
-            }
-          >
-            {language === 'en-US' ? 'Retry' : '重試'}
-          </button>
-        ) : (
-          <button type="button" disabled={file.downloadId == null} onClick={openLocation}>
-            {language === 'en-US' ? 'Location' : '位置'}
-          </button>
-        )}
-      </div>
-    </div>
+    <>
+      {file.deleteStatus !== 'not_deleted' && (
+        <span className="file-record-meta">
+          {language === 'en-US' ? 'File status' : '檔案狀態'}：{file.deleteStatus}
+        </span>
+      )}
+      {file.downloadStatus === 'failed' ? (
+        <button
+          type="button"
+          onClick={() =>
+            chrome.runtime
+              .sendMessage({ type: 'media/retryDownload', payload: { fileRecordId: file.id } })
+              .then(() => onSay(language === 'en-US' ? 'Retried.' : '已重試。'))
+          }
+        >
+          {language === 'en-US' ? 'Retry' : '重試'}
+        </button>
+      ) : (
+        <button type="button" disabled={file.downloadId == null} onClick={openLocation}>
+          {language === 'en-US' ? 'Location' : '位置'}
+        </button>
+      )}
+    </>
   );
 }
 
+async function copyPreviewAssetsToClipboard(assets: Asset[]): Promise<void> {
+  const texts = assets
+    .filter((asset) => asset.assetType === 'text')
+    .map((asset) => (asset.textContent ?? '').trim())
+    .filter(Boolean);
+  if (texts.length === 0) return;
+  await navigator.clipboard.writeText(texts.join('\n\n'));
+}
+
 /** Compact left/right (or output-only) preview of a record's assets on its list card. */
-function CardPreview({ assets, layout, t }: { assets: Asset[]; layout: 'split' | 'output-only'; t: UiText }) {
-  const cell = (a: Asset) => {
-    if (a.assetType === 'text') {
-      const text = (a.textContent ?? '').trim();
+function CardPreview({
+  assets,
+  layout,
+  t,
+  onAssetPick,
+}: {
+  assets: Asset[];
+  layout: 'split' | 'output-only';
+  t: UiText;
+  onAssetPick: (assets: Asset[]) => void;
+}) {
+  const renderAssetPreview = (asset: Asset) => {
+    if (asset.assetType === 'text') {
+      const text = (asset.textContent ?? '').trim();
       return text ? (
-        <div key={a.id} className="record-preview-text">
-          {text.slice(0, 160)}
+        <div key={asset.id} className="record-preview-text record-preview-unit">
+          {text.slice(0, 220)}
         </div>
       ) : null;
     }
-    const src = a.previewRef ?? a.originalUrl;
+    const src = asset.previewRef ?? asset.originalUrl;
     return src ? (
       <img
-        key={a.id}
+        key={asset.id}
         src={src}
         alt=""
-        className="record-preview-thumb"
+        className="record-preview-thumb record-preview-unit"
         onError={(e) => {
           e.currentTarget.style.display = 'none';
         }}
       />
     ) : null;
   };
+  const groupCard = (items: Asset[]) => {
+    const pick = (e: { stopPropagation: () => void }) => {
+      e.stopPropagation();
+      onAssetPick(items);
+    };
+    const hasText = items.some((item) => item.assetType === 'text');
+    const hasMedia = items.some((item) => item.assetType !== 'text');
+    const stackClass = hasText && hasMedia
+      ? 'record-preview-stack is-mixed'
+      : hasText
+        ? 'record-preview-stack is-text-only'
+        : 'record-preview-stack is-media-only';
+    return (
+      <button type="button" className="record-preview-item" onClick={pick}>
+        <div className={stackClass}>
+          {items.map(renderAssetPreview)}
+        </div>
+      </button>
+    );
+  };
   const col = (items: Asset[], label: string) => (
     <div className="record-preview-col">
       <div className="record-preview-label">{label}</div>
-      {items.length === 0 ? <div className="record-preview-empty">—</div> : items.map(cell)}
+      {items.length === 0 ? <div className="record-preview-empty">—</div> : groupCard(items)}
     </div>
   );
   const left = assets.filter((a) => a.role !== 'output');

@@ -1,4 +1,4 @@
-# ADR-0001：V1 採用 local-first Chrome Extension
+﻿# ADR-0001：V1 採用 local-first Chrome Extension
 
 ## Status
 
@@ -6,7 +6,7 @@ Accepted（2026-06-12）
 
 ## Context
 
-PromptTrace 的核心價值是「在 AI 工作流發生的當下，把 Prompt 與資產的對應關係留住」。capture 行為發生在瀏覽器頁面內（反白、右鍵），資料的敏感度高（使用者的 prompt 可能包含私有工作流、未發表內容）。
+PrompTrace 的核心價值是「在 AI 工作流發生的當下，把 Prompt 與資產的對應關係留住」。capture 行為發生在瀏覽器頁面內（反白、右鍵），資料的敏感度高（使用者的 prompt 可能包含私有工作流、未發表內容）。
 
 可選方案：(a) Chrome Extension + 本機儲存；(b) Web App + 後端；(c) 桌面 App。
 

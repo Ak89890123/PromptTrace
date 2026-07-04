@@ -4,6 +4,7 @@ import {
   backupFilename,
   createPromptTraceBackupZip,
   parsePromptTraceBackupZip,
+  promptTraceBackupMediaDownloadFilename,
   sanitizeBackupFileRecord,
   type BackupMediaEntry,
 } from '@/src/core/backup/archive';
@@ -11,18 +12,15 @@ import { ROLE_LABELS, type AssetRole } from '@/src/core/domain/enums';
 import { validateCategoryName } from '@/src/core/domain/validation';
 import { formatHotkeyFromEvent } from '@/src/core/hotkeys';
 import {
-  defaultSummarySystemPrompt,
   maskApiKey,
   SUMMARY_PROVIDER_LABELS,
   SUMMARY_PROVIDER_MODELS,
-  type SummaryPromptLanguage,
   type SummaryProvider,
 } from '@/src/core/summary';
 import {
   assetRepository,
   categoryRepository,
   fileRecordRepository,
-  modelPresetRepository,
   recordRepository,
   tagRepository,
 } from '@/src/storage/repositories';
@@ -398,9 +396,6 @@ function CategorySettings({
       <div className="spread">
         <div>
           <h2>{t.category}</h2>
-          <p className="muted">
-            {t.categoryHint}
-          </p>
         </div>
         <button onClick={resetBuiltinCategories}>{t.resetBuiltinCategories}</button>
       </div>
@@ -579,6 +574,7 @@ function SummarySettingsSection({
   const currentModel = summary.models[provider] ?? '';
   const isCustomModel = currentModel.length > 0 && !knownModels.includes(currentModel);
   const [usageRecords, setUsageRecords] = useState<LibraryRecord[]>([]);
+  const [systemPromptEdited, setSystemPromptEdited] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -630,16 +626,9 @@ function SummarySettingsSection({
       },
     });
   };
-  const defaultPromptForCurrentLanguage = defaultSummarySystemPrompt(language as SummaryPromptLanguage);
-  const applyDefaultPrompt = (promptLanguage: SummaryPromptLanguage) => {
-    patchSummary({
-      systemPrompt: defaultSummarySystemPrompt(promptLanguage),
-      systemPromptCustomized: false,
-    });
-  };
 
   return (
-    <section className="card settings-section">
+    <section className="card settings-section settings-summary-section">
       <div className="spread">
         <h2>{t.summary}</h2>
         <label className="row" style={{ gap: 6 }}>
@@ -652,7 +641,6 @@ function SummarySettingsSection({
           {t.enabled}
         </label>
       </div>
-      <p className="muted">{t.summaryHint}</p>
       <div className="settings-summary-config-row">
         <div className="settings-summary-config-panel">
           <h2>{t.summarySettings}</h2>
@@ -727,64 +715,65 @@ function SummarySettingsSection({
             />
             {t.autoSummary}
           </label>
-          <label className="settings-field">
-            <span className="muted">{t.scanIntervalMinutes}</span>
-            <input
-              type="number"
-              min={1}
-              value={summary.scanIntervalMinutes}
-              onChange={(e) => patchSummary({ scanIntervalMinutes: Number(e.target.value) })}
-              placeholder={t.exampleMinutes}
-            />
-          </label>
-          <label className="settings-field">
-            <span className="muted">{t.maxPerRun}</span>
-            <input
-              type="number"
-              min={1}
-              max={50}
-              value={summary.maxPerRun}
-              onChange={(e) => patchSummary({ maxPerRun: Number(e.target.value) })}
-            />
-          </label>
-          <label className="settings-field">
-            <span className="muted">{t.timeoutSeconds}</span>
-            <input
-              type="number"
-              min={5}
-              max={120}
-              value={Math.round(summary.timeoutMs / 1000)}
-              onChange={(e) => patchSummary({ timeoutMs: Number(e.target.value) * 1000 })}
-            />
-          </label>
+          <div
+            className={`settings-summary-schedule-fields${summary.autoEnabled ? '' : ' is-disabled'}`}
+            aria-disabled={!summary.autoEnabled}
+          >
+            <label className="settings-field">
+              <span className="muted">{t.scanIntervalMinutes}</span>
+              <input
+                type="number"
+                min={1}
+                value={summary.scanIntervalMinutes}
+                disabled={!summary.autoEnabled}
+                onChange={(e) => patchSummary({ scanIntervalMinutes: Number(e.target.value) })}
+                placeholder={t.exampleMinutes}
+              />
+            </label>
+            <label className="settings-field">
+              <span className="muted">{t.maxPerRun}</span>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={summary.maxPerRun}
+                disabled={!summary.autoEnabled}
+                onChange={(e) => patchSummary({ maxPerRun: Number(e.target.value) })}
+              />
+            </label>
+            <label className="settings-field">
+              <span className="muted">{t.timeoutSeconds}</span>
+              <input
+                type="number"
+                min={5}
+                max={120}
+                value={Math.round(summary.timeoutMs / 1000)}
+                disabled={!summary.autoEnabled}
+                onChange={(e) => patchSummary({ timeoutMs: Number(e.target.value) * 1000 })}
+              />
+            </label>
+          </div>
         </div>
       </div>
       <div className="settings-inner-divider" />
       <label className="settings-field settings-field-full">
-        <span className="muted">{t.systemPrompt}</span>
+        <span className="settings-field-title-row">
+          <span className="muted">{t.systemPrompt}</span>
+          {systemPromptEdited && <span className="settings-save-state">{t.saved.replace(/[.。]$/, '')}</span>}
+        </span>
         <textarea
           rows={6}
           value={summary.systemPrompt}
-          onChange={(e) => patchSummary({ systemPrompt: e.target.value, systemPromptCustomized: true })}
+          onChange={(e) => {
+            setSystemPromptEdited(true);
+            patchSummary({ systemPrompt: e.target.value, systemPromptCustomized: true });
+          }}
         />
       </label>
-      <p className="muted">{summary.systemPromptCustomized ? t.customPromptNotice : t.defaultPromptNotice}</p>
-      <div className="row" style={{ marginTop: 8 }}>
-        <button type="button" onClick={() => patchSummary({ systemPrompt: defaultPromptForCurrentLanguage, systemPromptCustomized: false })}>
-          {t.resetSystemPrompt}
-        </button>
-        <button type="button" onClick={() => applyDefaultPrompt('zh-TW')}>
-          {t.applyChinesePrompt}
-        </button>
-        <button type="button" onClick={() => applyDefaultPrompt('en-US')}>
-          {t.applyEnglishPrompt}
-        </button>
-      </div>
       <div className="settings-inner-divider" />
       <div className="settings-summary-dashboard">
         <div className="settings-summary-dashboard-head">
           <h2>{t.tokenDashboard}</h2>
-          <span className="muted">{t.tokenDashboardHint}</span>
         </div>
         <div className="settings-summary-metrics">
           <div>
@@ -873,13 +862,12 @@ async function mediaBlobForBackup(asset: Asset): Promise<{ blob: Blob; source: B
 }
 
 async function exportPromptTraceBackup(): Promise<{ records: number; mediaFiles: number }> {
-  const [records, assets, originalFileRecords, tags, categories, modelPresets] = await Promise.all([
+  const [records, assets, originalFileRecords, tags, categories] = await Promise.all([
     recordRepository.list(),
     assetRepository.list(),
     fileRecordRepository.list(),
     tagRepository.list(),
     categoryRepository.list(),
-    modelPresetRepository.list(),
   ]);
   const originalFileByAsset = new Map<string, FileRecord>();
   for (const fileRecord of originalFileRecords) {
@@ -939,7 +927,6 @@ async function exportPromptTraceBackup(): Promise<{ records: number; mediaFiles:
       fileRecords: Array.from(fileRecords.values()),
       tags,
       categories,
-      modelPresets,
       media,
     },
     mediaFiles,
@@ -953,7 +940,6 @@ async function restorePromptTraceBackup(file: File): Promise<{ records: number; 
   const mediaByFileRecord = new Map(parsed.data.media.map((entry) => [entry.fileRecordId, entry]));
 
   for (const category of parsed.data.categories ?? []) await categoryRepository.save(category);
-  for (const modelPreset of parsed.data.modelPresets ?? []) await modelPresetRepository.save(modelPreset);
   for (const record of parsed.data.records) await recordRepository.save(record);
   for (const asset of parsed.data.assets) await assetRepository.save(asset);
   for (const tag of parsed.data.tags ?? []) await tagRepository.save(tag);
@@ -976,7 +962,7 @@ async function restorePromptTraceBackup(file: File): Promise<{ records: number; 
     try {
       const downloadId = await chrome.downloads.download({
         url,
-        filename: `PromptTrace/${mediaEntry.recordId}/${mediaEntry.filename}`,
+        filename: promptTraceBackupMediaDownloadFilename(mediaEntry),
         conflictAction: 'uniquify',
         saveAs: false,
       });
@@ -1061,8 +1047,9 @@ function DataFilesSettingsSection({ t }: { t: UiText }) {
   );
 }
 
-const PROMPTTRACE_ROOT_FILE_REGEX = '[\\\\/]PromptTrace[\\\\/][^\\\\/]+$';
-const PROMPTTRACE_FILE_REGEX = '[\\\\/]PromptTrace[\\\\/]';
+const PROMPTRACE_FOLDER_REGEX = 'PrompTrace|PromptTrace';
+const PROMPTTRACE_ROOT_FILE_REGEX = `[\\\\/](${PROMPTRACE_FOLDER_REGEX})[\\\\/][^\\\\/]+$`;
+const PROMPTTRACE_FILE_REGEX = `[\\\\/](${PROMPTRACE_FOLDER_REGEX})[\\\\/]`;
 
 async function openPromptTraceFolder(): Promise<void> {
   const [rootItem] = await chrome.downloads.search({

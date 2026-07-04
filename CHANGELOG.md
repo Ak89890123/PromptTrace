@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 ## 0.3.0 — 2026-06-12
 
@@ -34,7 +34,7 @@ Initial V1 build.
 - 重複 / 重疊選取偵測 + Conflict Card
 - 兩步 wizard：多層分類（選填、可自訂、可快速新增）→ Model（選填 / Unknown / N.A. / Custom）
 - IndexedDB v1（7 stores）+ 內建分類 / model preset seed
-- 媒體下載到 Downloads/PromptTrace/{recordId}/、FileRecord 狀態追蹤、失敗 Error Card + 只保存來源 fallback
+- 媒體下載到 Downloads/PrompTrace/{recordId}/、FileRecord 狀態追蹤、失敗 Error Card + 只保存來源 fallback
 - Library Dashboard：搜尋、分類 / Model / 角色篩選、preview、notes、tags、補充資產（文字 / 拖放 / 上傳）
 - Copy Input / Output / Full Record Bundle + Floating Copy Tray fallback
 - Markdown / JSON export（可設定是否含 source / file path）

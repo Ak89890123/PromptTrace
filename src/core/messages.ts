@@ -47,11 +47,6 @@ export type CommitCaptureSessionMessage = {
   type: 'capture/commitSession';
   payload: {
     categoryId?: string | null;
-    modelPresetId?: string | null;
-    modelProvider?: string;
-    modelName?: string;
-    modelVersion?: string;
-    modelLabel?: string;
     title?: string;
   };
 };
@@ -136,8 +131,6 @@ export type GalleryRecord = {
   title?: string;
   categoryId?: string | null;
   categoryName?: string;
-  modelPresetId?: string | null;
-  modelLabel?: string;
   createdAt: string;
   assets: GalleryAsset[];
 };
@@ -156,17 +149,12 @@ export type DeleteRecordMessage = {
   payload: { recordId: string };
 };
 
-/** Content script → background: re-tag a saved record's category / model. */
+/** Content script → background: re-tag a saved record's category. */
 export type UpdateRecordMetaMessage = {
   type: 'library/updateRecordMeta';
   payload: {
     recordId: string;
     categoryId?: string | null;
-    modelPresetId?: string | null;
-    modelName?: string;
-    modelProvider?: string;
-    modelVersion?: string;
-    modelLabel?: string;
   };
 };
 

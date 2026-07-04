@@ -3,7 +3,8 @@
  * Future schema changes bump DB_VERSION and add steps in `migrate`.
  */
 
-export const DB_NAME = 'prompttrace';
+export const DB_NAME = 'promptrace';
+export const LEGACY_DB_NAME = 'prompttrace';
 export const DB_VERSION = 1;
 
 export const STORES = {
@@ -17,6 +18,7 @@ export const STORES = {
 } as const;
 
 export type StoreName = (typeof STORES)[keyof typeof STORES];
+const STORE_NAMES = Object.values(STORES) as StoreName[];
 
 function migrate(db: IDBDatabase, oldVersion: number): void {
   if (oldVersion < 1) {
@@ -58,13 +60,17 @@ function migrate(db: IDBDatabase, oldVersion: number): void {
 }
 
 let dbPromise: Promise<IDBDatabase> | null = null;
+let legacyMigrationPromise: Promise<void> | null = null;
 
 export function openDb(factory: IDBFactory = indexedDB): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
     const req = factory.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = (e) => migrate(req.result, e.oldVersion);
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const db = req.result;
+      migrateLegacyDb(factory, db).then(() => resolve(db), reject);
+    };
     req.onerror = () => reject(req.error);
   });
   return dbPromise;
@@ -73,6 +79,66 @@ export function openDb(factory: IDBFactory = indexedDB): Promise<IDBDatabase> {
 /** Test helper: reset the cached connection (used with fake-indexeddb). */
 export function resetDbCache(): void {
   dbPromise = null;
+  legacyMigrationPromise = null;
+}
+
+async function migrateLegacyDb(factory: IDBFactory, targetDb: IDBDatabase): Promise<void> {
+  if (!legacyMigrationPromise) legacyMigrationPromise = copyLegacyDb(factory, targetDb);
+  return legacyMigrationPromise;
+}
+
+async function copyLegacyDb(factory: IDBFactory, targetDb: IDBDatabase): Promise<void> {
+  const hasTargetData = await hasAnyStoreData(targetDb);
+  if (hasTargetData) return;
+
+  const legacyDb = await openRawDb(factory, LEGACY_DB_NAME);
+  try {
+    const hasLegacyData = await hasAnyStoreData(legacyDb);
+    if (!hasLegacyData) return;
+
+    const legacyData = new Map<StoreName, unknown[]>();
+    await tx(legacyDb, STORE_NAMES, 'readonly', async (transaction) => {
+      await Promise.all(
+        STORE_NAMES.map(async (store) => {
+          if (!legacyDb.objectStoreNames.contains(store)) {
+            legacyData.set(store, []);
+            return;
+          }
+          legacyData.set(store, await reqAsPromise(transaction.objectStore(store).getAll()));
+        }),
+      );
+    });
+
+    await tx(targetDb, STORE_NAMES, 'readwrite', async (transaction) => {
+      await Promise.all(
+        STORE_NAMES.flatMap((store) =>
+          (legacyData.get(store) ?? []).map((item) => reqAsPromise(transaction.objectStore(store).put(item))),
+        ),
+      );
+    });
+  } finally {
+    legacyDb.close();
+  }
+}
+
+function openRawDb(factory: IDBFactory, name: string): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = factory.open(name, DB_VERSION);
+    req.onupgradeneeded = (e) => migrate(req.result, e.oldVersion);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function hasAnyStoreData(db: IDBDatabase): Promise<boolean> {
+  return tx(db, STORE_NAMES, 'readonly', async (transaction) => {
+    for (const store of STORE_NAMES) {
+      if (!db.objectStoreNames.contains(store)) continue;
+      const count = await reqAsPromise(transaction.objectStore(store).count());
+      if (count > 0) return true;
+    }
+    return false;
+  });
 }
 
 export function tx<T>(

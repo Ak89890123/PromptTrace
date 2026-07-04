@@ -56,6 +56,24 @@
   max-width: 644px;
 }
 
+.settings-field-full textarea {
+  max-width: 100%;
+  min-width: 0;
+  resize: vertical;
+}
+
+.settings-field-title-row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pt-space-2);
+}
+
+.settings-save-state {
+  color: var(--pt-color-text-muted);
+  font-size: var(--pt-font-size-caption);
+  font-weight: 500;
+}
+
 .settings-subsection {
   margin-top: var(--pt-space-6);
   max-width: 644px;
@@ -106,6 +124,35 @@
   margin-bottom: 0;
 }
 
+.settings-summary-schedule-fields {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pt-space-5);
+  border-radius: var(--pt-radius-card);
+}
+
+.settings-summary-schedule-fields.is-disabled {
+  opacity: 0.72;
+}
+
+.settings-summary-schedule-fields.is-disabled::after {
+  content: '';
+  position: absolute;
+  inset: calc(var(--pt-space-2) * -1);
+  border-radius: var(--pt-radius-card);
+  background: rgba(120, 120, 128, 0.2);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  pointer-events: none;
+}
+
+.settings-summary-schedule-fields input:disabled {
+  cursor: not-allowed;
+  color: var(--pt-color-text-muted);
+  border-color: var(--pt-color-border);
+  background: var(--pt-surface-card-faint);
+}
+
 .settings-secret-preview {
   display: inline-flex;
   min-height: 34px;
@@ -117,6 +164,12 @@
 
 .settings-summary-dashboard {
   max-width: 644px;
+}
+
+.settings-summary-section .settings-field-full,
+.settings-summary-section .settings-inner-divider,
+.settings-summary-section .settings-summary-dashboard {
+  max-width: none;
 }
 
 .settings-summary-dashboard-head {

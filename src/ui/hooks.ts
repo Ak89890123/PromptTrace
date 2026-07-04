@@ -1,25 +1,20 @@
 import { useEffect, useState } from 'react';
-import type { ModelPreset, RecordCategory } from '../core/domain/entities';
-import { categoryRepository, modelPresetRepository } from '../storage/repositories';
+import type { RecordCategory } from '../core/domain/entities';
+import { categoryRepository } from '../storage/repositories';
 import { seedDefaults } from '../storage/seed';
 
-/** Load categories + model presets from IndexedDB (extension pages share the DB). */
+/** Load categories from IndexedDB (extension pages share the DB). */
 export function useTaxonomy(refreshKey = 0) {
   const [categories, setCategories] = useState<RecordCategory[]>([]);
-  const [presets, setPresets] = useState<ModelPreset[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       await seedDefaults();
-      const [cats, models] = await Promise.all([
-        categoryRepository.list(),
-        modelPresetRepository.list(),
-      ]);
+      const cats = await categoryRepository.list();
       if (!cancelled) {
         setCategories(cats.sort((a, b) => a.sortOrder - b.sortOrder));
-        setPresets(models.sort((a, b) => a.sortOrder - b.sortOrder));
         setLoaded(true);
       }
     })();
@@ -28,7 +23,7 @@ export function useTaxonomy(refreshKey = 0) {
     };
   }, [refreshKey]);
 
-  return { categories, presets, loaded };
+  return { categories, loaded };
 }
 
 /** Build a depth-first flattened tree for <select> / tree rendering. */

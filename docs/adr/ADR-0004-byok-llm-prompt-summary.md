@@ -1,4 +1,4 @@
-# ADR-0004: BYOK LLM prompt summary
+﻿# ADR-0004: BYOK LLM prompt summary
 
 ## Status
 
@@ -6,17 +6,17 @@ Accepted (2026-07-02)
 
 ## Context
 
-PromptTrace currently preserves a local-first privacy model: captured prompt records stay in the browser profile and local downloads, with no backend, account, telemetry, or LLM API calls by default. The next feature goal is to help users understand saved prompts faster by generating a short Chinese "summary" that explains what a prompt is for. This introduces optional outbound network calls, so the privacy boundary, key handling, trigger behavior, and output contract need an explicit decision before implementation.
+PrompTrace currently preserves a local-first privacy model: captured prompt records stay in the browser profile and local downloads, with no backend, account, telemetry, or LLM API calls by default. The next feature goal is to help users understand saved prompts faster by generating a short Chinese "summary" that explains what a prompt is for. This introduces optional outbound network calls, so the privacy boundary, key handling, trigger behavior, and output contract need an explicit decision before implementation.
 
 ## Decision
 
-PromptTrace will support an optional BYOK prompt-summary feature. Users can choose one fixed provider from OpenAI, Gemini, Claude, or OpenRouter, paste their own API key, choose a provider model from a maintained list or enter a custom model id, and run summaries manually or through an automatic interval.
+PrompTrace will support an optional BYOK prompt-summary feature. Users can choose one fixed provider from OpenAI, Gemini, Claude, or OpenRouter, paste their own API key, choose a provider model from a maintained list or enter a custom model id, and run summaries manually or through an automatic interval.
 
 The extension remains local-first by default. No summary request is sent unless the user enables and configures this feature. Summary calls are owned by the background service worker, not content scripts. Requests send prompt text only; records without prompt text are skipped instead of calling an API. Images, videos, local paths, download paths, page assets, and unrelated capture metadata are not sent.
 
 The summary contract has a maintained default system prompt that asks the model to produce a concise Chinese explanation of the prompt's purpose, expected output, important constraints, and searchable hints. Advanced users may edit this system prompt in local settings, while the response parser still validates the provider output through a stable JSON schema. Single cards can be summarized again manually. Automatic scans only process cards that have never been summarized.
 
-PromptTrace will store provider-returned token usage with each generated summary when the selected API returns it. The settings UI can aggregate this into a local token dashboard so users can understand input, output, and total token usage. If a provider response omits usage data, PromptTrace should show that the value is unavailable instead of inventing a precise local estimate.
+PrompTrace will store provider-returned token usage with each generated summary when the selected API returns it. The settings UI can aggregate this into a local token dashboard so users can understand input, output, and total token usage. If a provider response omits usage data, PrompTrace should show that the value is unavailable instead of inventing a precise local estimate.
 
 Provider API details, model lists, and headers must be verified against current official documentation during implementation because these APIs change over time. Stored API keys must be masked in the settings UI and must not be logged, exported, or committed.
 
@@ -28,7 +28,7 @@ Provider API details, model lists, and headers must be verified against current 
 - Cons: Does not solve the main workflow problem of quickly understanding many saved prompts.
 - Why not: The feature goal is specifically to automate a concise purpose summary when the user opts in.
 
-### Add a PromptTrace backend proxy
+### Add a PrompTrace backend proxy
 
 - Pros: Can centralize provider integrations and hide provider differences.
 - Cons: Breaks the current no-backend architecture, creates account/billing/security obligations, and introduces server-side data handling.
@@ -57,7 +57,7 @@ Provider API details, model lists, and headers must be verified against current 
 
 ### Negative
 
-- PromptTrace gains optional network behavior, which weakens the simplicity of the original "no LLM API calls" invariant unless the opt-in boundary is kept clear.
+- PrompTrace gains optional network behavior, which weakens the simplicity of the original "no LLM API calls" invariant unless the opt-in boundary is kept clear.
 - Provider APIs and model ids can drift, so implementation must avoid hardcoding assumptions without verification.
 - API key storage and masking require careful handling even though the feature is local-only.
 

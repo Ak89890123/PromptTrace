@@ -3,7 +3,6 @@ import type {
   ExportRecordEntry,
   FileRecord,
   LibraryRecord,
-  ModelPreset,
   RecordCategory,
   Tag,
 } from '../core/domain/entities';
@@ -43,13 +42,6 @@ export const categoryRepository = {
   save: (c: RecordCategory) => put(STORES.recordCategories, c),
   delete: (id: string) => remove(STORES.recordCategories, id),
   children: (parentId: string) => getByIndex<RecordCategory>(STORES.recordCategories, 'parentId', parentId),
-};
-
-export const modelPresetRepository = {
-  list: () => getAll<ModelPreset>(STORES.modelPresets),
-  get: (id: string) => getOne<ModelPreset>(STORES.modelPresets, id),
-  save: (m: ModelPreset) => put(STORES.modelPresets, m),
-  delete: (id: string) => remove(STORES.modelPresets, id),
 };
 
 export const recordRepository = {

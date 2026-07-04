@@ -1,6 +1,6 @@
-# PromptTrace Design System
+﻿# PrompTrace Design System
 
-PromptTrace is a local-first Chrome extension for capturing AI workflow material into a private local library. The UI system should make repeated capture, review, copy, and cleanup workflows fast without making the host page feel owned by the extension.
+PrompTrace is a local-first Chrome extension for capturing AI workflow material into a private local library. The UI system should make repeated capture, review, copy, and cleanup workflows fast without making the host page feel owned by the extension.
 
 ## Product UI Principles
 

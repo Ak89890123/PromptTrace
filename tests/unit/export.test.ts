@@ -1,15 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { Asset, FileRecord, LibraryRecord, Tag } from '@/src/core/domain/entities';
-import { exportMarkdown, modelLabelOf, type ExportContext } from '@/src/core/export/markdown';
+import { exportMarkdown, type ExportContext } from '@/src/core/export/markdown';
 import { exportJson } from '@/src/core/export/json';
 
 const record: LibraryRecord = {
   id: 'rec-1234567890',
   categoryId: 'cat-1',
-  modelPresetId: null,
-  modelLabel: undefined,
-  modelProvider: 'Anthropic',
-  modelName: 'Claude',
   title: 'My capture',
   notes: 'some notes',
   sourcePageUrl: 'https://chat.example/page',
@@ -53,7 +49,7 @@ const fileRecords: FileRecord[] = [
     id: 'f1',
     assetId: 'a3',
     filename: 'a3-img.png',
-    localPath: 'C:/Downloads/PromptTrace/rec/img.png',
+    localPath: 'C:/Downloads/PrompTrace/rec/img.png',
     downloadStatus: 'completed',
     deleteStatus: 'not_deleted',
     updatedAt: '',
@@ -75,7 +71,7 @@ describe('markdown export', () => {
     const md = exportMarkdown(ctx);
     expect(md).toContain('# My capture');
     expect(md).toContain('## Category\n生文 / 改寫');
-    expect(md).toContain('## Model\nAnthropic Claude');
+    expect(md).not.toContain('## Model');
     expect(md).toContain('## Input\nwrite a poem');
     expect(md).toContain('## Output\nroses are red');
     expect(md).toContain('#poetry');
@@ -88,10 +84,9 @@ describe('markdown export', () => {
     const md = exportMarkdown({
       ...ctx,
       categoryPath: 'Uncategorized',
-      record: { ...record, modelProvider: undefined, modelName: undefined, title: undefined, notes: undefined },
+      record: { ...record, title: undefined, notes: undefined },
     });
     expect(md).toContain('## Category\nUncategorized');
-    expect(md).toContain('## Model\nNot specified');
     expect(md).toContain('## Notes\n_None_');
   });
 
@@ -101,21 +96,14 @@ describe('markdown export', () => {
     expect(md).not.toContain('C:/Downloads');
   });
 
-  it('modelLabelOf prefers explicit label', () => {
-    expect(modelLabelOf({ ...record, modelLabel: 'Unknown' })).toBe('Unknown');
-    expect(modelLabelOf({ ...record, modelProvider: undefined, modelName: undefined })).toBe(
-      'Not specified',
-    );
-  });
 });
 
 describe('json export', () => {
-  it('includes record, category path, model, assets, files, tags, source, notes', () => {
+  it('includes record, category path, assets, files, tags, source, notes', () => {
     const json = exportJson(ctx);
     expect(json.exportVersion).toBe(1);
     expect(json.record.id).toBe(record.id);
     expect(json.categoryPath).toBe('生文 / 改寫');
-    expect(json.model.label).toBe('Anthropic Claude');
     expect(json.assets).toHaveLength(3);
     expect(json.fileRecords).toHaveLength(1);
     expect(json.tags).toEqual(['poetry']);

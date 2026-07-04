@@ -22,7 +22,6 @@ import {
   categoryRepository,
   deleteRecordCascade,
   fileRecordRepository,
-  modelPresetRepository,
   recordRepository,
 } from '@/src/storage/repositories';
 import { seedDefaults } from '@/src/storage/seed';
@@ -93,7 +92,7 @@ export default defineBackground(() => {
   // ---------- setup ----------
   chrome.runtime.onInstalled.addListener(() => {
     createContextMenus().catch(() => {});
-    seedDefaults().catch((e) => console.error('[PromptTrace] seed failed', e));
+    seedDefaults().catch((e) => console.error('[PrompTrace] seed failed', e));
     syncSummaryAlarm().catch(() => {});
   });
   chrome.runtime.onStartup.addListener(() => {
@@ -261,7 +260,7 @@ export default defineBackground(() => {
         url,
         filename: downloadPathFor(recordId, fileRecord),
         conflictAction: 'uniquify',
-        // Keep media capture seamless: files always go under Downloads/PromptTrace.
+        // Keep media capture seamless: files always go under Downloads/PrompTrace.
         saveAs: false,
       });
       await fileRecordRepository.save({
@@ -679,13 +678,9 @@ export default defineBackground(() => {
 
         case 'taxonomy/get': {
           await seedDefaults().catch(() => {});
-          const [categories, presets] = await Promise.all([
-            categoryRepository.list(),
-            modelPresetRepository.list(),
-          ]);
+          const categories = await categoryRepository.list();
           return sendResponse({
             categories: categories.sort((a, b) => a.sortOrder - b.sortOrder),
-            presets: presets.sort((a, b) => a.sortOrder - b.sortOrder),
           });
         }
 
@@ -733,8 +728,6 @@ export default defineBackground(() => {
               title: r.title,
               categoryId: r.categoryId,
               categoryName: r.categoryId ? catName.get(r.categoryId) : undefined,
-              modelPresetId: r.modelPresetId,
-              modelLabel: r.modelLabel || r.modelName || undefined,
               createdAt: r.createdAt,
               assets: (assetsByRecord.get(r.id) ?? [])
                 .slice()
@@ -768,17 +761,9 @@ export default defineBackground(() => {
           const rec = await recordRepository.get(message.payload.recordId);
           if (!rec) return sendResponse({ ok: false });
           const p = message.payload;
-          // Only overwrite the model fields when the editor actually sent them,
-          // so editing just the category never wipes a custom model label.
-          const updateModel = 'modelPresetId' in p;
           await recordRepository.save({
             ...rec,
             categoryId: 'categoryId' in p ? (p.categoryId ?? null) : rec.categoryId,
-            modelPresetId: updateModel ? (p.modelPresetId ?? null) : rec.modelPresetId,
-            modelName: updateModel ? p.modelName : rec.modelName,
-            modelProvider: updateModel ? p.modelProvider : rec.modelProvider,
-            modelVersion: updateModel ? p.modelVersion : rec.modelVersion,
-            modelLabel: updateModel ? p.modelLabel : rec.modelLabel,
             updatedAt: new Date().toISOString(),
           });
           return sendResponse({ ok: true });

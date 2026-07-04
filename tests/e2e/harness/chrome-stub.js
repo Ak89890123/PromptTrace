@@ -61,9 +61,6 @@
               { id: 'c1', parentId: null, name: '生文', isBuiltin: true, isActive: true, sortOrder: 0 },
               { id: 'c2', parentId: 'c1', name: '改寫', isBuiltin: false, isActive: true, sortOrder: 0 },
             ],
-            presets: [
-              { id: 'p1', modelName: 'Claude', provider: 'Anthropic', isActive: true, isDefault: false, sortOrder: 0 },
-            ],
           };
         }
         return { ok: true };

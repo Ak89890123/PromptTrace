@@ -25,7 +25,7 @@ const assets: Asset[] = [
 ];
 
 const files: FileRecord[] = [
-  { id: 'f1', assetId: 'a5', filename: 'in.png', localPath: 'D/PromptTrace/r1/in.png', downloadStatus: 'completed', deleteStatus: 'not_deleted', updatedAt: '' },
+  { id: 'f1', assetId: 'a5', filename: 'in.png', localPath: 'D/PrompTrace/r1/in.png', downloadStatus: 'completed', deleteStatus: 'not_deleted', updatedAt: '' },
 ];
 
 describe('copy bundles', () => {
@@ -33,7 +33,7 @@ describe('copy bundles', () => {
     const b = composeInputBundle(assets, files);
     expect(b.text).toContain('the prompt');
     expect(b.text).toContain('ref text');
-    expect(b.text).toContain('D/PromptTrace/r1/in.png'); // local path preferred
+    expect(b.text).toContain('D/PrompTrace/r1/in.png'); // local path preferred
     expect(b.text).not.toContain('the answer');
     expect(b.text).not.toContain('bad stuff');
     expect(b.mediaAssets.map((m) => m.id)).toEqual(['a5']);
@@ -53,10 +53,10 @@ describe('copy bundles', () => {
     expect(composeInputBundle(textOnly, []).needsTrayFallback).toBe(false);
   });
 
-  it('full record includes category, model, all roles, source, notes', () => {
-    const b = composeFullRecord({ ...record, modelLabel: 'Claude' }, assets, files, '生文');
+  it('full record includes category, all roles, source, notes', () => {
+    const b = composeFullRecord(record, assets, files, '生文');
     expect(b.text).toContain('Category: 生文');
-    expect(b.text).toContain('Model: Claude');
+    expect(b.text).not.toContain('Model:');
     expect(b.text).toContain('the prompt');
     expect(b.text).toContain('ref text');
     expect(b.text).toContain('bad stuff');

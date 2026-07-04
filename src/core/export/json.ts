@@ -1,18 +1,10 @@
 import type { ExportContext } from './markdown';
-import { modelLabelOf } from './markdown';
 
 export type JsonExport = {
   exportVersion: 1;
   exportedAt: string;
   record: ExportContext['record'];
   categoryPath: string;
-  model: {
-    presetId?: string | null;
-    provider?: string;
-    name?: string;
-    version?: string;
-    label: string;
-  };
   assets: ExportContext['assets'];
   fileRecords: ExportContext['fileRecords'];
   tags: string[];
@@ -21,7 +13,6 @@ export type JsonExport = {
 };
 
 export function exportJson(ctx: ExportContext): JsonExport {
-  const { record } = ctx;
   const includeSource = ctx.includeSource ?? true;
   const fileRecords = (ctx.includeFilePath ?? true)
     ? ctx.fileRecords
@@ -29,22 +20,15 @@ export function exportJson(ctx: ExportContext): JsonExport {
   return {
     exportVersion: 1,
     exportedAt: new Date().toISOString(),
-    record,
+    record: ctx.record,
     categoryPath: ctx.categoryPath || 'Uncategorized',
-    model: {
-      presetId: record.modelPresetId ?? null,
-      provider: record.modelProvider,
-      name: record.modelName,
-      version: record.modelVersion,
-      label: modelLabelOf(record),
-    },
     assets: ctx.assets,
     fileRecords,
     tags: ctx.tags.map((t) => t.name),
     source: includeSource
-      ? { url: record.sourcePageUrl, title: record.sourcePageTitle }
+      ? { url: ctx.record.sourcePageUrl, title: ctx.record.sourcePageTitle }
       : null,
-    notes: record.notes ?? null,
+    notes: ctx.record.notes ?? null,
   };
 }
 

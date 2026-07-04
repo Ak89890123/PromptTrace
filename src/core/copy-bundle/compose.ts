@@ -1,6 +1,5 @@
 import type { Asset, FileRecord, LibraryRecord } from '../domain/entities';
 import type { AssetRole } from '../domain/enums';
-import { modelLabelOf } from '../export/markdown';
 
 export type CopyBundle = {
   /** Plain text payload that goes to the clipboard. */
@@ -67,9 +66,8 @@ export function composeFullRecord(
   };
   const media = sorted(assets).filter((a) => a.assetType !== 'text');
   const text = [
-    `# ${record.title ?? 'PromptTrace Record'}`,
+    `# ${record.title ?? 'PrompTrace Record'}`,
     `Category: ${categoryPath || 'Uncategorized'}`,
-    `Model: ${modelLabelOf(record)}`,
     '',
     roleBlock('Input', ['input']),
     '',

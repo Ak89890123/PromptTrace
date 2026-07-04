@@ -223,7 +223,7 @@ async function callOpenRouter(
     headers: {
       Authorization: `Bearer ${request.apiKey}`,
       'Content-Type': 'application/json',
-      'X-OpenRouter-Title': 'PromptTrace',
+      'X-OpenRouter-Title': 'PrompTrace',
     },
     body: JSON.stringify({
       model: request.model,

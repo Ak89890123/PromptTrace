@@ -1,6 +1,6 @@
-# PromptTrace
+﻿# PrompTrace
 
-**PromptTrace 是一個 local-first Chrome Extension，讓你在 AI 工作流中選取文字、圖片、影片，標記為 Input / Input Reference / Negative / Output，並保存成可搜尋、可預覽、可複製、可匯出、可連動刪除本地檔案的 Prompt Asset Library。**
+**PrompTrace 是一個 local-first Chrome Extension，讓你在 AI 工作流中選取文字、圖片、影片，標記為 Input / Input Reference / Negative / Output，並保存成可搜尋、可預覽、可複製、可匯出、可連動刪除本地檔案的 Prompt Asset Library。**
 
 不是 LLM 工具、不是 prompt 生成器、不是下載器、沒有後端、沒有帳號、沒有雲端同步。
 
@@ -17,7 +17,7 @@
 1. 反白文字 → 選取處直接浮出角色按鈕（或按自訂快捷鍵 Alt+1～4 立即加入）；圖片 / 影片用右鍵選單。
 2. 頁面出現角色顏色框線；滑鼠靠近頁面右緣，玻璃質感漂浮面板自動展開顯示本次選取。
 3. 在面板中調整角色、按 ✓ → 選填分類與 Model metadata → 保存。
-4. 文字進 IndexedDB，媒體下載到 `Downloads/PromptTrace/`，Library 中可搜尋、預覽、複製、匯出、刪除。
+4. 文字進 IndexedDB，媒體下載到 `Downloads/PrompTrace/`，Library 中可搜尋、預覽、複製、匯出、刪除。
 
 ## Features
 
@@ -76,7 +76,7 @@ npm test         # unit + integration tests
 ## Usage
 
 1. 在任何網頁反白文字 → 按召喚鍵（預設 **Alt+S**）→ 選取處浮出角色選項，點一下即加入（也可在 Settings 改成反白後自動出現，或用右鍵選單）。
-2. 圖片 / 影片 → 游標移上去按召喚鍵（只會出現合法角色），或右鍵 → **PromptTrace：加入圖片 / 加入影片**。
+2. 圖片 / 影片 → 游標移上去按召喚鍵（只會出現合法角色），或右鍵 → **PrompTrace：加入圖片 / 加入影片**。
 3. 滑鼠移到頁面右緣 → 漂浮面板展開，可調整角色（圖片 / 影片不能選 Negative）、移除項目。
 4. 按 **✓ 保存** → Step 1 選分類（可不選）→ Step 2 確認 Model metadata（可不選）。
 5. 開 **Library** 搜尋、預覽、產生摘要、調整分類 / 模型 / 角色、刪除。
@@ -87,14 +87,14 @@ npm test         # unit + integration tests
 | 權限 | 用途 |
 | --- | --- |
 | `<all_urls>` / `activeTab` / `scripting` | 讀取你主動選取的文字與右鍵選到的媒體 URL、畫 overlay 框線。不讀其他內容。 |
-| `contextMenus` | 提供右鍵「加入 PromptTrace」選單。 |
-| `downloads` | 把媒體下載到 `Downloads/PromptTrace/`；刪除 Record 時可選擇刪除這些檔案。 |
+| `contextMenus` | 提供右鍵「加入 PrompTrace」選單。 |
+| `downloads` | 把媒體下載到 `Downloads/PrompTrace/`；刪除 Record 時可選擇刪除這些檔案。 |
 | `storage` | 保存設定（角色顏色、匯出偏好）。 |
 | `clipboardWrite` | 頁內 Gallery 複製 prompt / 圖片。 |
 
 ## Local-first Privacy Note
 
-- 所有資料（Prompt 文字、metadata、檔案索引）保存在本機：IndexedDB + `Downloads/PromptTrace/`。
+- 所有資料（Prompt 文字、metadata、檔案索引）保存在本機：IndexedDB + `Downloads/PrompTrace/`。
 - 不上傳任何資料、不呼叫任何 LLM API、不蒐集 analytics、無帳號、無雲端。
 - 本地檔案路徑只存在本機資料庫中，匯出時可在 Settings 關閉「包含檔案路徑」。
 
@@ -240,7 +240,7 @@ MIT — 見 [LICENSE](LICENSE)。
 **下次方向：**
 - **全部改動尚未在 Chrome 實機驗證**。先：移除舊擴充 → 重新載入 `.output/chrome-mv3/` → 對頁面按 F5，逐項驗：
   - 工具列圖示變橘 P；點圖示出現設定彈出框（非側欄）
-  - content script 仍會注入（EdgePanel 現在是唯一擷取 UI、無 fallback）：Console 看 `[PromptTrace]`、Elements 找 `<prompttrace-ui>`
+  - content script 仍會注入（EdgePanel 現在是唯一擷取 UI、無 fallback）：Console 看 `[PrompTrace]`、Elements 找 `<prompttrace-ui>`
   - Gallery：空狀態 hover 右緣浮出、點 prompt 會複製（注意 `navigator.clipboard` 是否被該頁擋）
   - overlay 追蹤：ChatGPT 框選後捲動，框跟著文字移動
   - 圖片 / 影片 summon 工具列只剩 Input Reference / Output、無破方框
@@ -265,5 +265,5 @@ MIT — 見 [LICENSE](LICENSE)。
   - 最可能原因 A：MV3 content script 不注入載入前已開啟的分頁 → 載入擴充功能後對頁面按 **F5** 再測試
   - 最可能原因 B：`createShadowRootUi` 建立失敗（shadow host 沒 append 到 DOM）→ 檢查 `entrypoints/content/index.tsx` 的 `main()` 是否有 console.error
   - 最可能原因 C：CSS `cssInjectionMode: 'ui'` 失敗 → UI render 但不可見
-  - 驗證方法：載入後 F5，開 DevTools Console 看是否有 `[PromptTrace]` 或 error，再看 Elements 是否有 `<prompttrace-ui>` shadow host
+  - 驗證方法：載入後 F5，開 DevTools Console 看是否有 `[PrompTrace]` 或 error，再看 Elements 是否有 `<prompttrace-ui>` shadow host
 - 確認後視情況修 bug 或完成 visual QA

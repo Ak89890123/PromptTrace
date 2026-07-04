@@ -48,7 +48,7 @@ export default function App() {
       <div className="pop-head">
         <span className="pop-title">
           <img className="pop-logo" src="/icon/128.png" alt="" />
-          PromptTrace
+          PrompTrace
         </span>
       </div>
 

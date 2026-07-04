@@ -205,19 +205,22 @@ body {
 }
 
 .record-card {
-  display: flex;
-  flex-direction: column;
-  min-height: 340px;
+  display: grid;
+  grid-template-rows: 24px 44px minmax(0, 1fr) 26px;
+  row-gap: 10px;
+  height: 360px;
   width: 100%;
   padding: var(--pt-space-8);
   text-align: left;
+  cursor: pointer;
   background: var(--pt-surface-elevated);
   border: 1px solid var(--pt-stroke-soft);
   border-radius: var(--pt-radius-thumb);
   box-shadow: var(--pt-shadow-panel);
 }
 
-.record-card:hover {
+.record-card:hover,
+.record-card:focus-visible {
   border-color: var(--pt-stroke-hover);
   background: var(--pt-surface-record-hover);
 }
@@ -240,14 +243,14 @@ body {
 }
 
 .record-card-summary-slot {
-  min-height: 92px;
-  margin: var(--pt-space-6) 0 var(--pt-space-5);
+  min-height: 0;
+  margin: 0;
 }
 
 .record-card-summary {
-  max-height: 92px;
+  height: 100%;
   overflow: hidden;
-  padding: var(--pt-space-4);
+  padding: var(--pt-space-3) var(--pt-space-4);
   border-left: 3px solid var(--pt-stroke-success-strong);
   border-radius: var(--pt-radius-kbd);
   background: var(--pt-surface-card-faint);
@@ -303,16 +306,51 @@ body {
   font-size: var(--pt-font-size-caption);
 }
 
+.asset-text-edit {
+  margin: var(--pt-space-2) 0;
+}
+
+.asset-text-editor {
+  display: block;
+  width: 100%;
+  min-height: 78px;
+  max-height: 220px;
+  margin: 0;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.asset-text-edit-status {
+  display: inline-block;
+  margin-top: var(--pt-space-2);
+  color: var(--pt-color-text-muted);
+  font-size: var(--pt-font-size-caption);
+}
+
 .record-card-footer {
-  margin-top: auto;
-  padding-top: var(--pt-space-6);
+  min-height: 26px;
+  margin-top: 0;
+  padding-top: 0;
+  align-items: end;
+}
+
+.record-card-footer span:first-child:empty {
+  visibility: hidden;
+  border: 0;
+  padding: 0;
+}
+
+.record-card-footer span:last-child {
+  margin-left: auto;
 }
 
 .record-preview {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--pt-space-5);
-  margin: var(--pt-space-1) 0 var(--pt-space-6);
+  height: 100%;
+  min-height: 0;
+  margin: 0;
 }
 
 .record-preview.is-output-only {
@@ -320,42 +358,99 @@ body {
 }
 
 .record-preview-col {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pt-space-3);
+  display: grid;
+  grid-template-rows: 14px minmax(0, 1fr);
+  gap: 8px;
+  min-height: 0;
   min-width: 0;
 }
 
 .record-preview-label {
+  display: flex;
+  align-items: center;
+  height: 14px;
   color: var(--pt-color-text-muted);
   font-size: var(--pt-font-size-micro);
   font-weight: 800;
+  line-height: 14px;
   text-transform: uppercase;
 }
 
+.record-preview-item {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  text-align: left;
+  cursor: copy;
+  border: 0;
+  background: transparent;
+}
+
+.record-preview-item:hover,
+.record-preview-item:focus-visible {
+  outline: 1px solid var(--pt-stroke-accent-strong);
+  outline-offset: 2px;
+}
+
+.record-preview-stack {
+  display: grid;
+  gap: var(--pt-space-2);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: var(--pt-space-2);
+  background: var(--pt-surface-card-faint);
+  border: 1px solid var(--pt-stroke-soft);
+  border-radius: var(--pt-radius-thumb);
+}
+
+.record-preview-stack.is-text-only {
+  grid-auto-rows: minmax(0, 1fr);
+}
+
+.record-preview-stack.is-media-only {
+  grid-auto-rows: minmax(0, 1fr);
+}
+
+.record-preview-stack.is-mixed {
+  grid-template-rows: minmax(54px, 0.38fr) minmax(0, 0.62fr);
+}
+
 .record-preview-text {
-  max-height: 114px;
+  width: 100%;
+  min-height: 0;
+  max-height: none;
   overflow: hidden;
   padding: var(--pt-space-4);
   border-left: 3px solid var(--pt-stroke-accent-muted);
   border-radius: var(--pt-radius-kbd);
   background: var(--pt-surface-input);
   color: var(--pt-color-text-secondary);
+  display: -webkit-box;
   font-size: var(--pt-font-size-control);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
   line-height: 1.48;
+}
+
+.record-preview-stack.is-mixed .record-preview-text {
+  -webkit-line-clamp: 3;
 }
 
 .record-preview-thumb {
   display: block;
   width: 100%;
-  height: 160px;
-  object-fit: cover;
-  border-radius: var(--pt-radius-thumb);
-  background: var(--pt-surface-input-strong);
+  height: 100%;
+  min-height: 0;
+  object-fit: contain;
+  border-radius: var(--pt-radius-kbd);
+  background: var(--pt-surface-input);
 }
 
 .record-preview-empty {
-  min-height: 70px;
+  height: 100%;
+  min-height: 0;
   border: 1px dashed var(--pt-stroke-muted);
   border-radius: var(--pt-radius-thumb);
   color: var(--pt-color-text-disabled);

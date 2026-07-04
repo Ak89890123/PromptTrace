@@ -1,6 +1,6 @@
-import { test, expect } from './support/extension';
+﻿import { test, expect } from './support/extension';
 
-// Verifies the wrap-up-log item: "content script 仍注入 (Console [PromptTrace],
+// Verifies the wrap-up-log item: "content script 仍注入 (Console [PrompTrace],
 // Elements <prompttrace-ui>)" — now automated.
 test('content script injects shadow UI + overlay container on an http page', async ({ context }) => {
   const page = await context.newPage();

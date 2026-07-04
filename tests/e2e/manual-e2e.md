@@ -1,4 +1,4 @@
-# Manual E2E Test Script
+﻿# Manual E2E Test Script
 
 每次發版前手動跑一遍。前置：`npm run build`、Chrome 載入 `.output/chrome-mv3`。
 
@@ -23,7 +23,7 @@
 | 1 | 右鍵圖片 → 加入圖片 | Side Panel 出現 Image item，含縮圖；Negative 按鈕 disabled 且有說明 tooltip |
 | 2 | 點 Input | 框線變青 |
 | 3 | ✓ → 分類選「生圖」→ Model 選 Custom 輸入名稱 | 保存成功 |
-| 4 | 檢查 Downloads/PromptTrace/{recordId}/ | 圖片檔存在 |
+| 4 | 檢查 Downloads/PrompTrace/{recordId}/ | 圖片檔存在 |
 | 5 | Library 開 record | 圖片 preview 顯示；FileRecord 狀態 completed 且有路徑 |
 | 6 | Library 開 record | 圖片角色、preview 與「位置」按鈕顯示正常，不直接顯示長路徑 |
 
@@ -69,5 +69,5 @@
 | 3 | 新增自訂 model → 回 capture 流程 | Step 2 可選到 |
 | 4 | 改 Input 角色顏色 | 新框線用新顏色 |
 | 5 | 關閉 overlay 開關 | 頁面不再畫框（session 照常運作） |
-| 6 | 備份與還原 → 匯出紀錄庫 ZIP | 下載 `prompttrace-backup-YYYY-MM-DD.zip`，內含 `prompttrace-manifest.json`、`records.json` 與可取得的 media 檔 |
-| 7 | 備份與還原 → 匯入剛剛的 ZIP | 紀錄合併回 IndexedDB；media 檔重新寫入 `Downloads/PromptTrace/{recordId}/` |
+| 6 | 備份與還原 → 匯出紀錄庫 ZIP | 下載 `promptrace-backup-YYYY-MM-DD.zip`，內含 `promptrace-manifest.json`、`records.json` 與可取得的 media 檔 |
+| 7 | 備份與還原 → 匯入剛剛的 ZIP | 紀錄合併回 IndexedDB；media 檔重新寫入 `Downloads/PrompTrace/{recordId}/` |

@@ -7,7 +7,6 @@ import {
   safeFilename,
   validateCategoryName,
   validateCategoryTree,
-  validateModelPreset,
   validatePendingAsset,
   wouldCreateCycle,
 } from '@/src/core/domain/validation';
@@ -114,13 +113,6 @@ describe('category tree validation', () => {
     expect(validateCategoryName('生圖').ok).toBe(true);
     expect(validateCategoryName('   ').ok).toBe(false);
     expect(validateCategoryName('x'.repeat(61)).ok).toBe(false);
-  });
-});
-
-describe('model preset validation', () => {
-  it('requires a name', () => {
-    expect(validateModelPreset({ modelName: 'Claude' }).ok).toBe(true);
-    expect(validateModelPreset({ modelName: ' ' }).ok).toBe(false);
   });
 });
 

@@ -1,4 +1,4 @@
-# ADR-0003：使用 IndexedDB + chrome.downloads
+﻿# ADR-0003：使用 IndexedDB + chrome.downloads
 
 ## Status
 
@@ -16,7 +16,7 @@ Accepted（2026-06-12）
 ## Decision
 
 - **結構化資料用 IndexedDB**（7 個 stores、version 1 migration、明確 indexes）。chrome.storage.local 只放輕量 UI settings。
-- **媒體用 chrome.downloads** 下載到固定子資料夾 `Downloads/PromptTrace/{recordId}/`，用 FileRecord 追蹤 downloadId / localPath / 狀態，刪除時用 `downloads.removeFile`。
+- **媒體用 chrome.downloads** 下載到固定子資料夾 `Downloads/PrompTrace/{recordId}/`，用 FileRecord 追蹤 downloadId / localPath / 狀態，刪除時用 `downloads.removeFile`。
 
 ## Consequences
 

@@ -54,7 +54,8 @@ export const DEFAULT_SETTINGS: DisplaySettings = {
   summary: DEFAULT_SUMMARY_SETTINGS,
 };
 
-const SETTINGS_KEY = 'prompttrace:settings';
+const SETTINGS_KEY = 'promptrace:settings';
+const LEGACY_SETTINGS_KEY = 'prompttrace:settings';
 
 function withDefaults(stored: Partial<DisplaySettings> | undefined): DisplaySettings {
   if (!stored) return DEFAULT_SETTINGS;
@@ -77,8 +78,16 @@ function withDefaults(stored: Partial<DisplaySettings> | undefined): DisplaySett
 
 export async function loadSettings(): Promise<DisplaySettings> {
   try {
-    const data = await chrome.storage.local.get(SETTINGS_KEY);
-    return withDefaults(data[SETTINGS_KEY] as Partial<DisplaySettings> | undefined);
+    const data = await chrome.storage.local.get([SETTINGS_KEY, LEGACY_SETTINGS_KEY]);
+    const stored = data[SETTINGS_KEY] as Partial<DisplaySettings> | undefined;
+    if (stored) return withDefaults(stored);
+
+    const legacy = data[LEGACY_SETTINGS_KEY] as Partial<DisplaySettings> | undefined;
+    if (legacy) {
+      await chrome.storage.local.set({ [SETTINGS_KEY]: legacy });
+      return withDefaults(legacy);
+    }
+    return DEFAULT_SETTINGS;
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -90,8 +99,10 @@ export async function saveSettings(settings: DisplaySettings): Promise<void> {
 
 export function onSettingsChanged(cb: (s: DisplaySettings) => void): void {
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes[SETTINGS_KEY]) {
-      cb(withDefaults(changes[SETTINGS_KEY].newValue as Partial<DisplaySettings> | undefined));
+    if (area !== 'local') return;
+    const change = changes[SETTINGS_KEY] ?? changes[LEGACY_SETTINGS_KEY];
+    if (change) {
+      cb(withDefaults(change.newValue as Partial<DisplaySettings> | undefined));
     }
   });
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { CaptureSessionState } from '@/src/core/capture/session';
 import { canCommit, emptySession } from '@/src/core/capture/session';
-import type { ModelPreset, PendingAsset, RecordCategory } from '@/src/core/domain/entities';
+import type { PendingAsset, RecordCategory } from '@/src/core/domain/entities';
 import { ROLE_LABELS, type AssetRole } from '@/src/core/domain/enums';
 import { allowedRolesFor, ROLE_NOT_ALLOWED_MESSAGE } from '@/src/core/domain/validation';
 import { matchHotkey } from '@/src/core/hotkeys';
@@ -15,7 +15,6 @@ import { assetTypeLabel, categoryLabel, resolveLanguage, roleLabel, UI_TEXT, typ
 import type { OverlayManager } from './overlay';
 import { LOGO_DATA_URL } from './logo';
 import type { GalleryAsset, GalleryRecord, ListRecordsResult } from '@/src/core/messages';
-import { detectProvider } from '@/src/core/capture/detectProvider';
 
 const send = (message: unknown) => chrome.runtime.sendMessage(message).catch(() => undefined);
 const openExtensionPage = (page: 'library' | 'settings', hash?: string) =>
@@ -246,7 +245,7 @@ function SelectionToolbar({ overlay, settings, language }: { overlay: OverlayMan
 function CapturePanel({ session, settings, t }: { session: CaptureSessionState; settings: DisplaySettings; t: UiText }) {
   const [open, setOpen] = useState(false);
   const prevCount = useRef(0);
-  const [wizard, setWizard] = useState<null | 'category' | 'model'>(null);
+  const [wizard, setWizard] = useState<null | 'category'>(null);
 
   const count = session.assets.length;
   const active = count > 0 || session.conflicts.length > 0 || session.errors.length > 0;
@@ -275,7 +274,7 @@ function CapturePanel({ session, settings, t }: { session: CaptureSessionState; 
         <div className="pt-panel-head">
           <span className="pt-title">
             <img className="pt-logo-img" src={LOGO_DATA_URL} alt="" />
-            PromptTrace
+            PrompTrace
           </span>
           <span className="pt-links">
             <a onClick={() => openExtensionPage('library')}>{t.goLibrary}</a>
@@ -372,7 +371,7 @@ function GalleryPanel({
             <div className="pt-panel-head">
               <span className="pt-title">
                 <img className="pt-logo-img" src={LOGO_DATA_URL} alt="" />
-                PromptTrace
+                PrompTrace
               </span>
               <span className="pt-links">
                 <a onClick={() => openExtensionPage('library')}>{t.goLibrary}</a>
@@ -424,7 +423,7 @@ function GalleryPanel({
             setOpen(true);
           }}
         >
-          <img className="pt-tab-img" src={LOGO_DATA_URL} alt="PromptTrace" />
+          <img className="pt-tab-img" src={LOGO_DATA_URL} alt="PrompTrace" />
         </div>
       )}
       {editing && (
@@ -454,8 +453,8 @@ function CaptureBody({
 }: {
   session: CaptureSessionState;
   settings: DisplaySettings;
-  wizard: null | 'category' | 'model';
-  setWizard: (w: null | 'category' | 'model') => void;
+  wizard: null | 'category';
+  setWizard: (w: null | 'category') => void;
   t: UiText;
   language: ResolvedLanguage;
 }) {
@@ -473,9 +472,7 @@ function CaptureBody({
   if (wizard) {
     return (
       <Wizard
-        stage={wizard}
         setStage={setWizard}
-        sourceUrl={session.assets[0]?.pageUrl}
         outputTypes={session.assets.filter((a) => a.role === 'output').map((a) => a.assetType)}
         t={t}
         language={language}
@@ -737,8 +734,8 @@ function findPromptComposer(): ComposerTarget | null {
     if (isVisibleComposerCandidate(target)) return target;
   }
 
-  const detected = detectProvider(window.location.href);
-  if (detected?.modelName !== 'GPT' && detected?.modelName !== 'Gemini') return null;
+  const host = location.hostname.toLowerCase();
+  if (!/(^|\.)chatgpt\.com$/.test(host) && !/(^|\.)gemini\.google\.com$/.test(host)) return null;
 
   return [...document.querySelectorAll('textarea, input[type="text"], input[type="search"], [contenteditable="true"]')]
     .filter(isVisibleComposerCandidate)
@@ -1081,10 +1078,9 @@ function GalleryCard({
         setMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top });
       }}
     >
-      {(record.categoryName || record.modelLabel) && (
+      {record.categoryName && (
         <div className="pt-gmeta">
-          {record.categoryName && <span className="pt-gtag">{record.categoryName}</span>}
-          {record.modelLabel && <span className="pt-gtag pt-gtag--model">{record.modelLabel}</span>}
+          <span className="pt-gtag">{record.categoryName}</span>
         </div>
       )}
       <div className="pt-gcols">
@@ -1232,44 +1228,25 @@ function CardEditor({
   onSaved: () => void;
 }) {
   const [categories, setCategories] = useState<RecordCategory[]>([]);
-  const [presets, setPresets] = useState<ModelPreset[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(record.categoryId ?? null);
-  const [presetId, setPresetId] = useState<string | null>(record.modelPresetId ?? null);
   // Don't touch the model unless the user picks one — otherwise editing the
   // category alone would wipe a custom / auto-detected model label.
-  const [modelTouched, setModelTouched] = useState(false);
 
   useEffect(() => {
     send({ type: 'taxonomy/get', payload: {} }).then((r) => {
-      const data = r as { categories: RecordCategory[]; presets: ModelPreset[] } | undefined;
+      const data = r as { categories: RecordCategory[] } | undefined;
       if (data) {
         setCategories(data.categories);
-        setPresets(data.presets);
       }
     });
   }, []);
 
-  const pickModel = (id: string | null) => {
-    setPresetId(id);
-    setModelTouched(true);
-  };
-
   const save = async () => {
-    const preset = presets.find((p) => p.id === presetId);
     await send({
       type: 'library/updateRecordMeta',
       payload: {
         recordId: record.id,
         categoryId,
-        ...(modelTouched
-          ? {
-              modelPresetId: presetId,
-              modelName: preset?.modelName,
-              modelProvider: preset?.provider,
-              modelVersion: preset?.modelVersion,
-              modelLabel: preset?.modelName,
-            }
-          : {}),
       },
     });
     onSaved();
@@ -1299,29 +1276,6 @@ function CardEditor({
               onClick={() => setCategoryId(c.id)}
             >
               {categoryLabel(c, language)}
-            </button>
-          ))}
-      </div>
-      <div className="pt-geditor-label">{t.model}</div>
-      <div className="pt-choices">
-        <button
-          className={modelTouched && presetId === null ? 'pt-choice pt-choice--on' : 'pt-choice'}
-          onClick={() => pickModel(null)}
-        >
-          {language === 'en-US' ? 'Not specified' : '未指定'}
-        </button>
-        {presets
-          .filter((p) => p.isActive)
-          .map((p) => (
-            <button
-              key={p.id}
-              className={
-                modelTouched && presetId === p.id ? 'pt-choice pt-choice--on' : 'pt-choice'
-              }
-              onClick={() => pickModel(p.id)}
-            >
-              {p.modelName}
-              {p.provider ? `（${p.provider}）` : ''}
             </button>
           ))}
       </div>
@@ -1394,7 +1348,7 @@ function GalleryPrompt({ role, text, color, language }: { role: AssetRole; text:
 }
 
 /* ------------------------------------------------------------------ */
-/*  Two-step wizard inside the edge panel                              */
+/*  Save wizard inside the edge panel                                  */
 /* ------------------------------------------------------------------ */
 
 /** Built-in category ids, keyed by asset type (mirrors storage/seed.ts). */
@@ -1405,22 +1359,17 @@ const BUILTIN_CATEGORY_BY_TYPE: Record<PendingAsset['assetType'], string> = {
 };
 
 function Wizard({
-  stage,
   setStage,
-  sourceUrl,
   outputTypes,
   t,
   language,
 }: {
-  stage: 'category' | 'model';
-  setStage: (w: null | 'category' | 'model') => void;
-  sourceUrl?: string;
+  setStage: (w: null | 'category') => void;
   outputTypes?: PendingAsset['assetType'][];
   t: UiText;
   language: ResolvedLanguage;
 }) {
   const [categories, setCategories] = useState<RecordCategory[]>([]);
-  const [presets, setPresets] = useState<ModelPreset[]>([]);
 
   // Suggest a category from the OUTPUT type (image→生圖, video→生影, text→生文).
   // Only when the outputs are a single type; mixed/none stays unsuggested.
@@ -1431,16 +1380,13 @@ function Wizard({
   }, [outputTypes]);
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
-  const [customOpen, setCustomOpen] = useState(false);
-  const [customLabel, setCustomLabel] = useState('');
 
   const loadTaxonomy = useCallback(async () => {
     const r = (await send({ type: 'taxonomy/get', payload: {} })) as
-      | { categories: RecordCategory[]; presets: ModelPreset[] }
+      | { categories: RecordCategory[] }
       | undefined;
     if (r) {
       setCategories(r.categories.filter((c) => c.isActive));
-      setPresets(r.presets.filter((p) => p.isActive));
     }
   }, []);
   useEffect(() => {
@@ -1465,21 +1411,15 @@ function Wizard({
     return out;
   }, [categories]);
 
-  const commit = async (model: Record<string, unknown>) => {
-    await send({ type: 'capture/commitSession', payload: { categoryId, ...model } });
+  const commit = async (nextCategoryId: unknown = categoryId) => {
+    const resolvedCategoryId = typeof nextCategoryId === 'string' || nextCategoryId === null ? nextCategoryId : categoryId;
+    await send({ type: 'capture/commitSession', payload: { categoryId: resolvedCategoryId } });
     setStage(null);
   };
 
-  // Provider guessed from the captured page, surfaced as a one-click option.
-  const detected = useMemo(() => detectProvider(sourceUrl), [sourceUrl]);
-  const detectedPreset = detected
-    ? presets.find((p) => p.provider === detected.provider && p.modelName === detected.modelName)
-    : undefined;
-
-  // Pick a category → jump straight to the model step (no "next" button).
   const pickCategory = (id: string | null) => {
     setCategoryId(id);
-    setStage('model');
+    commit(id);
   };
 
   const quickAdd = async () => {
@@ -1494,124 +1434,47 @@ function Wizard({
     }
   };
 
-  if (stage === 'category') {
-    return (
-      <div className="pt-card pt-wizard">
-        <strong>{t.category}（{language === 'en-US' ? 'optional' : '選填'}）</strong>
-        <div className="pt-choices">
-          <button className="pt-choice" onClick={() => pickCategory(null)}>
-            {t.uncategorized}
-          </button>
-          {tree.map(({ c, depth }) => {
-            const suggested = c.id === suggestedCategoryId;
-            return (
-              <button
-                key={c.id}
-                className={suggested ? 'pt-choice pt-choice--detected' : 'pt-choice'}
-                style={{ paddingLeft: 12 + depth * 14 }}
-                onClick={() => pickCategory(c.id)}
-              >
-                {suggested ? '✨ ' : ''}
-                {categoryLabel(c, language)}
-                {suggested ? (language === 'en-US' ? ' · suggested' : ' · 依產出建議') : ''}
-              </button>
-            );
-          })}
-        </div>
-        <div className="pt-row" style={{ marginTop: 8 }}>
-          <input
-            type="text"
-            placeholder={language === 'en-US' ? 'Quick add category…' : '快速新增分類…'}
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') quickAdd();
-            }}
-            style={{ flex: 1, width: 'auto' }}
-          />
-          <button className="pt-small-btn" disabled={!newName.trim()} onClick={quickAdd}>
-            {t.add}
-          </button>
-        </div>
-        <div className="pt-wizard-foot">
-          <button className="pt-link-btn" onClick={() => setStage(null)}>
-            ← {language === 'en-US' ? 'Back' : '返回'}
-          </button>
-          <button className="pt-link-btn pt-wizard-x" onClick={() => setStage(null)} title={language === 'en-US' ? 'Cancel save' : '取消保存'}>
-            ✕ {language === 'en-US' ? 'Cancel' : '取消'}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="pt-card pt-wizard">
-      <strong>{t.model}（{language === 'en-US' ? 'optional' : '選填'}）</strong>
+      <strong>{t.category}（{language === 'en-US' ? 'optional' : '選填'}）</strong>
       <div className="pt-choices">
-        <button className="pt-choice" onClick={() => commit({})}>
-          {language === 'en-US' ? 'Skip and save' : '不填（直接保存）'}
+        <button className="pt-choice" onClick={() => pickCategory(null)}>
+          {t.uncategorized}
         </button>
-        {detected && (
-          <button
-            className="pt-choice pt-choice--detected"
-            onClick={() =>
-              detectedPreset
-                ? commit({
-                    modelPresetId: detectedPreset.id,
-                    modelName: detectedPreset.modelName,
-                    modelProvider: detectedPreset.provider,
-                  })
-                : commit({ modelName: detected.modelName, modelProvider: detected.provider })
-            }
-          >
-            ✨ {detected.modelName}（{detected.provider}）· {language === 'en-US' ? 'detected from page' : '偵測自頁面'}
-          </button>
-        )}
-        {presets
-          .filter((p) => p.id !== detectedPreset?.id)
-          .map((p) => (
-          <button
-            key={p.id}
-            className="pt-choice"
-            onClick={() => commit({ modelPresetId: p.id, modelName: p.modelName, modelProvider: p.provider })}
-          >
-            {p.alias || p.modelName}
-            {p.provider ? `（${p.provider}）` : ''}
-          </button>
-        ))}
-        <button className="pt-choice pt-choice--sub" onClick={() => commit({ modelLabel: 'Unknown' })}>
-          Unknown
-        </button>
-        <button className="pt-choice pt-choice--sub" onClick={() => commit({ modelLabel: 'Not applicable' })}>
-          Not applicable
-        </button>
-        {!customOpen ? (
-          <button className="pt-choice pt-choice--sub" onClick={() => setCustomOpen(true)}>
-            {language === 'en-US' ? 'Custom…' : '自訂…'}
-          </button>
-        ) : (
-          <div className="pt-row">
-            <input
-              type="text"
-              placeholder={language === 'en-US' ? 'Custom model name' : '自訂模型名稱'}
-              value={customLabel}
-              autoFocus
-              onChange={(e) => setCustomLabel(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && customLabel.trim()) commit({ modelLabel: customLabel.trim() });
-              }}
-              style={{ flex: 1, width: 'auto' }}
-            />
-            <button className="pt-small-btn" disabled={!customLabel.trim()} onClick={() => commit({ modelLabel: customLabel.trim() })}>
-              {language === 'en-US' ? 'Save' : '保存'}
+        {tree.map(({ c, depth }) => {
+          const suggested = c.id === suggestedCategoryId;
+          return (
+            <button
+              key={c.id}
+              className={suggested ? 'pt-choice pt-choice--detected' : 'pt-choice'}
+              style={{ paddingLeft: 12 + depth * 14 }}
+              onClick={() => pickCategory(c.id)}
+            >
+              {suggested ? '✨ ' : ''}
+              {categoryLabel(c, language)}
+              {suggested ? (language === 'en-US' ? ' · suggested' : ' · 依產出建議') : ''}
             </button>
-          </div>
-        )}
+          );
+        })}
+      </div>
+      <div className="pt-row" style={{ marginTop: 8 }}>
+        <input
+          type="text"
+          placeholder={language === 'en-US' ? 'Quick add category…' : '快速新增分類…'}
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') quickAdd();
+          }}
+          style={{ flex: 1, width: 'auto' }}
+        />
+        <button className="pt-small-btn" disabled={!newName.trim()} onClick={quickAdd}>
+          {t.add}
+        </button>
       </div>
       <div className="pt-wizard-foot">
-        <button className="pt-link-btn" onClick={() => setStage('category')}>
-          ← {language === 'en-US' ? 'Previous' : '上一步'}
+        <button className="pt-link-btn" onClick={() => setStage(null)}>
+          ← {language === 'en-US' ? 'Back' : '返回'}
         </button>
         <button className="pt-link-btn pt-wizard-x" onClick={() => setStage(null)} title={language === 'en-US' ? 'Cancel save' : '取消保存'}>
           ✕ {language === 'en-US' ? 'Cancel' : '取消'}

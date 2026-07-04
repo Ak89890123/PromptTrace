@@ -2,13 +2,12 @@
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
-import { resetDbCache } from '@/src/storage/db';
+import { DB_NAME, LEGACY_DB_NAME, resetDbCache, STORES } from '@/src/storage/db';
 import {
   assetRepository,
   categoryRepository,
   deleteRecordCascade,
   fileRecordRepository,
-  modelPresetRepository,
   recordRepository,
   tagRepository,
 } from '@/src/storage/repositories';
@@ -34,14 +33,41 @@ beforeEach(() => {
 });
 
 describe('seed', () => {
-  it('seeds built-in categories and presets once', async () => {
+  it('migrates records from the legacy PromptTrace IndexedDB name', async () => {
+    const legacyDb = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open(LEGACY_DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        for (const store of Object.values(STORES)) req.result.createObjectStore(store, { keyPath: 'id' });
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    await new Promise<void>((resolve, reject) => {
+      const transaction = legacyDb.transaction(STORES.libraryRecords, 'readwrite');
+      transaction.objectStore(STORES.libraryRecords).put({
+        id: 'legacy-record',
+        title: 'Legacy record',
+        createdAt: '2026-07-04T00:00:00Z',
+        updatedAt: '2026-07-04T00:00:00Z',
+      });
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+    legacyDb.close();
+
+    resetDbCache();
+    const records = await recordRepository.list();
+
+    expect(DB_NAME).toBe('promptrace');
+    expect(records.map((record) => record.id)).toContain('legacy-record');
+  });
+
+  it('seeds built-in categories once', async () => {
     await seedDefaults();
     await seedDefaults();
     const cats = await categoryRepository.list();
-    const presets = await modelPresetRepository.list();
     expect(cats.filter((c) => c.isBuiltin)).toHaveLength(BUILTIN_CATEGORY_DEFAULTS.length);
     expect(cats.map((c) => c.name)).toContain('生文');
-    expect(presets.map((p) => p.modelName)).toContain('Claude');
   });
 });
 
@@ -52,10 +78,9 @@ describe('commit session', () => {
         pending({ role: 'input', textContent: 'the prompt' }),
         pending({ role: 'output', textContent: 'the answer' }),
       ],
-      { categoryId: null, modelLabel: 'Unknown' },
+      { categoryId: null },
     );
     const record = await recordRepository.get(result.record.id);
-    expect(record?.modelLabel).toBe('Unknown');
     expect(record?.sourcePageUrl).toBe('https://page.test');
     const assets = await assetRepository.byRecord(result.record.id);
     expect(assets).toHaveLength(2);
@@ -71,7 +96,7 @@ describe('commit session', () => {
     const { fileRecord, url } = result.pendingDownloads[0];
     expect(url).toBe('https://x.test/a.png');
     expect(fileRecord.downloadStatus).toBe('pending');
-    expect(downloadPathFor(result.record.id, fileRecord)).toBe(`PromptTrace/${result.record.id}/${fileRecord.filename}`);
+    expect(downloadPathFor(result.record.id, fileRecord)).toBe(`PrompTrace/${result.record.id}/${fileRecord.filename}`);
     const stored = await fileRecordRepository.get(fileRecord.id);
     expect(stored?.assetId).toBe(result.assets[0].id);
   });
