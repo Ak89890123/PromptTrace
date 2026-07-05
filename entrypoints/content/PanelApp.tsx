@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { CaptureSessionState } from '@/src/core/capture/session';
 import { canCommit, emptySession } from '@/src/core/capture/session';
 import type { PendingAsset, RecordCategory } from '@/src/core/domain/entities';
@@ -63,8 +63,13 @@ type ToolbarTarget =
   | { kind: 'text'; range: Range }
   | { kind: 'media'; el: HTMLImageElement | HTMLVideoElement; assetType: 'image' | 'video' };
 
+type ToolbarPlacement = 'above' | 'below';
+type ToolbarPosition = { x: number; top: number; bottom: number; placement: ToolbarPlacement };
+
 function SelectionToolbar({ overlay, settings, language }: { overlay: OverlayManager; settings: DisplaySettings; language: ResolvedLanguage }) {
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [pos, setPos] = useState<ToolbarPosition | null>(null);
+  const [toolbarTop, setToolbarTop] = useState<number | null>(null);
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
   const targetRef = useRef<ToolbarTarget | null>(null);
   const [targetType, setTargetType] = useState<'text' | 'image' | 'video'>('text');
   /** The <img>/<video> currently under the cursor (for keyboard media capture). */
@@ -79,13 +84,17 @@ function SelectionToolbar({ overlay, settings, language }: { overlay: OverlayMan
 
   const hide = useCallback(() => {
     setPos(null);
+    setToolbarTop(null);
     targetRef.current = null;
   }, []);
 
-  const showAt = useCallback((rect: DOMRect) => {
+  const showAt = useCallback((rect: DOMRect, placement: ToolbarPlacement = 'above') => {
+    setToolbarTop(null);
     setPos({
       x: Math.min(Math.max(rect.left + rect.width / 2, 150), window.innerWidth - 150),
-      y: rect.top,
+      top: rect.top,
+      bottom: rect.bottom,
+      placement,
     });
   }, []);
 
@@ -112,11 +121,12 @@ function SelectionToolbar({ overlay, settings, language }: { overlay: OverlayMan
     const sel = window.getSelection();
     if (sel && sel.rangeCount > 0 && !sel.isCollapsed && sel.toString().trim()) {
       const range = sel.getRangeAt(0).cloneRange();
-      const rect = range.getBoundingClientRect();
+      const forward = isSelectionForward(sel);
+      const rect = selectionEndpointRect(range, forward);
       if (rect.width || rect.height) {
         targetRef.current = { kind: 'text', range };
         setTargetType('text');
-        showAt(rect);
+        showAt(rect, forward ? 'below' : 'above');
         return;
       }
     }
@@ -158,6 +168,13 @@ function SelectionToolbar({ overlay, settings, language }: { overlay: OverlayMan
     const onMouseMove = (e: MouseEvent) => {
       lastPointer.current = { x: e.clientX, y: e.clientY };
     };
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      const toolbar = toolbarRef.current;
+      if (toolbar && e.composedPath().includes(toolbar)) return;
+      window.getSelection()?.removeAllRanges();
+      hide();
+    };
     const onContextMenu = (e: MouseEvent) => {
       lastPointer.current = { x: e.clientX, y: e.clientY };
       lastContextMedia.current = null;
@@ -192,6 +209,7 @@ function SelectionToolbar({ overlay, settings, language }: { overlay: OverlayMan
     window.addEventListener('prompttrace:summon', onSummon);
     document.addEventListener('mouseover', onMouseOver, true);
     document.addEventListener('mousemove', onMouseMove, { passive: true, capture: true });
+    document.addEventListener('mousedown', onMouseDown, true);
     document.addEventListener('contextmenu', onContextMenu, true);
     document.addEventListener('mouseup', onMouseUp);
     document.addEventListener('keydown', onKeyDown, true);
@@ -202,6 +220,7 @@ function SelectionToolbar({ overlay, settings, language }: { overlay: OverlayMan
       window.removeEventListener('prompttrace:summon', onSummon);
       document.removeEventListener('mouseover', onMouseOver, true);
       document.removeEventListener('mousemove', onMouseMove, true);
+      document.removeEventListener('mousedown', onMouseDown, true);
       document.removeEventListener('contextmenu', onContextMenu, true);
       document.removeEventListener('mouseup', onMouseUp);
       document.removeEventListener('keydown', onKeyDown, true);
@@ -219,14 +238,50 @@ function SelectionToolbar({ overlay, settings, language }: { overlay: OverlayMan
     }
   }, [settings.toolbarTrigger, hide]);
 
-  if (!pos) return null;
   // Only roles valid for this target type ever appear (e.g. media → no Negative).
   const roles = settings.toolbarRoles.filter((r) => allowedRolesFor(targetType).includes(r));
 
+  useLayoutEffect(() => {
+    if (!pos) return;
+    let animationFrame = 0;
+    let timeout = 0;
+    const adjust = () => {
+      const toolbar = toolbarRef.current;
+      if (!toolbar) return;
+
+      const width = toolbar.offsetWidth;
+      const height = toolbar.offsetHeight;
+      const left = pos.x - width / 2;
+      const right = pos.x + width / 2;
+      const minTop = 8;
+      const maxTop = Math.max(minTop, window.innerHeight - height - 8);
+      const desiredTop = Math.min(maxTop, Math.max(minTop, pos.top - height - 8));
+      const belowTop = Math.min(maxTop, Math.max(minTop, pos.bottom + 8));
+      const candidates = pos.placement === 'below' ? [belowTop, desiredTop, maxTop, minTop] : [desiredTop, belowTop, minTop, maxTop];
+      const blockers = collectVisiblePopoverRects();
+      const candidateTop =
+        candidates.find((candidate) => !blockers.some((blocker) => rectsOverlap({ left, right, top: candidate, bottom: candidate + height }, blocker))) ??
+        desiredTop;
+
+      setToolbarTop((current) => (current === candidateTop ? current : candidateTop));
+    };
+    adjust();
+    animationFrame = window.requestAnimationFrame(adjust);
+    timeout = window.setTimeout(adjust, 80);
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      window.clearTimeout(timeout);
+    };
+  }, [pos, roles.length]);
+
+  if (!pos) return null;
+  const top = toolbarTop ?? (pos.placement === 'below' ? Math.min(window.innerHeight - 8, pos.bottom + 8) : Math.max(pos.top - 46, 8));
+
   return (
     <div
+      ref={toolbarRef}
       className="pt-glass pt-toolbar"
-      style={{ left: pos.x, top: Math.max(pos.y - 46, 8), transform: 'translateX(-50%)' }}
+      style={{ left: pos.x, top, transform: 'translateX(-50%)' }}
       onMouseDown={(e) => e.preventDefault() /* keep the selection alive */}
     >
       {roles.map((role) => (
@@ -236,6 +291,50 @@ function SelectionToolbar({ overlay, settings, language }: { overlay: OverlayMan
       ))}
     </div>
   );
+}
+
+function collectVisiblePopoverRects(): DOMRect[] {
+  const rects: DOMRect[] = [];
+  for (const el of document.querySelectorAll('[popover]')) {
+    if (!(el instanceof HTMLElement)) continue;
+    if (!isOpenPopover(el)) continue;
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) continue;
+    if (rect.bottom < 0 || rect.top > window.innerHeight || rect.right < 0 || rect.left > window.innerWidth) continue;
+    rects.push(rect);
+  }
+  return rects;
+}
+
+function isOpenPopover(el: HTMLElement): boolean {
+  try {
+    if (el.matches(':popover-open')) return true;
+  } catch {
+    // Older engines may not parse :popover-open; fall back to visibility checks.
+  }
+  const style = getComputedStyle(el);
+  return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+}
+
+function rectsOverlap(a: { left: number; right: number; top: number; bottom: number }, b: DOMRect): boolean {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
+function isSelectionForward(selection: Selection): boolean {
+  const { anchorNode, focusNode } = selection;
+  if (!anchorNode || !focusNode) return true;
+  if (anchorNode === focusNode) return selection.anchorOffset <= selection.focusOffset;
+
+  const position = anchorNode.compareDocumentPosition(focusNode);
+  if (position & Node.DOCUMENT_POSITION_FOLLOWING) return true;
+  if (position & Node.DOCUMENT_POSITION_PRECEDING) return false;
+  return true;
+}
+
+function selectionEndpointRect(range: Range, forward: boolean): DOMRect {
+  const rects = Array.from(range.getClientRects()).filter((rect) => rect.width > 0 || rect.height > 0);
+  if (rects.length === 0) return range.getBoundingClientRect();
+  return forward ? rects[rects.length - 1] : rects[0];
 }
 
 /* ------------------------------------------------------------------ */
@@ -323,6 +422,8 @@ function GalleryPanel({
   const [pinned, setPinned] = useState(false);
   const [editing, setEditing] = useState<GalleryRecord | null>(null);
   const [refreshSignal, setRefreshSignal] = useState(0);
+  const panelWidth = settings.cardLayout === 'split' ? 'min(440px, 94vw)' : 'min(267px, 94vw)';
+  const edgeStyle = { '--pt-gallery-panel-width': panelWidth } as CSSProperties;
   // The tab sits where the user put it; the panel keeps its full height and only
   // shifts enough to stay on-screen while still covering the tab (so hover-open
   // holds). Tab high → panel pinned near the top (extends down); tab low → pinned
@@ -357,7 +458,7 @@ function GalleryPanel({
     return () => document.removeEventListener('keydown', onKeyDown, true);
   }, [open, dismissGallery]);
   return (
-    <div className="pt-gallery-edge">
+    <div className="pt-gallery-edge" style={edgeStyle}>
       {open ? (
         // The dock's padding-right keeps the visual gap to the screen edge part of
         // the hover zone, so sliding into it doesn't drop hover and flicker shut.

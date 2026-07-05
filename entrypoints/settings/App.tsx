@@ -120,7 +120,7 @@ export default function App() {
         </div>
         <div className="settings-column settings-card-layout-column">
           <section className="card settings-section">
-            <CardLayoutSettings settings={settings} onPatch={patchSettings} t={t} />
+            <CardLayoutSettings settings={settings} onPatch={patchSettings} t={t} language={language} />
           </section>
         </div>
         <div className="settings-column settings-summary-column">
@@ -555,16 +555,16 @@ function DisplaySettingsSection({
       <div className="settings-display-group">
         <span className="muted">{t.roleColors}</span>
         <div className="settings-role-legend">
-          {(['pending', ...Object.keys(ROLE_LABELS)] as (AssetRole | 'pending')[]).map((role) => (
+          {(Object.keys(ROLE_LABELS) as AssetRole[]).map((role) => (
             <div key={role} className="settings-role-color">
               <ColorSwatchPicker
                 value={settings.roleColors[role]}
-                label={`${role === 'pending' ? t.uncategorized : roleLabel(role as AssetRole, language)} ${t.color}`}
+                label={`${roleLabel(role, language)} ${t.color}`}
                 t={t}
                 language={language}
                 onChange={(color) => onPatch({ roleColors: { ...settings.roleColors, [role]: color } })}
               />
-              <span>{role === 'pending' ? t.uncategorized : roleLabel(role as AssetRole, language)}</span>
+              <span>{roleLabel(role, language)}</span>
             </div>
           ))}
         </div>
@@ -577,11 +577,19 @@ function CardLayoutSettings({
   settings,
   onPatch,
   t,
+  language,
 }: {
   settings: DisplaySettings;
   onPatch: (p: Partial<DisplaySettings>) => void;
   t: UiText;
+  language: ResolvedLanguage;
 }) {
+  const inputPreviewPrompt =
+    language === 'en-US'
+      ? 'What the dog doing? What the dog doing? What the dog doing? What the dog doing? What the dog doing? What the dog doing? What the dog doing? What the dog doing?'
+      : '我的刀盾，我的刀盾，我的刀盾，我的刀盾，我的刀盾，我的刀盾，我的刀盾，我的刀盾，我的刀盾，我的刀盾，我的刀盾，我的刀盾';
+  const inputRoleLabel = language === 'en-US' ? 'Input' : '輸入';
+
   return (
     <div className="settings-subsection settings-card-layout-subsection">
       <h2>{t.cardRoleColumn}</h2>
@@ -602,8 +610,8 @@ function CardLayoutSettings({
                     <span>{t.copy}</span>
                   </span>
                   <span className="settings-real-preview-prompt">
-                    <span className="settings-real-preview-role">輸入</span>
-                    <span>我的刀盾</span>
+                    <span className="settings-real-preview-role">{inputRoleLabel}</span>
+                    <span>{inputPreviewPrompt}</span>
                   </span>
                 </span>
                 <span className="settings-real-preview-col">
@@ -632,8 +640,8 @@ function CardLayoutSettings({
                 <span>{t.copy}</span>
               </span>
               <span className="settings-real-preview-prompt">
-                <span className="settings-real-preview-role">輸入</span>
-                <span>我的刀盾</span>
+                <span className="settings-real-preview-role">{inputRoleLabel}</span>
+                <span>{inputPreviewPrompt}</span>
               </span>
             </span>
           </span>

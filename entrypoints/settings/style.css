@@ -287,7 +287,9 @@
   display: grid;
   align-content: start;
   gap: 6px;
+  height: 104px;
   min-height: 104px;
+  overflow: hidden;
   padding: 8px;
   border-radius: var(--pt-radius-thumb);
   background: var(--pt-surface-input);
@@ -315,7 +317,7 @@
   border-radius: var(--pt-radius-thumb);
   object-fit: contain;
   object-position: center;
-  background: #fff;
+  background: var(--pt-surface-input);
 }
 
 .settings-real-preview-card-output .settings-real-preview-image {

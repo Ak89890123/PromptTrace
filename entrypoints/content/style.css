@@ -11,6 +11,7 @@
   height: 0 !important;
   overflow: visible !important;
   pointer-events: none !important;
+  z-index: 2147483647 !important;
 }
 
 * {
@@ -445,7 +446,7 @@
    every option without an internal scroll fight. */
 .pt-geditor {
   position: absolute;
-  right: calc(min(267px, 94vw) + 18px);
+  right: calc(var(--pt-gallery-panel-width, min(440px, 94vw)) + 18px);
   width: 232px;
   max-height: 86vh;
   overflow-y: auto;
@@ -490,7 +491,7 @@
 .pt-gthumbs { display: flex; gap: var(--pt-space-1); flex-wrap: wrap; margin-bottom: var(--pt-space-2); }
 .pt-gthumbs img { width: 54px; height: 54px; object-fit: cover; border-radius: var(--pt-radius-thumb); }
 .pt-gallery-panel {
-  width: min(267px, 94vw);
+  width: var(--pt-gallery-panel-width, min(440px, 94vw));
 }
 .pt-gallery-panel .pt-panel-body {
   padding-inline: var(--pt-space-2);

@@ -13,15 +13,13 @@ import { resolveLanguage, UI_TEXT, type UiText } from '@/src/ui/i18n';
 type ToggleKey =
   | 'edgePanelEnabled'
   | 'selectionToolbarEnabled'
-  | 'overlayEnabled'
-  | 'copyTrayEnabled';
+  | 'overlayEnabled';
 
 function toggles(t: UiText): { key: ToggleKey; label: string; hint: string }[] {
   return [
     { key: 'edgePanelEnabled', label: t.edgePanelShort, hint: t.edgePanelHint },
     { key: 'selectionToolbarEnabled', label: t.selectionToolbarShort, hint: t.selectionToolbarHint },
     { key: 'overlayEnabled', label: t.pageFrameShort, hint: t.pageFrameHint },
-    { key: 'copyTrayEnabled', label: t.copyTrayShort, hint: t.copyTrayHint },
   ];
 }
 
