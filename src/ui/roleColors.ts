@@ -31,8 +31,8 @@ export type DisplaySettings = {
   summonHotkey: string;
   /** Which role buttons the toolbar may show (filtered per asset type at popup time). */
   toolbarRoles: AssetRole[];
-  /** Saved-prompt card layout: 'split' = Input·Reference | Output; 'output-only'. */
-  cardLayout: 'split' | 'output-only';
+  /** Saved-prompt card layout: split, input-only, or output-only. */
+  cardLayout: 'split' | 'input-only' | 'output-only';
   /** Vertical position of the right-edge gallery tab, 0 (top)–100 (bottom). */
   edgeTabTop: number;
   summary: SummarySettings;
@@ -63,10 +63,15 @@ function withDefaults(stored: Partial<DisplaySettings> | undefined): DisplaySett
     stored.language === 'system' || stored.language === 'zh-TW' || stored.language === 'en-US'
       ? stored.language
       : DEFAULT_SETTINGS.language;
+  const cardLayout =
+    stored.cardLayout === 'split' || stored.cardLayout === 'input-only' || stored.cardLayout === 'output-only'
+      ? stored.cardLayout
+      : DEFAULT_SETTINGS.cardLayout;
   return {
     ...DEFAULT_SETTINGS,
     ...stored,
     language,
+    cardLayout,
     roleColors: { ...DEFAULT_ROLE_COLORS, ...(stored.roleColors ?? {}) },
     toolbarRoles:
       stored.toolbarRoles && stored.toolbarRoles.length >= 2

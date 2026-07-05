@@ -1062,6 +1062,10 @@ function GalleryCard({
   // Left column = prompt side (input / reference / negative); right = output.
   const left = record.assets.filter((a) => a.role !== 'output');
   const right = record.assets.filter((a) => a.role === 'output');
+  const isOutputOnly = settings.cardLayout === 'output-only';
+  const isInputOnly = settings.cardLayout === 'input-only';
+  const visibleSingleColumnAssets = isInputOnly ? left : right;
+  const singleColumnHasMedia = visibleSingleColumnAssets.some((a) => a.assetType !== 'text');
 
   const remove = async () => {
     closeMenu();
@@ -1071,7 +1075,7 @@ function GalleryCard({
 
   return (
     <div
-      className="pt-gcard"
+      className={`pt-gcard${isOutputOnly || isInputOnly ? ' pt-gcard--single-column' : ''}${singleColumnHasMedia ? ' pt-gcard--single-column-media' : ''}`}
       onContextMenu={(e) => {
         e.preventDefault();
         const rect = e.currentTarget.getBoundingClientRect();
@@ -1084,10 +1088,12 @@ function GalleryCard({
         </div>
       )}
       <div className="pt-gcols">
-        {settings.cardLayout !== 'output-only' && (
+        {isInputOnly ? (
+          <GalleryColumn label={t.inputReference} assets={left} settings={settings} onZoom={onZoom} t={t} language={language} />
+        ) : !isOutputOnly && (
           <GalleryColumn label={t.inputReference} assets={left} settings={settings} onZoom={onZoom} t={t} language={language} />
         )}
-        <GalleryColumn label={t.output} assets={right} settings={settings} onZoom={onZoom} t={t} language={language} />
+        {!isInputOnly && <GalleryColumn label={t.output} assets={right} settings={settings} onZoom={onZoom} t={t} language={language} />}
       </div>
 
       {menu && <div className="pt-menu-backdrop" onClick={closeMenu} role="presentation" />}

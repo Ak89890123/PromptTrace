@@ -118,6 +118,11 @@ export default function App() {
         <div className="settings-column settings-category-column">
           <LibraryRulesSettings categories={categories} onChanged={reload} t={t} language={language} />
         </div>
+        <div className="settings-column settings-card-layout-column">
+          <section className="card settings-section">
+            <CardLayoutSettings settings={settings} onPatch={patchSettings} t={t} />
+          </section>
+        </div>
         <div className="settings-column settings-summary-column">
           <SummarySettingsSection settings={settings} onPatch={patchSettings} t={t} language={language} />
         </div>
@@ -396,8 +401,14 @@ function CategorySettings({
       });
     }
     for (const c of categories) {
-      if (c.isBuiltin && !builtinIds.has(c.id as (typeof BUILTIN_CATEGORY_DEFAULTS)[number]['id'])) {
+      if (!builtinIds.has(c.id as (typeof BUILTIN_CATEGORY_DEFAULTS)[number]['id'])) {
         await categoryRepository.delete(c.id);
+      }
+    }
+    const records = await recordRepository.list();
+    for (const record of records) {
+      if (record.categoryId && !builtinIds.has(record.categoryId as (typeof BUILTIN_CATEGORY_DEFAULTS)[number]['id'])) {
+        await recordRepository.save({ ...record, categoryId: null, updatedAt: now });
       }
     }
     onChanged();
@@ -430,6 +441,7 @@ function CategorySettings({
                 onChange={(color) => save(c, { color })}
               />
               <input
+                key={`${c.id}:${c.updatedAt}:${displayName}`}
                 defaultValue={displayName}
                 onBlur={(e) => {
                   const name = e.target.value.trim();
@@ -453,36 +465,36 @@ function CategorySettings({
             </div>
           );
         })}
-      </div>
-      <div className="settings-category-row settings-new-row">
-        <span />
-        <input
-          placeholder={t.newCategoryName}
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-        />
-        <span />
-        <button
-          className="primary"
-          disabled={!validateCategoryName(newName).ok}
-          onClick={async () => {
-            const now = new Date().toISOString();
-            await categoryRepository.save({
-              id: crypto.randomUUID(),
-              parentId: null,
-              name: newName.trim(),
-              isBuiltin: false,
-              isActive: true,
-              sortOrder: categories.length,
-              createdAt: now,
-              updatedAt: now,
-            });
-            setNewName('');
-            onChanged();
-          }}
-        >
-          {t.addCategory}
-        </button>
+        <div className="settings-category-row settings-new-row">
+          <span />
+          <input
+            placeholder={t.newCategoryName}
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+          />
+          <span />
+          <button
+            className="primary"
+            disabled={!validateCategoryName(newName).ok}
+            onClick={async () => {
+              const now = new Date().toISOString();
+              await categoryRepository.save({
+                id: crypto.randomUUID(),
+                parentId: null,
+                name: newName.trim(),
+                isBuiltin: false,
+                isActive: true,
+                sortOrder: categories.length,
+                createdAt: now,
+                updatedAt: now,
+              });
+              setNewName('');
+              onChanged();
+            }}
+          >
+            {t.addCategory}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -557,17 +569,94 @@ function DisplaySettingsSection({
           ))}
         </div>
       </div>
-      <div className="settings-mode-row">
-        <label className="muted">{t.cardRoleColumn}</label>
-        <select
-          style={{ width: 'auto' }}
-          value={settings.cardLayout}
-          onChange={(e) => onPatch({ cardLayout: e.target.value as 'split' | 'output-only' })}
+    </div>
+  );
+}
+
+function CardLayoutSettings({
+  settings,
+  onPatch,
+  t,
+}: {
+  settings: DisplaySettings;
+  onPatch: (p: Partial<DisplaySettings>) => void;
+  t: UiText;
+}) {
+  return (
+    <div className="settings-subsection settings-card-layout-subsection">
+      <h2>{t.cardRoleColumn}</h2>
+      <div className="settings-card-layout-options" role="group" aria-label={t.cardRoleColumn}>
+        <button
+          type="button"
+          className={`settings-card-layout-option${settings.cardLayout === 'split' ? ' is-selected' : ''}`}
+          aria-pressed={settings.cardLayout === 'split'}
+          onClick={() => onPatch({ cardLayout: 'split' })}
         >
-          <option value="split">{t.splitCard}</option>
-          <option value="output-only">{t.outputOnly}</option>
-        </select>
-        <span className="muted">{t.layoutApplies}</span>
+          <span className="settings-real-layout-preview settings-real-layout-preview-split" aria-hidden="true">
+            <span className="settings-real-preview-card">
+              <span className="settings-real-preview-tag">生圖</span>
+              <span className="settings-real-preview-cols">
+                <span className="settings-real-preview-col">
+                  <span className="settings-real-preview-label">
+                    <span>{t.inputReference}</span>
+                    <span>{t.copy}</span>
+                  </span>
+                  <span className="settings-real-preview-prompt">
+                    <span className="settings-real-preview-role">輸入</span>
+                    <span>我的刀盾</span>
+                  </span>
+                </span>
+                <span className="settings-real-preview-col">
+                  <span className="settings-real-preview-label">
+                    <span>{t.output}</span>
+                    <span>{t.copy}</span>
+                  </span>
+                  <img src="/preview/card-layout-output.jpg" alt="" className="settings-real-preview-image" />
+                </span>
+              </span>
+            </span>
+          </span>
+          <span className="settings-card-layout-label">{t.splitCard}</span>
+        </button>
+        <button
+          type="button"
+          className={`settings-card-layout-option${settings.cardLayout === 'input-only' ? ' is-selected' : ''}`}
+          aria-pressed={settings.cardLayout === 'input-only'}
+          onClick={() => onPatch({ cardLayout: 'input-only' })}
+        >
+          <span className="settings-real-layout-preview" aria-hidden="true">
+            <span className="settings-real-preview-card settings-real-preview-card-input">
+              <span className="settings-real-preview-tag">生文</span>
+              <span className="settings-real-preview-label">
+                <span>{t.inputReference}</span>
+                <span>{t.copy}</span>
+              </span>
+              <span className="settings-real-preview-prompt">
+                <span className="settings-real-preview-role">輸入</span>
+                <span>我的刀盾</span>
+              </span>
+            </span>
+          </span>
+          <span className="settings-card-layout-label">{t.inputOnly}</span>
+        </button>
+        <button
+          type="button"
+          className={`settings-card-layout-option${settings.cardLayout === 'output-only' ? ' is-selected' : ''}`}
+          aria-pressed={settings.cardLayout === 'output-only'}
+          onClick={() => onPatch({ cardLayout: 'output-only' })}
+        >
+          <span className="settings-real-layout-preview" aria-hidden="true">
+            <span className="settings-real-preview-card settings-real-preview-card-output">
+              <span className="settings-real-preview-tag">生圖</span>
+              <span className="settings-real-preview-label">
+                <span>{t.output}</span>
+                <span>{t.copy}</span>
+              </span>
+              <img src="/preview/card-layout-output.jpg" alt="" className="settings-real-preview-image" />
+            </span>
+          </span>
+          <span className="settings-card-layout-label">{t.outputOnly}</span>
+        </button>
       </div>
     </div>
   );

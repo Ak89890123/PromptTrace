@@ -13,7 +13,7 @@ import {
   recordRepository,
 } from '@/src/storage/repositories';
 import { assetTypeLabel, categoryLabel, resolveLanguage, roleLabel, UI_TEXT, type ResolvedLanguage, type UiText } from '@/src/ui/i18n';
-import { DEFAULT_ROLE_COLORS, DEFAULT_SETTINGS, loadSettings, onSettingsChanged } from '@/src/ui/roleColors';
+import { DEFAULT_ROLE_COLORS, DEFAULT_SETTINGS, loadSettings, onSettingsChanged, type DisplaySettings } from '@/src/ui/roleColors';
 import { flattenTree, useTaxonomy } from '@/src/ui/hooks';
 
 type RecordBundle = {
@@ -270,7 +270,7 @@ function RecordCard(props: {
   assets: Asset[];
   categories: ReturnType<typeof useTaxonomy>['categories'];
   selected: boolean;
-  layout: 'split' | 'output-only';
+  layout: DisplaySettings['cardLayout'];
   t: UiText;
   language: ResolvedLanguage;
   onOpen: () => void;
@@ -616,7 +616,7 @@ async function copyPreviewAssetsToClipboard(assets: Asset[]): Promise<void> {
   await navigator.clipboard.writeText(texts.join('\n\n'));
 }
 
-/** Compact left/right (or output-only) preview of a record's assets on its list card. */
+/** Compact left/right or single-column preview of a record's assets on its list card. */
 function CardPreview({
   assets,
   layout,
@@ -624,7 +624,7 @@ function CardPreview({
   onAssetPick,
 }: {
   assets: Asset[];
-  layout: 'split' | 'output-only';
+  layout: DisplaySettings['cardLayout'];
   t: UiText;
   onAssetPick: (assets: Asset[]) => void;
 }) {
@@ -678,6 +678,9 @@ function CardPreview({
   );
   const left = assets.filter((a) => a.role !== 'output');
   const right = assets.filter((a) => a.role === 'output');
+  if (layout === 'input-only') {
+    return <div className="record-preview is-output-only">{col(left, t.inputReference)}</div>;
+  }
   if (layout === 'output-only') {
     return <div className="record-preview is-output-only">{col(right, t.output)}</div>;
   }
