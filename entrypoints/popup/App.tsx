@@ -52,6 +52,11 @@ export default function App() {
         </span>
       </div>
 
+      <div className="pop-footer">
+        <button onClick={() => openPage('library.html')}>📚 {t.goLibrary}</button>
+        <button onClick={() => openPage('settings.html')}>⚙ {t.detailedSettings}</button>
+      </div>
+
       <div className="card">
         <h2>{t.quickToggles}</h2>
         {toggles(t).map((item) => (
@@ -125,11 +130,6 @@ export default function App() {
             </button>
           </span>
         </label>
-      </div>
-
-      <div className="pop-footer">
-        <button onClick={() => openPage('library.html')}>📚 {t.goLibrary}</button>
-        <button onClick={() => openPage('settings.html')}>⚙ {t.detailedSettings}</button>
       </div>
     </div>
   );

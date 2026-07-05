@@ -113,10 +113,12 @@ export default function App() {
         <div className="settings-column">
           <LanguageSettings settings={settings} onPatch={patchSettings} t={t} />
           <InteractionDisplaySettings settings={settings} onPatch={patchSettings} t={t} language={language} />
-          <LibraryRulesSettings categories={categories} onChanged={reload} t={t} language={language} />
           <DataFilesSettingsSection t={t} />
         </div>
-        <div className="settings-column">
+        <div className="settings-column settings-category-column">
+          <LibraryRulesSettings categories={categories} onChanged={reload} t={t} language={language} />
+        </div>
+        <div className="settings-column settings-summary-column">
           <SummarySettingsSection settings={settings} onPatch={patchSettings} t={t} language={language} />
         </div>
       </div>
@@ -286,9 +288,9 @@ function InteractionSettings({
 
   return (
     <div className="settings-subsection">
-      <h2>{t.interaction}</h2>
-      <div className="row" style={{ marginBottom: 8 }}>
-        <label className="row" style={{ gap: 4 }}>
+      <h2>{t.saveEntry}</h2>
+      <div className="settings-control-stack">
+        <label className="settings-control-row">
           <input
             type="checkbox"
             style={{ width: 'auto' }}
@@ -297,7 +299,7 @@ function InteractionSettings({
           />
           {t.edgePanel}
         </label>
-        <label className="row" style={{ gap: 4 }}>
+        <label className="settings-control-row">
           <input
             type="checkbox"
             style={{ width: 'auto' }}
@@ -307,35 +309,45 @@ function InteractionSettings({
           {t.selectionToolbar}
         </label>
       </div>
-      <div className="row" style={{ marginBottom: 8 }}>
-        <label className="muted">{t.toolbarTrigger}</label>
-        <select
-          style={{ width: 'auto' }}
-          value={settings.toolbarTrigger}
-          onChange={(e) => onPatch({ toolbarTrigger: e.target.value as 'auto' | 'hotkey' })}
-        >
-          <option value="hotkey">{t.triggerHotkey}</option>
-          <option value="auto">{t.triggerAuto}</option>
-        </select>
-        <label className="muted">{t.hotkey}</label>
-        <HotkeyRecorder
-          value={settings.summonHotkey}
-          onChange={(v) => onPatch({ summonHotkey: v })}
-          t={t}
-        />
+      <div className="settings-mode-row">
+        <span className="muted">{t.toolbarTrigger}</span>
+        <div className="settings-segmented" role="group" aria-label={t.toolbarTrigger}>
+          <button
+            type="button"
+            className={settings.toolbarTrigger === 'auto' ? 'is-active' : ''}
+            aria-pressed={settings.toolbarTrigger === 'auto'}
+            onClick={() => onPatch({ toolbarTrigger: 'auto' })}
+          >
+            {t.triggerAuto}
+          </button>
+          <button
+            type="button"
+            className={settings.toolbarTrigger === 'hotkey' ? 'is-active' : ''}
+            aria-pressed={settings.toolbarTrigger === 'hotkey'}
+            onClick={() => onPatch({ toolbarTrigger: 'hotkey' })}
+          >
+            {t.triggerHotkey}
+          </button>
+        </div>
       </div>
-      <h2>{t.quickSaveButtons}</h2>
+      <div className="settings-mode-row">
+        <span className="muted">{t.hotkey}</span>
+        <HotkeyRecorder value={settings.summonHotkey} onChange={(v) => onPatch({ summonHotkey: v })} t={t} />
+      </div>
+      <h2>{t.saveContent}</h2>
       <p className="muted">{t.quickSaveHint}</p>
-      <div className="row">
+      <div className="settings-role-chip-row">
         {(Object.keys(ROLE_LABELS) as AssetRole[]).map((role) => (
-          <label key={role} className="row" style={{ gap: 4 }}>
+          <label
+            key={role}
+            className={`settings-role-chip${settings.toolbarRoles.includes(role) ? ' is-selected' : ''}`}
+          >
             <input
               type="checkbox"
-              style={{ width: 'auto' }}
               checked={settings.toolbarRoles.includes(role)}
               onChange={() => toggleToolbarRole(role)}
             />
-            {roleLabel(role, language)}
+            <span>{roleLabel(role, language)}</span>
           </label>
         ))}
       </div>
@@ -405,42 +417,43 @@ function CategorySettings({
         <span>{t.order}</span>
         <span>{t.action}</span>
       </div>
-      {categoryRows.map((c) => {
-        const displayName = categoryLabel(c, language);
-        return (
-          <div className="settings-category-row" key={c.id}>
-            <ColorSwatchPicker
-              value={c.color ?? '#94a3b8'}
-              label={`${displayName} ${t.color}`}
-              t={t}
-              language={language}
-              onChange={(color) => save(c, { color })}
-            />
-            <input
-              style={{ width: 180 }}
-              defaultValue={displayName}
-              onBlur={(e) => {
-                const name = e.target.value.trim();
-                const v = validateCategoryName(name);
-                if (v.ok && name !== displayName) save(c, { name });
-              }}
-            />
-            <div className="settings-compact-actions">
-              <button onClick={() => save(c, { sortOrder: c.sortOrder - 1.5 })} title={t.moveUp}>↑</button>
-              <button onClick={() => save(c, { sortOrder: c.sortOrder + 1.5 })} title={t.moveDown}>↓</button>
+      <div className="settings-category-list">
+        {categoryRows.map((c) => {
+          const displayName = categoryLabel(c, language);
+          return (
+            <div className="settings-category-row" key={c.id}>
+              <ColorSwatchPicker
+                value={c.color ?? '#94a3b8'}
+                label={`${displayName} ${t.color}`}
+                t={t}
+                language={language}
+                onChange={(color) => save(c, { color })}
+              />
+              <input
+                defaultValue={displayName}
+                onBlur={(e) => {
+                  const name = e.target.value.trim();
+                  const v = validateCategoryName(name);
+                  if (v.ok && name !== displayName) save(c, { name });
+                }}
+              />
+              <div className="settings-compact-actions">
+                <button onClick={() => save(c, { sortOrder: c.sortOrder - 1.5 })} title={t.moveUp}>↑</button>
+                <button onClick={() => save(c, { sortOrder: c.sortOrder + 1.5 })} title={t.moveDown}>↓</button>
+              </div>
+              <button
+                className="danger"
+                onClick={async () => {
+                  await categoryRepository.delete(c.id);
+                  onChanged();
+                }}
+              >
+                {t.delete}
+              </button>
             </div>
-            <button
-              className="danger"
-              onClick={async () => {
-                await categoryRepository.delete(c.id);
-                onChanged();
-              }}
-            >
-              {t.delete}
-            </button>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
       <div className="settings-category-row settings-new-row">
         <span />
         <input
@@ -506,23 +519,9 @@ function DisplaySettingsSection({
 }) {
   return (
     <div className="settings-subsection">
-      <h2>{t.display}</h2>
-      <div className="row">
-        {(['pending', ...Object.keys(ROLE_LABELS)] as (AssetRole | 'pending')[]).map((role) => (
-          <div key={role} className="settings-role-color">
-            <ColorSwatchPicker
-              value={settings.roleColors[role]}
-              label={`${role === 'pending' ? t.uncategorized : roleLabel(role as AssetRole, language)} ${t.color}`}
-              t={t}
-              language={language}
-              onChange={(color) => onPatch({ roleColors: { ...settings.roleColors, [role]: color } })}
-            />
-            <span className="muted">{role === 'pending' ? t.uncategorized : roleLabel(role as AssetRole, language)}</span>
-          </div>
-        ))}
-      </div>
-      <div className="row" style={{ marginTop: 8 }}>
-        <label className="row" style={{ gap: 4 }}>
+      <h2>{t.displayAndRecords}</h2>
+      <div className="settings-control-stack">
+        <label className="settings-control-row">
           <input
             type="checkbox"
             style={{ width: 'auto' }}
@@ -531,7 +530,7 @@ function DisplaySettingsSection({
           />
           {t.pageFrame}
         </label>
-        <label className="row" style={{ gap: 4 }}>
+        <label className="settings-control-row">
           <input
             type="checkbox"
             style={{ width: 'auto' }}
@@ -541,8 +540,25 @@ function DisplaySettingsSection({
           {t.copyTray}
         </label>
       </div>
-      <div className="row" style={{ marginTop: 8 }}>
-        <label className="muted">{t.cardLayout}</label>
+      <div className="settings-display-group">
+        <span className="muted">{t.roleColors}</span>
+        <div className="settings-role-legend">
+          {(['pending', ...Object.keys(ROLE_LABELS)] as (AssetRole | 'pending')[]).map((role) => (
+            <div key={role} className="settings-role-color">
+              <ColorSwatchPicker
+                value={settings.roleColors[role]}
+                label={`${role === 'pending' ? t.uncategorized : roleLabel(role as AssetRole, language)} ${t.color}`}
+                t={t}
+                language={language}
+                onChange={(color) => onPatch({ roleColors: { ...settings.roleColors, [role]: color } })}
+              />
+              <span>{role === 'pending' ? t.uncategorized : roleLabel(role as AssetRole, language)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="settings-mode-row">
+        <label className="muted">{t.cardRoleColumn}</label>
         <select
           style={{ width: 'auto' }}
           value={settings.cardLayout}

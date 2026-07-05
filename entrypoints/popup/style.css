@@ -101,7 +101,7 @@ body {
 .pop-footer {
   display: flex;
   gap: 8px;
-  margin-top: 4px;
+  margin: 0 0 12px;
 }
 .pop-footer button {
   flex: 1;
