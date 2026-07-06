@@ -1,15 +1,18 @@
 ﻿import type { AssetRole, AssetType } from '../core/domain/enums';
 import type { DisplaySettings } from './roleColors';
 
-export type ResolvedLanguage = 'zh-TW' | 'en-US';
+export type ResolvedLanguage = 'en-US' | 'zh-TW' | 'zh-CN';
 
 export function resolveLanguage(
   preference: DisplaySettings['language'],
   languages: readonly string[] = typeof navigator === 'undefined' ? [] : navigator.languages,
 ): ResolvedLanguage {
-  if (preference === 'zh-TW' || preference === 'en-US') return preference;
+  if (preference === 'en-US' || preference === 'zh-TW' || preference === 'zh-CN') return preference;
   const first = languages.find(Boolean) ?? (typeof navigator === 'undefined' ? '' : navigator.language);
-  return first.toLowerCase().startsWith('en') ? 'en-US' : 'zh-TW';
+  const normalized = first.toLowerCase();
+  if (normalized.startsWith('en')) return 'en-US';
+  if (normalized === 'zh-cn' || normalized.startsWith('zh-hans') || normalized.includes('-cn')) return 'zh-CN';
+  return 'zh-TW';
 }
 
 export const ROLE_TEXT: Record<ResolvedLanguage, Record<AssetRole, string>> = {
@@ -18,6 +21,12 @@ export const ROLE_TEXT: Record<ResolvedLanguage, Record<AssetRole, string>> = {
     input_reference: '參考',
     negative: '排除',
     output: '輸出',
+  },
+  'zh-CN': {
+    input: '输入',
+    input_reference: '参考',
+    negative: '排除',
+    output: '输出',
   },
   'en-US': {
     input: 'Input',
@@ -32,6 +41,11 @@ export const ASSET_TYPE_TEXT: Record<ResolvedLanguage, Record<AssetType, string>
     text: '文字',
     image: '圖片',
     video: '影片',
+  },
+  'zh-CN': {
+    text: '文字',
+    image: '图片',
+    video: '视频',
   },
   'en-US': {
     text: 'Text',
@@ -54,6 +68,12 @@ const BUILTIN_CATEGORY_TEXT: Record<ResolvedLanguage, Record<string, string>> = 
     [BUILTIN_CATEGORY_IDS.video]: '生影',
     [BUILTIN_CATEGORY_IDS.music]: '生音樂',
   },
+  'zh-CN': {
+    [BUILTIN_CATEGORY_IDS.text]: '生文',
+    [BUILTIN_CATEGORY_IDS.image]: '生图',
+    [BUILTIN_CATEGORY_IDS.video]: '生影',
+    [BUILTIN_CATEGORY_IDS.music]: '生音乐',
+  },
   'en-US': {
     [BUILTIN_CATEGORY_IDS.text]: 'Text',
     [BUILTIN_CATEGORY_IDS.image]: 'Image',
@@ -74,7 +94,7 @@ export function categoryLabel(category: { id: string; name: string; isBuiltin?: 
   return category.isBuiltin ? BUILTIN_CATEGORY_TEXT[language][category.id] ?? category.name : category.name;
 }
 
-export const UI_TEXT = {
+const BASE_UI_TEXT = {
   'zh-TW': {
     settingsTitle: 'PrompTrace 設定',
     goLibrary: '前往紀錄庫',
@@ -82,6 +102,7 @@ export const UI_TEXT = {
     interfaceLanguage: '介面語言',
     followSystem: '跟隨系統',
     traditionalChinese: '繁體中文',
+    simplifiedChinese: '簡體中文',
     english: 'English',
     interaction: '互動設定',
     saveEntry: '保存入口',
@@ -206,6 +227,9 @@ export const UI_TEXT = {
     maxPerRun: '每次最多',
     timeoutSeconds: '逾時秒數',
     systemPrompt: 'System prompt',
+    applyTraditionalChinesePrompt: '繁中預設',
+    applySimplifiedChinesePrompt: '簡中預設',
+    applyEnglishPrompt: '英文預設',
     tokenDashboard: 'Token 儀表板',
     summarized: '已摘要',
     withUsage: '有 usage',
@@ -225,6 +249,7 @@ export const UI_TEXT = {
     interfaceLanguage: 'Interface language',
     followSystem: 'Follow system',
     traditionalChinese: 'Traditional Chinese',
+    simplifiedChinese: 'Simplified Chinese',
     english: 'English',
     interaction: 'Interaction',
     saveEntry: 'Save entry points',
@@ -349,6 +374,9 @@ export const UI_TEXT = {
     maxPerRun: 'Max per run',
     timeoutSeconds: 'Timeout seconds',
     systemPrompt: 'System prompt',
+    applyTraditionalChinesePrompt: 'Traditional Chinese default',
+    applySimplifiedChinesePrompt: 'Simplified Chinese default',
+    applyEnglishPrompt: 'English default',
     tokenDashboard: 'Token dashboard',
     summarized: 'Summarized',
     withUsage: 'With usage',
@@ -361,6 +389,139 @@ export const UI_TEXT = {
     outputTokenShort: 'Output',
     totalTokenShort: 'Total',
   },
+} as const;
+
+type UiTextBundle = { [K in keyof typeof BASE_UI_TEXT['zh-TW']]: string };
+
+const ZH_CN_UI_TEXT: UiTextBundle = {
+  ...BASE_UI_TEXT['zh-TW'],
+  interfaceLanguage: '界面语言',
+  followSystem: '跟随系统',
+  traditionalChinese: '繁体中文',
+  simplifiedChinese: '简体中文',
+  interaction: '互动设置',
+  saveEntry: '保存入口',
+  edgePanel: '滑到页面右边时，打开快速面板',
+  selectionToolbar: '选取文字时，显示保存按钮',
+  toolbarTrigger: '保存按钮出现方式',
+  triggerHotkey: '按快捷键显示',
+  triggerAuto: '自动显示',
+  hotkey: '快捷键',
+  quickSaveButtons: '快速保存按钮',
+  saveContent: '可保存内容',
+  quickSaveHint: '选 2 到 4 个角色。重叠图片与视频时，不能用的按钮会自动藏起来。',
+  display: '画面显示',
+  displayAndRecords: '显示与记录',
+  uncategorized: '未分类',
+  color: '颜色',
+  roleColors: '角色颜色',
+  pageFrame: '在网页上显示选取框线',
+  copyTray: '显示快速复制列',
+  cardLayout: '记录卡片显示方式',
+  cardRoleColumn: '右侧浮动小卡',
+  splitCard: '左右显示（输入、参考｜输出）',
+  inputOnly: '只显示输入',
+  outputOnly: '只显示输出',
+  layoutApplies: '会套用到页面小面板和记录库。',
+  category: '分类',
+  resetBuiltinCategories: '重置原厂分类',
+  order: '排序',
+  moveUp: '上移',
+  moveDown: '下移',
+  disable: '停用',
+  enable: '启用',
+  delete: '删除',
+  newCategoryName: '新分类名称',
+  addCategory: '新增分类',
+  noCategoryBinding: '（不绑分类）',
+  setFavorite: '设为常用',
+  files: '文件',
+  openFileFolder: '打开文件夹',
+  noDownloads: '目前还没有 PrompTrace 下载文件可以定位。请先抓一张图片或视频。',
+  openFolderFailed: '无法打开文件夹。',
+  exportBackup: '导出记录库 ZIP',
+  importBackup: '导入记录库 ZIP',
+  backupExported: '已导出 {records} 笔记录，包含 {media} 个媒体文件。',
+  backupImported: '已导入 {records} 笔记录，重新写入 {media} 个媒体文件。',
+  backupExportFailed: '导出失败。部分远程媒体可能已过期，请稍后再试。',
+  backupImportFailed: '导入失败。请确认这是 PrompTrace 导出的 ZIP。',
+  search: '搜索',
+  settings: '设置',
+  resetCategory: '重置分类',
+  records: 'records',
+  assets: 'assets',
+  noRecords: '暂无记录',
+  noRecordsHint: '在网页上选取文字或保存图片、视频后，这里会出现可搜索、可复制、可导出的本地记录。',
+  noMatches: '没有符合的记录',
+  noMatchesHint: '调整左侧筛选或搜索条件，找回已保存的内容。',
+  copy: '复制',
+  copied: '已复制 ✓',
+  copiedAndFilled: '已复制+填入 ✓',
+  copiedAndAttached: '已复制+加入 ✓',
+  copiedAndPasted: '已复制+粘贴 ✓',
+  pressCtrlV: '请 Ctrl+V',
+  richCopied: '含图片 ✓',
+  clickCopyColumn: '点击复制整栏',
+  inputReference: '输入、参考、排除',
+  loading: '加载中…',
+  emptyPrompt: '还没有保存任何 prompt。',
+  emptyPromptHelp: '选取文字 → 按快捷键 → 选按钮保存。',
+  openInLibrary: '在记录库查看',
+  saved: '已保存。',
+  pinned: '固定',
+  unpinTitle: '取消固定',
+  pinTitle: '固定面板',
+  close: '关闭',
+  quickToggles: '快速开关',
+  roleOptions: '保存按钮',
+  edgePanelShort: '右边浮动小卡',
+  edgePanelHint: '鼠标靠右边自动展开保存清单',
+  selectionToolbarShort: '选取文字按钮',
+  selectionToolbarHint: '选取文字时显示保存按钮',
+  pageFrameShort: '选取框线',
+  pageFrameHint: '已保存项目在页面上显示彩色框',
+  copyTrayShort: '快速复制列',
+  copyTrayHint: '在记录库卡片旁快速复制',
+  triggerMode: '出现方式',
+  hotkeyTriggerShort: '按快捷键',
+  autoTriggerShort: '选取后立即',
+  edgeTabHeight: 'P 按钮高度',
+  edgeTabHeightHint: '调整右边 P 按钮的上下位置',
+  detailedSettings: '详细设置',
+  contextAddSelection: 'PrompTrace：加入选取文字',
+  contextAddImage: 'PrompTrace：加入图片',
+  contextAddVideo: 'PrompTrace：加入视频',
+  colorFamily: '色系',
+  selectColor: '选择',
+  summarySettings: '摘要设置',
+  scheduledSummarySettings: '定时摘要设置',
+  enabled: '启用',
+  apiKeyPlaceholder: '贴上你的 API key',
+  customModel: '自填模型',
+  savedApiKey: '已保存',
+  apiKeyNotSet: '尚未设置 API key',
+  autoSummary: '自动摘要没摘要过的卡片',
+  scanIntervalMinutes: '扫描间隔（分钟）',
+  maxPerRun: '每次最多',
+  timeoutSeconds: '超时秒数',
+  applyTraditionalChinesePrompt: '繁中预设',
+  applySimplifiedChinesePrompt: '简中预设',
+  applyEnglishPrompt: '英文预设',
+  tokenDashboard: 'Token 仪表板',
+  summarized: '已摘要',
+  inputToken: '输入 token',
+  outputToken: '输出 token',
+  totalToken: '总 token',
+  noSummaryTokenRecords: '还没有摘要 token 记录。',
+  untitledCard: '未命名卡片',
+  inputTokenShort: '输入',
+  outputTokenShort: '输出',
+  totalTokenShort: '总计',
+};
+
+export const UI_TEXT = {
+  ...BASE_UI_TEXT,
+  'zh-CN': ZH_CN_UI_TEXT,
 } as const;
 
 export type UiText = (typeof UI_TEXT)[ResolvedLanguage];

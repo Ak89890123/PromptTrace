@@ -12,7 +12,7 @@ export const DEFAULT_ROLE_COLORS: RoleColorMap = {
 };
 
 export type DisplaySettings = {
-  language: 'system' | 'zh-TW' | 'en-US';
+  language: 'system' | 'en-US' | 'zh-TW' | 'zh-CN';
   roleColors: RoleColorMap;
   overlayEnabled: boolean;
   copyTrayEnabled: boolean;
@@ -60,7 +60,7 @@ const LEGACY_SETTINGS_KEY = 'prompttrace:settings';
 function withDefaults(stored: Partial<DisplaySettings> | undefined): DisplaySettings {
   if (!stored) return DEFAULT_SETTINGS;
   const language =
-    stored.language === 'system' || stored.language === 'zh-TW' || stored.language === 'en-US'
+    stored.language === 'system' || stored.language === 'en-US' || stored.language === 'zh-TW' || stored.language === 'zh-CN'
       ? stored.language
       : DEFAULT_SETTINGS.language;
   const cardLayout =

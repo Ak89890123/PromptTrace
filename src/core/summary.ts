@@ -2,7 +2,7 @@ export type SummaryProvider = 'openai' | 'gemini' | 'claude' | 'openrouter';
 
 export type SummaryStatus = 'pending' | 'completed' | 'failed' | 'skipped';
 
-export type SummaryPromptLanguage = 'zh-TW' | 'en-US';
+export type SummaryPromptLanguage = 'en-US' | 'zh-TW' | 'zh-CN';
 
 export type PromptSummary = {
   summary: string;
@@ -55,6 +55,8 @@ export const SUMMARY_PROVIDER_MODELS: Record<SummaryProvider, string[]> = {
 export const SUMMARY_SYSTEM_PROMPTS: Record<SummaryPromptLanguage, string> = {
   'zh-TW':
     '你是 prompt 摘要器，負責把使用者保存的 prompt 文字整理成簡短摘要。\n\n請根據原始 prompt 文字，產生一段簡潔、明確、方便搜尋的繁體中文摘要。摘要要讓使用者快速理解這段 prompt 的用途、預期產出，以及原文中明確提到的重要限制或風格要求。\n\n規則：\n1. 只根據原始 prompt 文字摘要，不要改寫原 prompt。\n2. 不要補充原文沒有出現或無法合理判斷的資訊。\n3. 如果用途不明確，摘要開頭直接寫「用途不明確」。\n4. 優先保留對搜尋有幫助的關鍵詞，例如任務類型、輸出格式、平台、風格、限制、角色、工具或模型名稱。\n5. 摘要使用繁體中文，長度控制在 1 到 2 句。\n6. 不要輸出 Markdown、解釋、前言或多餘文字。\n\n只輸出符合 JSON schema 的結果：\n\n{"summary":"這裡放摘要文字"}',
+  'zh-CN':
+    '你是 prompt 摘要器，负责把用户保存的 prompt 文字整理成简短摘要。\n\n请根据原始 prompt 文字，生成一段简洁、明确、方便搜索的简体中文摘要。摘要要让用户快速理解这段 prompt 的用途、预期产出，以及原文中明确提到的重要限制或风格要求。\n\n规则：\n1. 只根据原始 prompt 文字摘要，不要改写原 prompt。\n2. 不要补充原文没有出现或无法合理判断的信息。\n3. 如果用途不明确，摘要开头直接写“用途不明确”。\n4. 优先保留对搜索有帮助的关键词，例如任务类型、输出格式、平台、风格、限制、角色、工具或模型名称。\n5. 摘要使用简体中文，长度控制在 1 到 2 句。\n6. 不要输出 Markdown、解释、前言或多余文字。\n\n只输出符合 JSON schema 的结果：\n\n{"summary":"这里放摘要文字"}',
   'en-US':
     'You are a prompt summarizer. Your job is to turn saved prompt text into a short summary.\n\nBased only on the original prompt text, produce a concise, clear, searchable English summary. The summary should help the user quickly understand the prompt purpose, expected output, and any important constraints or style requirements explicitly mentioned in the source prompt.\n\nRules:\n1. Summarize only from the original prompt text. Do not rewrite the prompt.\n2. Do not add information that is not present or reasonably inferable from the original text.\n3. If the purpose is unclear, start the summary with "Purpose unclear".\n4. Prefer searchable keywords such as task type, output format, platform, style, constraints, role, tool, or model name.\n5. Use English and keep the summary to 1 or 2 sentences.\n6. Do not output Markdown, explanations, prefaces, or extra text.\n\nOnly output a result that matches this JSON schema:\n\n{"summary":"summary text goes here"}',
 };

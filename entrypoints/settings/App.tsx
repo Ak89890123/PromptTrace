@@ -12,9 +12,11 @@ import { ROLE_LABELS, type AssetRole } from '@/src/core/domain/enums';
 import { validateCategoryName } from '@/src/core/domain/validation';
 import { formatHotkeyFromEvent } from '@/src/core/hotkeys';
 import {
+  defaultSummarySystemPrompt,
   maskApiKey,
   SUMMARY_PROVIDER_LABELS,
   SUMMARY_PROVIDER_MODELS,
+  type SummaryPromptLanguage,
   type SummaryProvider,
 } from '@/src/core/summary';
 import {
@@ -111,9 +113,13 @@ export default function App() {
       </header>
       <div className="settings-layout">
         <div className="settings-column">
-          <LanguageSettings settings={settings} onPatch={patchSettings} t={t} />
-          <InteractionDisplaySettings settings={settings} onPatch={patchSettings} t={t} language={language} />
-          <DataFilesSettingsSection t={t} />
+          <section className="card settings-section settings-primary-section">
+            <LanguageSettings settings={settings} onPatch={patchSettings} t={t} />
+            <div className="settings-inner-divider settings-primary-divider" />
+            <InteractionDisplaySettings settings={settings} onPatch={patchSettings} t={t} language={language} />
+            <div className="settings-inner-divider settings-primary-divider" />
+            <DataFilesSettingsSection t={t} />
+          </section>
         </div>
         <div className="settings-column settings-category-column">
           <LibraryRulesSettings categories={categories} onChanged={reload} t={t} language={language} />
@@ -141,7 +147,7 @@ function LanguageSettings({
   t: UiText;
 }) {
   return (
-    <section className="card settings-section">
+    <div className="settings-subsection settings-language-subsection">
       <h2>{t.languageCard}</h2>
       <label className="settings-field">
         <span className="muted">{t.interfaceLanguage}</span>
@@ -150,11 +156,12 @@ function LanguageSettings({
           onChange={(e) => onPatch({ language: e.target.value as DisplaySettings['language'] })}
         >
           <option value="system">{t.followSystem}</option>
-          <option value="zh-TW">{t.traditionalChinese}</option>
           <option value="en-US">{t.english}</option>
+          <option value="zh-TW">{t.traditionalChinese}</option>
+          <option value="zh-CN">{t.simplifiedChinese}</option>
         </select>
       </label>
-    </section>
+    </div>
   );
 }
 
@@ -263,11 +270,11 @@ function InteractionDisplaySettings({
   language: ResolvedLanguage;
 }) {
   return (
-    <section className="card settings-section">
+    <>
       <InteractionSettings settings={settings} onPatch={onPatch} t={t} language={language} />
       <div className="settings-dashed-divider" />
       <DisplaySettingsSection settings={settings} onPatch={onPatch} t={t} language={language} />
-    </section>
+    </>
   );
 }
 
@@ -282,15 +289,6 @@ function InteractionSettings({
   t: UiText;
   language: ResolvedLanguage;
 }) {
-  const toggleToolbarRole = (role: AssetRole) => {
-    const has = settings.toolbarRoles.includes(role);
-    const next = has
-      ? settings.toolbarRoles.filter((r) => r !== role)
-      : [...settings.toolbarRoles, role];
-    if (next.length < 2) return; // keep at least two buttons
-    onPatch({ toolbarRoles: next });
-  };
-
   return (
     <div className="settings-subsection">
       <h2>{t.saveEntry}</h2>
@@ -338,23 +336,6 @@ function InteractionSettings({
       <div className="settings-mode-row">
         <span className="muted">{t.hotkey}</span>
         <HotkeyRecorder value={settings.summonHotkey} onChange={(v) => onPatch({ summonHotkey: v })} t={t} />
-      </div>
-      <h2>{t.saveContent}</h2>
-      <p className="muted">{t.quickSaveHint}</p>
-      <div className="settings-role-chip-row">
-        {(Object.keys(ROLE_LABELS) as AssetRole[]).map((role) => (
-          <label
-            key={role}
-            className={`settings-role-chip${settings.toolbarRoles.includes(role) ? ' is-selected' : ''}`}
-          >
-            <input
-              type="checkbox"
-              checked={settings.toolbarRoles.includes(role)}
-              onChange={() => toggleToolbarRole(role)}
-            />
-            <span>{roleLabel(role, language)}</span>
-          </label>
-        ))}
       </div>
     </div>
   );
@@ -739,6 +720,13 @@ function SummarySettingsSection({
       },
     });
   };
+  const applyDefaultPrompt = (promptLanguage: SummaryPromptLanguage) => {
+    setSystemPromptEdited(true);
+    patchSummary({
+      systemPrompt: defaultSummarySystemPrompt(promptLanguage),
+      systemPromptCustomized: false,
+    });
+  };
 
   return (
     <section className="card settings-section settings-summary-section">
@@ -883,6 +871,17 @@ function SummarySettingsSection({
           }}
         />
       </label>
+      <div className="row settings-prompt-actions">
+        <button type="button" onClick={() => applyDefaultPrompt('zh-TW')}>
+          {t.applyTraditionalChinesePrompt}
+        </button>
+        <button type="button" onClick={() => applyDefaultPrompt('zh-CN')}>
+          {t.applySimplifiedChinesePrompt}
+        </button>
+        <button type="button" onClick={() => applyDefaultPrompt('en-US')}>
+          {t.applyEnglishPrompt}
+        </button>
+      </div>
       <div className="settings-inner-divider" />
       <div className="settings-summary-dashboard">
         <div className="settings-summary-dashboard-head">
@@ -1099,7 +1098,7 @@ function DataFilesSettingsSection({ t }: { t: UiText }) {
   const [status, setStatus] = useState('');
 
   return (
-    <section className="card settings-section">
+    <div className="settings-subsection settings-files-subsection">
       <h2>{t.files}</h2>
       <div className="row settings-file-actions">
         <button
@@ -1156,7 +1155,7 @@ function DataFilesSettingsSection({ t }: { t: UiText }) {
         </label>
       </div>
       {status && <p className="muted">{status}</p>}
-    </section>
+    </div>
   );
 }
 

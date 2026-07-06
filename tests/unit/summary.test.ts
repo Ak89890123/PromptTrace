@@ -35,6 +35,7 @@ describe('summary helpers', () => {
   it('provides default summary prompts by language', () => {
     expect(defaultSummarySystemPrompt('en-US')).toContain('Use English');
     expect(defaultSummarySystemPrompt('zh-TW')).toContain('繁體中文');
+    expect(defaultSummarySystemPrompt('zh-CN')).toContain('简体中文');
   });
 
   it('rejects empty prompt text before calling the provider', async () => {
