@@ -19,6 +19,7 @@ import type { GalleryAsset, GalleryRecord, ListRecordsResult } from '@/src/core/
 const send = (message: unknown) => chrome.runtime.sendMessage(message).catch(() => undefined);
 const openExtensionPage = (page: 'library' | 'settings', hash?: string) =>
   send({ type: 'navigation/openExtensionPage', payload: { page, hash } });
+const ALL_GALLERY_CATEGORIES = '__all__';
 
 export default function PanelApp({ overlay }: { overlay: OverlayManager }) {
   const [settings, setSettings] = useState<DisplaySettings>(DEFAULT_SETTINGS);
@@ -1061,6 +1062,7 @@ function Gallery({
   refreshSignal: number;
 }) {
   const [records, setRecords] = useState<GalleryRecord[] | null>(null);
+  const [activeCategory, setActiveCategory] = useState(ALL_GALLERY_CATEGORIES);
   const refresh = useCallback(() => {
     send({ type: 'library/listRecords', payload: {} }).then((r) => {
       setRecords((r as ListRecordsResult | undefined)?.records ?? []);
@@ -1070,6 +1072,29 @@ function Gallery({
   useEffect(() => {
     refresh();
   }, [refresh, refreshSignal]);
+
+  const categoryFilters = useMemo(() => {
+    if (!records) return [];
+    const seen = new Map<string, { key: string; label: string; count: number }>();
+    for (const record of records) {
+      if (!record.categoryName) continue;
+      const key = galleryCategoryKey(record);
+      const existing = seen.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        seen.set(key, { key, label: record.categoryName, count: 1 });
+      }
+    }
+    return Array.from(seen.values());
+  }, [records]);
+
+  useEffect(() => {
+    if (activeCategory === ALL_GALLERY_CATEGORIES) return;
+    if (!categoryFilters.some((category) => category.key === activeCategory)) {
+      setActiveCategory(ALL_GALLERY_CATEGORIES);
+    }
+  }, [activeCategory, categoryFilters]);
 
   if (records === null) return <div className="pt-empty">{t.loading}</div>;
   if (records.length === 0) {
@@ -1082,22 +1107,62 @@ function Gallery({
       </div>
     );
   }
+  const filteredRecords =
+    activeCategory === ALL_GALLERY_CATEGORIES
+      ? records
+      : records.filter((record) => galleryCategoryKey(record) === activeCategory);
+  const allLabel = language === 'en-US' ? 'All' : language === 'zh-CN' ? '全部' : '全部';
   return (
-    <div className="pt-gallery">
-      {records.map((r) => (
-        <GalleryCard
-          key={r.id}
-          record={r}
-          settings={settings}
-          t={t}
-          language={language}
-          onZoom={onZoom}
-          onEdit={onEdit}
-          onChanged={refresh}
-        />
-      ))}
-    </div>
+    <>
+      {categoryFilters.length > 0 && (
+        <div className="pt-gallery-filter" aria-label={language === 'en-US' ? 'Filter saved records' : '篩選保存紀錄'}>
+          <div className="pt-gallery-filter-scroll">
+            <button
+              className="pt-filter-chip"
+              type="button"
+              aria-pressed={activeCategory === ALL_GALLERY_CATEGORIES}
+              data-active={activeCategory === ALL_GALLERY_CATEGORIES}
+              onClick={() => setActiveCategory(ALL_GALLERY_CATEGORIES)}
+            >
+              <span>{allLabel}</span>
+              <span className="pt-filter-count">{records.length}</span>
+            </button>
+            {categoryFilters.map((category) => (
+              <button
+                key={category.key}
+                className="pt-filter-chip"
+                type="button"
+                aria-pressed={activeCategory === category.key}
+                data-active={activeCategory === category.key}
+                onClick={() => setActiveCategory(category.key)}
+              >
+                <span>{category.label}</span>
+                <span className="pt-filter-count">{category.count}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="pt-gallery">
+        {filteredRecords.map((r) => (
+          <GalleryCard
+            key={r.id}
+            record={r}
+            settings={settings}
+            t={t}
+            language={language}
+            onZoom={onZoom}
+            onEdit={onEdit}
+            onChanged={refresh}
+          />
+        ))}
+      </div>
+    </>
   );
+}
+
+function galleryCategoryKey(record: GalleryRecord): string {
+  return record.categoryId ?? `name:${record.categoryName ?? ''}`;
 }
 
 /** Full-screen image preview. Click anywhere or press Esc to dismiss. */
