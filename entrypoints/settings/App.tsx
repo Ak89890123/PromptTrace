@@ -239,7 +239,7 @@ function HotkeyRecorder({ value, onChange, t }: { value: string | undefined; onC
   const [recording, setRecording] = useState(false);
   return (
     <button
-      style={{ minWidth: 86, borderColor: recording ? 'var(--accent)' : undefined }}
+      style={{ borderColor: recording ? 'var(--accent)' : undefined }}
       onClick={() => setRecording(true)}
       onBlur={() => setRecording(false)}
       onKeyDown={(e) => {

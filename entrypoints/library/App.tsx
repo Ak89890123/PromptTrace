@@ -276,7 +276,6 @@ function RecordCard(props: {
   onOpen: () => void;
 }) {
   const { record, assets, categories, selected, layout, t, language, onOpen } = props;
-  const outputCount = assets.filter((a) => a.role === 'output').length;
   const category = categories.find((c) => c.id === record.categoryId);
   const copyAssets = async (pickedAssets: Asset[]) => {
     onOpen();
@@ -317,10 +316,6 @@ function RecordCard(props: {
         )}
       </div>
       <CardPreview assets={assets} layout={layout} t={t} onAssetPick={copyAssets} />
-      <div className="record-card-footer">
-        <span />
-        <span>{outputCount > 0 ? `${outputCount} ${t.output}` : language === 'en-US' ? 'no output' : '無輸出'}</span>
-      </div>
     </article>
   );
 }

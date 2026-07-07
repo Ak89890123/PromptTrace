@@ -206,13 +206,13 @@ body {
 
 .record-card {
   display: grid;
-  grid-template-rows: 24px 44px minmax(0, 1fr) 26px;
+  grid-template-rows: 24px 44px minmax(0, 1fr);
   row-gap: 10px;
   height: 360px;
   width: 100%;
   padding: var(--pt-space-8);
   text-align: left;
-  cursor: pointer;
+  cursor: default;
   background: var(--pt-surface-elevated);
   border: 1px solid var(--pt-stroke-soft);
   border-radius: var(--pt-radius-thumb);
@@ -234,8 +234,7 @@ body {
   box-shadow: var(--pt-shadow-record-selected);
 }
 
-.record-card-topline,
-.record-card-footer {
+.record-card-topline {
   display: flex;
   justify-content: space-between;
   gap: var(--pt-space-3);
@@ -327,23 +326,6 @@ body {
   font-size: var(--pt-font-size-caption);
 }
 
-.record-card-footer {
-  min-height: 26px;
-  margin-top: 0;
-  padding-top: 0;
-  align-items: end;
-}
-
-.record-card-footer span:first-child:empty {
-  visibility: hidden;
-  border: 0;
-  padding: 0;
-}
-
-.record-card-footer span:last-child {
-  margin-left: auto;
-}
-
 .record-preview {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -382,7 +364,7 @@ body {
   min-height: 0;
   padding: 0;
   text-align: left;
-  cursor: copy;
+  cursor: pointer;
   border: 0;
   background: transparent;
 }

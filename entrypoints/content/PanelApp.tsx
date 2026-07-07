@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { CaptureSessionState } from '@/src/core/capture/session';
 import { canCommit, emptySession } from '@/src/core/capture/session';
 import type { PendingAsset, RecordCategory } from '@/src/core/domain/entities';
@@ -20,14 +20,18 @@ const send = (message: unknown) => chrome.runtime.sendMessage(message).catch(() 
 const openExtensionPage = (page: 'library' | 'settings', hash?: string) =>
   send({ type: 'navigation/openExtensionPage', payload: { page, hash } });
 const ALL_GALLERY_CATEGORIES = '__all__';
+const UNCATEGORIZED_GALLERY_CATEGORY = '__uncategorized__';
+
+type GalleryMoveToast = {
+  recordId: string;
+  previousCategoryId: string | null;
+  previousCategoryName?: string;
+  message: string;
+};
 
 export default function PanelApp({ overlay }: { overlay: OverlayManager }) {
   const [settings, setSettings] = useState<DisplaySettings>(DEFAULT_SETTINGS);
   const [session, setSession] = useState<CaptureSessionState>(emptySession());
-  // Zoom lives at the root so the lightbox renders OUTSIDE .pt-glass — its
-  // backdrop-filter would otherwise become the containing block for the
-  // position:fixed overlay and trap it inside the narrow panel.
-  const [zoom, setZoom] = useState<ZoomSrc | null>(null);
 
   useEffect(() => {
     loadSettings().then(setSettings);
@@ -50,8 +54,7 @@ export default function PanelApp({ overlay }: { overlay: OverlayManager }) {
     <>
       {settings.selectionToolbarEnabled && <SelectionToolbar overlay={overlay} settings={settings} language={language} />}
       {settings.edgePanelEnabled && <CapturePanel session={session} settings={settings} t={t} />}
-      {settings.edgePanelEnabled && <GalleryPanel settings={settings} onZoom={setZoom} t={t} language={language} />}
-      {zoom && <Lightbox zoom={zoom} onClose={() => setZoom(null)} t={t} />}
+      {settings.edgePanelEnabled && <GalleryPanel settings={settings} t={t} language={language} />}
     </>
   );
 }
@@ -410,12 +413,10 @@ function CapturePanel({ session, settings, t }: { session: CaptureSessionState; 
 
 function GalleryPanel({
   settings,
-  onZoom,
   t,
   language,
 }: {
   settings: DisplaySettings;
-  onZoom: (z: ZoomSrc | null) => void;
   t: UiText;
   language: ResolvedLanguage;
 }) {
@@ -436,18 +437,14 @@ function GalleryPanel({
     setOpen(true);
   };
   const closeGallery = () => {
-    // Stay open while editing (the editor flyout sits to the left). Otherwise
-    // leaving the gallery closes it and dismisses the big preview.
     if (editing || pinned) return;
     setOpen(false);
-    onZoom(null);
   };
   const dismissGallery = useCallback(() => {
     setPinned(false);
     setEditing(null);
     setOpen(false);
-    onZoom(null);
-  }, [onZoom]);
+  }, []);
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -508,7 +505,6 @@ function GalleryPanel({
                 settings={settings}
                 t={t}
                 language={language}
-                onZoom={onZoom}
                 onEdit={setEditing}
                 refreshSignal={refreshSignal}
               />
@@ -707,26 +703,6 @@ function PanelAssetCard({ asset, settings, t, language }: { asset: PendingAsset;
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Gallery: scrollable, copyable library of saved prompts             */
-/* ------------------------------------------------------------------ */
-
-/** Best-quality source first, durable fallback second (for the zoom view). */
-type ZoomSrc = { primary?: string; fallback?: string };
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
-
-function galleryAssetRef(asset: GalleryAsset): string {
-  return asset.previewRef ?? asset.originalUrl ?? '';
-}
-
 function galleryAssetComposerRef(asset: GalleryAsset): string {
   if (asset.originalUrl) return asset.originalUrl;
   if (asset.previewRef && !asset.previewRef.startsWith('data:')) return asset.previewRef;
@@ -737,8 +713,7 @@ function galleryAssetsPlainText(assets: GalleryAsset[]): string {
   return assets
     .map((asset) => {
       if (asset.assetType === 'text' && asset.textContent) return asset.textContent.trim();
-      const ref = galleryAssetRef(asset);
-      return ref ? `[${asset.assetType}] ${ref}` : `[${asset.assetType}]`;
+      return '';
     })
     .filter(Boolean)
     .join('\n\n');
@@ -756,60 +731,14 @@ function galleryAssetsComposerText(assets: GalleryAsset[]): string {
     .join('\n\n');
 }
 
-function galleryAssetsHtml(assets: GalleryAsset[]): string {
-  const body = assets
-    .map((asset) => {
-      if (asset.assetType === 'text' && asset.textContent) {
-        return `<p>${escapeHtml(asset.textContent.trim()).replaceAll('\n', '<br>')}</p>`;
-      }
-      const src = galleryAssetRef(asset);
-      if (asset.assetType === 'image' && src) {
-        return `<p><img src="${escapeHtml(src)}" alt="" style="max-width:100%;height:auto;"></p>`;
-      }
-      return src ? `<p><a href="${escapeHtml(src)}">${escapeHtml(src)}</a></p>` : '';
-    })
-    .filter(Boolean)
-    .join('');
-  return `<div>${body}</div>`;
-}
-
-async function copyGalleryAssets(assets: GalleryAsset[]): Promise<'rich' | 'text'> {
+async function copyGalleryAssetsText(assets: GalleryAsset[]): Promise<'text'> {
   const text = galleryAssetsPlainText(assets);
-  const hasImage = assets.some((asset) => asset.assetType === 'image' && galleryAssetRef(asset));
-  if (hasImage && 'ClipboardItem' in window && navigator.clipboard.write) {
-    try {
-      const [file] = await imageFilesFromAssets(assets);
-      if (file) {
-        await navigator.clipboard.write([
-          new ClipboardItem({
-            'image/png': file,
-            'text/plain': new Blob([text], { type: 'text/plain' }),
-            'text/html': new Blob([galleryAssetsHtml(assets)], { type: 'text/html' }),
-          }),
-        ]);
-        return 'rich';
-      }
-    } catch {
-      // Some sites/browsers reject mixed image + text clipboard items.
-    }
-    try {
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          'text/plain': new Blob([text], { type: 'text/plain' }),
-          'text/html': new Blob([galleryAssetsHtml(assets)], { type: 'text/html' }),
-        }),
-      ]);
-      return 'rich';
-    } catch {
-      // Rich clipboard is best-effort; plain text still carries the media refs.
-    }
-  }
   await navigator.clipboard.writeText(text);
   return 'text';
 }
 
 type ComposerTarget = HTMLInputElement | HTMLTextAreaElement | HTMLElement;
-type PromptInsertResult = 'uploaded' | 'pasted' | 'imageClipboard' | 'filled' | 'none';
+type PromptInsertResult = 'uploaded' | 'pasted' | 'filled' | 'none';
 
 function isVisibleComposerCandidate(el: Element | null): el is ComposerTarget {
   if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLElement)) return false;
@@ -851,11 +780,10 @@ function appendWithSeparator(current: string, text: string): string {
 function setTextInputValue(target: HTMLInputElement | HTMLTextAreaElement, text: string): void {
   const start = target.selectionStart ?? target.value.length;
   const end = target.selectionEnd ?? target.value.length;
-  const insertion = target.value ? text : text;
   const next =
     start !== end || start < target.value.length
-      ? `${target.value.slice(0, start)}${insertion}${target.value.slice(end)}`
-      : appendWithSeparator(target.value, insertion);
+      ? `${target.value.slice(0, start)}${text}${target.value.slice(end)}`
+      : appendWithSeparator(target.value, text);
   const proto = target instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
   Object.getOwnPropertyDescriptor(proto, 'value')?.set?.call(target, next);
   target.focus();
@@ -867,8 +795,7 @@ function setTextInputValue(target: HTMLInputElement | HTMLTextAreaElement, text:
 
 function setContentEditableText(target: HTMLElement, text: string): void {
   target.focus();
-  const current = target.innerText;
-  const next = appendWithSeparator(current, text);
+  const next = appendWithSeparator(target.innerText, text);
   target.textContent = next;
   const range = document.createRange();
   range.selectNodeContents(target);
@@ -889,7 +816,6 @@ async function imageFileFromAsset(asset: GalleryAsset, index: number): Promise<F
       const png = await blobToPng(await resp.blob());
       return new File([png], `prompttrace-image-${index + 1}.png`, { type: 'image/png' });
     } catch {
-      // Try the next source. Original URLs can expire; previewRef is the fallback.
     }
   }
   return null;
@@ -1009,15 +935,6 @@ async function blobToPng(blob: Blob): Promise<Blob> {
   }
 }
 
-async function writeGalleryImageToClipboard(assets: GalleryAsset[], text: string): Promise<boolean> {
-  const [file] = await imageFilesFromAssets(assets);
-  if (!file || !('ClipboardItem' in window) || !navigator.clipboard.write) return false;
-  const item: Record<string, Blob> = { 'image/png': file };
-  if (text) item['text/plain'] = new Blob([text], { type: 'text/plain' });
-  await navigator.clipboard.write([new ClipboardItem(item)]);
-  return true;
-}
-
 async function insertGalleryAssetsIntoPrompt(assets: GalleryAsset[]): Promise<PromptInsertResult> {
   const text = galleryAssetsComposerText(assets);
   const target = findPromptComposer();
@@ -1034,11 +951,6 @@ async function insertGalleryAssetsIntoPrompt(assets: GalleryAsset[]): Promise<Pr
       insertTextIntoPromptTarget(target, text);
       return 'pasted';
     }
-    if (await writeGalleryImageToClipboard(assets, '')) {
-      target.focus();
-      insertTextIntoPromptTarget(target, text);
-      return 'imageClipboard';
-    }
     return 'none';
   }
   if (!text) return 'none';
@@ -1050,44 +962,198 @@ function Gallery({
   settings,
   t,
   language,
-  onZoom,
   onEdit,
   refreshSignal,
 }: {
   settings: DisplaySettings;
   t: UiText;
   language: ResolvedLanguage;
-  onZoom: (z: ZoomSrc) => void;
   onEdit: (r: GalleryRecord) => void;
   refreshSignal: number;
 }) {
   const [records, setRecords] = useState<GalleryRecord[] | null>(null);
+  const [categories, setCategories] = useState<RecordCategory[]>([]);
   const [activeCategory, setActiveCategory] = useState(ALL_GALLERY_CATEGORIES);
+  const [draggingRecord, setDraggingRecord] = useState<{ id: string; categoryId: string | null } | null>(null);
+  const [dragOverCategory, setDragOverCategory] = useState<string | null>(null);
+  const [moveToast, setMoveToast] = useState<GalleryMoveToast | null>(null);
+  const moveToastTimerRef = useRef<number | null>(null);
+
   const refresh = useCallback(() => {
     send({ type: 'library/listRecords', payload: {} }).then((r) => {
       setRecords((r as ListRecordsResult | undefined)?.records ?? []);
     });
   }, []);
+
+  useEffect(() => {
+    send({ type: 'taxonomy/get', payload: {} }).then((r) => {
+      const data = r as { categories?: RecordCategory[] } | undefined;
+      setCategories(data?.categories ?? []);
+    });
+  }, []);
+
   // Re-fetch on mount and whenever an edit elsewhere bumps the signal.
   useEffect(() => {
     refresh();
   }, [refresh, refreshSignal]);
 
+  const clearMoveToast = useCallback(() => {
+    if (moveToastTimerRef.current !== null) {
+      window.clearTimeout(moveToastTimerRef.current);
+      moveToastTimerRef.current = null;
+    }
+    setMoveToast(null);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (moveToastTimerRef.current !== null) {
+        window.clearTimeout(moveToastTimerRef.current);
+      }
+    },
+    [],
+  );
+
   const categoryFilters = useMemo(() => {
     if (!records) return [];
-    const seen = new Map<string, { key: string; label: string; count: number }>();
+    const counts = new Map<string | null, number>();
     for (const record of records) {
-      if (!record.categoryName) continue;
-      const key = galleryCategoryKey(record);
-      const existing = seen.get(key);
-      if (existing) {
-        existing.count += 1;
-      } else {
-        seen.set(key, { key, label: record.categoryName, count: 1 });
-      }
+      const categoryId = record.categoryId ?? null;
+      counts.set(categoryId, (counts.get(categoryId) ?? 0) + 1);
     }
-    return Array.from(seen.values());
-  }, [records]);
+
+    const filters = new Map<string, GalleryCategoryFilter>();
+
+    for (const category of categories) {
+      if (category.isActive === false) continue;
+      filters.set(category.id, {
+        key: category.id,
+        categoryId: category.id,
+        label: categoryLabel(category, language),
+        count: counts.get(category.id) ?? 0,
+      });
+    }
+
+    for (const record of records) {
+      if (!record.categoryId || filters.has(record.categoryId)) continue;
+      filters.set(record.categoryId, {
+        key: record.categoryId,
+        categoryId: record.categoryId,
+        label: record.categoryName ?? record.categoryId,
+        count: counts.get(record.categoryId) ?? 0,
+      });
+    }
+
+    return Array.from(filters.values());
+  }, [categories, language, records]);
+
+  const showMoveToast = useCallback((toast: GalleryMoveToast) => {
+    if (moveToastTimerRef.current !== null) {
+      window.clearTimeout(moveToastTimerRef.current);
+    }
+    setMoveToast(toast);
+    moveToastTimerRef.current = window.setTimeout(() => {
+      setMoveToast(null);
+      moveToastTimerRef.current = null;
+    }, 3200);
+  }, []);
+
+  const moveRecordToCategory = useCallback(
+    async (record: GalleryRecord, category: GalleryCategoryFilter) => {
+      const previousCategoryId = record.categoryId ?? null;
+      if (previousCategoryId === category.categoryId) return;
+
+      const result = await send({
+        type: 'library/updateRecordMeta',
+        payload: { recordId: record.id, categoryId: category.categoryId },
+      });
+      if ((result as { ok?: boolean } | undefined)?.ok === false) return;
+
+      setRecords((current) =>
+        current?.map((item) =>
+          item.id === record.id
+            ? {
+                ...item,
+                categoryId: category.categoryId,
+                categoryName: category.categoryId ? category.label : undefined,
+              }
+            : item,
+        ) ?? current,
+      );
+      showMoveToast({
+        recordId: record.id,
+        previousCategoryId,
+        previousCategoryName: record.categoryName,
+        message: language === 'en-US' ? `Moved to ${category.label}` : `已移到 ${category.label}`,
+      });
+    },
+    [language, showMoveToast],
+  );
+
+  const undoMove = useCallback(async () => {
+    if (!moveToast) return;
+    const result = await send({
+      type: 'library/updateRecordMeta',
+      payload: { recordId: moveToast.recordId, categoryId: moveToast.previousCategoryId },
+    });
+    if ((result as { ok?: boolean } | undefined)?.ok === false) return;
+
+    setRecords((current) =>
+      current?.map((item) =>
+        item.id === moveToast.recordId
+          ? {
+              ...item,
+              categoryId: moveToast.previousCategoryId,
+              categoryName: moveToast.previousCategoryName,
+            }
+          : item,
+      ) ?? current,
+    );
+    clearMoveToast();
+  }, [clearMoveToast, moveToast]);
+
+  const onCategoryDrop = (e: ReactDragEvent<HTMLButtonElement>, category: GalleryCategoryFilter) => {
+    if (!draggingRecord || !records) return;
+    e.preventDefault();
+    const record = records.find((item) => item.id === draggingRecord.id);
+    setDragOverCategory(null);
+    setDraggingRecord(null);
+    if (!record) return;
+    void moveRecordToCategory(record, category);
+  };
+
+  const onCategoryDragLeave = (e: ReactDragEvent<HTMLButtonElement>, category: GalleryCategoryFilter) => {
+    const next = e.relatedTarget;
+    if (next instanceof Node && e.currentTarget.contains(next)) return;
+    if (dragOverCategory === category.key) setDragOverCategory(null);
+  };
+
+  const allowCategoryDrop = (e: ReactDragEvent<HTMLButtonElement>, category: GalleryCategoryFilter) => {
+    if (!draggingRecord || draggingRecord.categoryId === category.categoryId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverCategory(category.key);
+  };
+
+  const onRecordDragStart = (record: GalleryRecord, e: ReactDragEvent<HTMLButtonElement>) => {
+    setDraggingRecord({ id: record.id, categoryId: record.categoryId ?? null });
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', record.id);
+    const dragImage = createCategoryDragImage(record.categoryName ?? t.uncategorized);
+    document.body.appendChild(dragImage);
+    e.dataTransfer.setDragImage(dragImage, 16, 14);
+    window.setTimeout(() => dragImage.remove(), 0);
+  };
+
+  const onRecordDragEnd = () => {
+    setDraggingRecord(null);
+    setDragOverCategory(null);
+  };
+
+  const filteredRecords =
+    activeCategory === ALL_GALLERY_CATEGORIES
+      ? records
+      : records?.filter((record) => galleryCategoryKey(record) === activeCategory);
 
   useEffect(() => {
     if (activeCategory === ALL_GALLERY_CATEGORIES) return;
@@ -1107,15 +1173,15 @@ function Gallery({
       </div>
     );
   }
-  const filteredRecords =
-    activeCategory === ALL_GALLERY_CATEGORIES
-      ? records
-      : records.filter((record) => galleryCategoryKey(record) === activeCategory);
   const allLabel = language === 'en-US' ? 'All' : language === 'zh-CN' ? '全部' : '全部';
   return (
     <>
       {categoryFilters.length > 0 && (
-        <div className="pt-gallery-filter" aria-label={language === 'en-US' ? 'Filter saved records' : '篩選保存紀錄'}>
+        <div
+          className="pt-gallery-filter"
+          aria-label={language === 'en-US' ? 'Filter saved records' : '篩選保存紀錄'}
+          data-dragging={draggingRecord ? 'true' : 'false'}
+        >
           <div className="pt-gallery-filter-scroll">
             <button
               className="pt-filter-chip"
@@ -1134,7 +1200,14 @@ function Gallery({
                 type="button"
                 aria-pressed={activeCategory === category.key}
                 data-active={activeCategory === category.key}
+                data-drop-target={draggingRecord ? 'true' : 'false'}
+                data-drop-over={dragOverCategory === category.key}
+                data-drop-disabled={draggingRecord?.categoryId === category.categoryId}
                 onClick={() => setActiveCategory(category.key)}
+                onDragEnter={(e) => allowCategoryDrop(e, category)}
+                onDragOver={(e) => allowCategoryDrop(e, category)}
+                onDragLeave={(e) => onCategoryDragLeave(e, category)}
+                onDrop={(e) => onCategoryDrop(e, category)}
               >
                 <span>{category.label}</span>
                 <span className="pt-filter-count">{category.count}</span>
@@ -1144,60 +1217,50 @@ function Gallery({
         </div>
       )}
       <div className="pt-gallery">
-        {filteredRecords.map((r) => (
+        {(filteredRecords ?? []).map((r) => (
           <GalleryCard
             key={r.id}
             record={r}
             settings={settings}
             t={t}
             language={language}
-            onZoom={onZoom}
             onEdit={onEdit}
             onChanged={refresh}
+            onCategoryDragStart={onRecordDragStart}
+            onCategoryDragEnd={onRecordDragEnd}
+            isDragging={draggingRecord?.id === r.id}
           />
         ))}
       </div>
+      {moveToast && (
+        <div className="pt-gallery-toast" role="status">
+          <span>{moveToast.message}</span>
+          <button type="button" onClick={undoMove}>
+            {language === 'en-US' ? 'Undo' : '復原'}
+          </button>
+        </div>
+      )}
     </>
   );
 }
 
-function galleryCategoryKey(record: GalleryRecord): string {
-  return record.categoryId ?? `name:${record.categoryName ?? ''}`;
+type GalleryCategoryFilter = {
+  key: string;
+  categoryId: string | null;
+  label: string;
+  count: number;
+};
+
+function createCategoryDragImage(label: string): HTMLDivElement {
+  const dragImage = document.createElement('div');
+  dragImage.className = 'pt-category-drag-image';
+  dragImage.textContent = `⋮⋮ ${label}`;
+  dragImage.setAttribute('aria-hidden', 'true');
+  return dragImage;
 }
 
-/** Full-screen image preview. Click anywhere or press Esc to dismiss. */
-function Lightbox({ zoom, onClose, t }: { zoom: ZoomSrc; onClose: () => void; t: UiText }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    document.addEventListener('keydown', onKey, true);
-    return () => document.removeEventListener('keydown', onKey, true);
-  }, [onClose]);
-
-  const src = zoom.primary ?? zoom.fallback;
-  if (!src) return null;
-  return (
-    <div className="pt-lightbox" role="presentation">
-      <img
-        className="pt-lightbox-img"
-        src={src}
-        alt=""
-        onClick={onClose}
-        onError={(e) => {
-          if (zoom.fallback && e.currentTarget.src !== zoom.fallback) {
-            e.currentTarget.src = zoom.fallback;
-          }
-        }}
-      />
-      <button className="pt-lightbox-close" type="button" aria-label={t.close} onClick={onClose}>
-        ✕
-      </button>
-    </div>
-  );
+function galleryCategoryKey(record: GalleryRecord): string {
+  return record.categoryId ?? UNCATEGORIZED_GALLERY_CATEGORY;
 }
 
 function GalleryCard({
@@ -1205,17 +1268,21 @@ function GalleryCard({
   settings,
   t,
   language,
-  onZoom,
   onEdit,
   onChanged,
+  onCategoryDragStart,
+  onCategoryDragEnd,
+  isDragging,
 }: {
   record: GalleryRecord;
   settings: DisplaySettings;
   t: UiText;
   language: ResolvedLanguage;
-  onZoom: (z: ZoomSrc) => void;
   onEdit: (r: GalleryRecord) => void;
   onChanged: () => void;
+  onCategoryDragStart: (record: GalleryRecord, e: ReactDragEvent<HTMLButtonElement>) => void;
+  onCategoryDragEnd: () => void;
+  isDragging: boolean;
 }) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [confirmDel, setConfirmDel] = useState(false);
@@ -1232,6 +1299,7 @@ function GalleryCard({
   const isInputOnly = settings.cardLayout === 'input-only';
   const visibleSingleColumnAssets = isInputOnly ? left : right;
   const singleColumnHasMedia = visibleSingleColumnAssets.some((a) => a.assetType !== 'text');
+  const categoryText = record.categoryName ?? t.uncategorized;
 
   const remove = async () => {
     closeMenu();
@@ -1241,25 +1309,35 @@ function GalleryCard({
 
   return (
     <div
-      className={`pt-gcard${isOutputOnly || isInputOnly ? ' pt-gcard--single-column' : ''}${singleColumnHasMedia ? ' pt-gcard--single-column-media' : ''}`}
+      className={`pt-gcard${isOutputOnly || isInputOnly ? ' pt-gcard--single-column' : ''}${singleColumnHasMedia ? ' pt-gcard--single-column-media' : ''}${isDragging ? ' pt-gcard--dragging' : ''}`}
       onContextMenu={(e) => {
         e.preventDefault();
         const rect = e.currentTarget.getBoundingClientRect();
         setMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top });
       }}
     >
-      {record.categoryName && (
-        <div className="pt-gmeta">
-          <span className="pt-gtag">{record.categoryName}</span>
-        </div>
-      )}
+      <div className="pt-gmeta">
+        <button
+          className="pt-category-drag"
+          type="button"
+          draggable
+          aria-label={language === 'en-US' ? `Move category: ${categoryText}` : `移動分類：${categoryText}`}
+          title={language === 'en-US' ? 'Drag to a category chip' : '拖到上方分類'}
+          onDragStart={(e) => onCategoryDragStart(record, e)}
+          onDragEnd={onCategoryDragEnd}
+          onClick={(e) => e.currentTarget.blur()}
+        >
+          <span className="pt-category-drag-grip" aria-hidden="true">⋮⋮</span>
+          <span className="pt-gtag">{categoryText}</span>
+        </button>
+      </div>
       <div className="pt-gcols">
         {isInputOnly ? (
-          <GalleryColumn label={t.inputReference} assets={left} settings={settings} onZoom={onZoom} t={t} language={language} />
+          <GalleryColumn label={t.inputReference} assets={left} settings={settings} t={t} language={language} />
         ) : !isOutputOnly && (
-          <GalleryColumn label={t.inputReference} assets={left} settings={settings} onZoom={onZoom} t={t} language={language} />
+          <GalleryColumn label={t.inputReference} assets={left} settings={settings} t={t} language={language} />
         )}
-        {!isInputOnly && <GalleryColumn label={t.output} assets={right} settings={settings} onZoom={onZoom} t={t} language={language} />}
+        {!isInputOnly && <GalleryColumn label={t.output} assets={right} settings={settings} t={t} language={language} />}
       </div>
 
       {menu && <div className="pt-menu-backdrop" onClick={closeMenu} role="presentation" />}
@@ -1308,33 +1386,23 @@ function GalleryColumn({
   label,
   assets,
   settings,
-  onZoom,
   t,
   language,
 }: {
   label: string;
   assets: GalleryAsset[];
   settings: DisplaySettings;
-  onZoom: (z: ZoomSrc) => void;
   t: UiText;
   language: ResolvedLanguage;
 }) {
-  const [copyState, setCopyState] = useState<'idle' | 'uploaded' | 'pasted' | 'imageClipboard' | 'filled' | 'text' | 'rich'>('idle');
-
   const copy = async () => {
     if (assets.length === 0) return;
     try {
-      const clipboardResult = await copyGalleryAssets(assets);
+      const clipboardResult = await copyGalleryAssetsText(assets);
       const insertResult = await insertGalleryAssetsIntoPrompt(assets);
-      if (insertResult !== 'none') {
-        setCopyState(insertResult);
-        window.setTimeout(() => setCopyState('idle'), 1400);
-        return;
-      }
-      setCopyState(clipboardResult);
-      window.setTimeout(() => setCopyState('idle'), 1400);
+      void clipboardResult;
+      void insertResult;
     } catch {
-      setCopyState('idle');
     }
   };
 
@@ -1355,29 +1423,14 @@ function GalleryColumn({
     >
       <div className="pt-gcol-label">
         <span>{label}</span>
-        {assets.length > 0 && (
-          <span className="pt-gcol-copy">
-            {copyState === 'uploaded'
-              ? t.copiedAndAttached
-              : copyState === 'pasted'
-              ? t.copiedAndPasted
-              : copyState === 'imageClipboard'
-              ? t.pressCtrlV
-              : copyState === 'filled'
-              ? t.copiedAndFilled
-              : copyState === 'rich'
-                ? t.richCopied
-                : copyState === 'text'
-                  ? t.copied
-                  : t.copy}
-          </span>
+      </div>
+      <div className="pt-gcol-content">
+        {assets.length === 0 ? (
+          <div className="pt-gcol-empty">—</div>
+        ) : (
+          assets.map((a, i) => <GalleryAssetView key={i} asset={a} settings={settings} language={language} />)
         )}
       </div>
-      {assets.length === 0 ? (
-        <div className="pt-gcol-empty">—</div>
-      ) : (
-        assets.map((a, i) => <GalleryAssetView key={i} asset={a} settings={settings} onZoom={onZoom} language={language} />)
-      )}
     </div>
   );
 }
@@ -1466,12 +1519,10 @@ function CardEditor({
 function GalleryAssetView({
   asset,
   settings,
-  onZoom,
   language,
 }: {
   asset: GalleryAsset;
   settings: DisplaySettings;
-  onZoom: (z: ZoomSrc) => void;
   language: ResolvedLanguage;
 }) {
   if (asset.assetType === 'text' && asset.textContent) {
@@ -1487,12 +1538,6 @@ function GalleryAssetView({
         src={src}
         alt=""
         loading="lazy"
-        title={language === 'en-US' ? 'Click to enlarge' : '點擊放大'}
-        // Zoom prefers the full-res original; falls back to the durable thumbnail.
-        onClick={(e) => {
-          e.stopPropagation();
-          onZoom({ primary: asset.originalUrl ?? asset.previewRef, fallback: asset.previewRef });
-        }}
         onError={(e) => {
           if (asset.previewRef && e.currentTarget.src !== asset.previewRef) {
             e.currentTarget.src = asset.previewRef;

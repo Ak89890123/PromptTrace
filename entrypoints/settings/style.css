@@ -177,6 +177,11 @@
   white-space: nowrap;
 }
 
+.settings-mode-row > .settings-segmented,
+.settings-mode-row > button {
+  width: min(100%, 300px);
+}
+
 .settings-card-layout-row {
   grid-template-columns: 1fr;
   gap: var(--pt-space-2);
@@ -510,9 +515,18 @@
 }
 
 .settings-prompt-actions {
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(86px, 1fr));
+  align-items: stretch;
+  gap: var(--pt-space-2);
   margin-top: var(--pt-space-3);
-  max-width: 644px;
+  max-width: min(100%, 644px);
+}
+
+.settings-prompt-actions button {
+  min-width: 0;
+  width: 100%;
+  padding-inline: var(--pt-space-3);
 }
 
 .settings-summary-usage-row {
