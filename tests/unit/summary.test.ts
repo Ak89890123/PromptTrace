@@ -6,6 +6,7 @@ import {
   mergeSummarySettings,
   parsePromptSummary,
   requestPromptSummary,
+  summaryPromptTextFromAssets,
   SUMMARY_SYSTEM_PROMPT,
 } from '../../src/core/summary';
 
@@ -51,6 +52,61 @@ describe('summary helpers', () => {
       }),
     ).rejects.toThrow('NO_PROMPT_TEXT');
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('builds summary prompt text from input, reference, and negative text only', () => {
+    const promptText = summaryPromptTextFromAssets([
+      {
+        id: 'image-ref',
+        recordId: 'record-1',
+        assetType: 'image',
+        role: 'input_reference',
+        originalUrl: 'data:image/png;base64,SHOULD_NOT_SEND',
+        previewRef: 'data:image/png;base64,SHOULD_NOT_SEND',
+        orderIndex: 1,
+        capturedAt: '',
+      },
+      {
+        id: 'output-text',
+        recordId: 'record-1',
+        assetType: 'text',
+        role: 'output',
+        textContent: 'output text should not be summarized',
+        orderIndex: 2,
+        capturedAt: '',
+      },
+      {
+        id: 'input-text',
+        recordId: 'record-1',
+        assetType: 'text',
+        role: 'input',
+        textContent: 'input prompt',
+        orderIndex: 3,
+        capturedAt: '',
+      },
+      {
+        id: 'reference-text',
+        recordId: 'record-1',
+        assetType: 'text',
+        role: 'input_reference',
+        textContent: 'reference text',
+        orderIndex: 4,
+        capturedAt: '',
+      },
+      {
+        id: 'negative-text',
+        recordId: 'record-1',
+        assetType: 'text',
+        role: 'negative',
+        textContent: 'negative text',
+        orderIndex: 5,
+        capturedAt: '',
+      },
+    ]);
+
+    expect(promptText).toBe('input prompt\n\n---\n\nreference text\n\n---\n\nnegative text');
+    expect(promptText).not.toContain('SHOULD_NOT_SEND');
+    expect(promptText).not.toContain('output text');
   });
 
   it('requests an OpenAI-style JSON schema response', async () => {

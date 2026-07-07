@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { CSSProperties } from 'react';
 import type { Asset, FileRecord, LibraryRecord } from '@/src/core/domain/entities';
 import { ROLE_LABELS, type AssetRole } from '@/src/core/domain/enums';
 import {
@@ -27,6 +28,51 @@ type CategoryDraft = {
   name: string;
 };
 
+type CategoryColorStyle = CSSProperties & {
+  '--category-color': string;
+  '--category-indent'?: string;
+};
+
+function categoryColorStyle(color: string | null | undefined, extra: Partial<CategoryColorStyle> = {}): CategoryColorStyle {
+  return { ...extra, '--category-color': color ?? DEFAULT_ROLE_COLORS.pending };
+}
+
+function summaryResultMessage(reason: string | undefined, language: ResolvedLanguage): string {
+  const messages: Record<string, { en: string; zh: string }> = {
+    no_prompt_text: {
+      en: 'No input text was found, so there is nothing to summarize.',
+      zh: '沒有輸入文字可摘要，所以這筆紀錄不會送出摘要請求。',
+    },
+    api_key_required: {
+      en: 'Add an API key in Settings before generating summaries.',
+      zh: '請先到設定填入 API key，才能產生摘要。',
+    },
+    model_required: {
+      en: 'Choose a summary model in Settings before generating summaries.',
+      zh: '請先到設定選擇摘要模型，才能產生摘要。',
+    },
+    summary_disabled: {
+      en: 'Summary is disabled in Settings.',
+      zh: '摘要功能目前在設定中關閉。',
+    },
+    provider_failed: {
+      en: 'The summary provider request failed.',
+      zh: '摘要服務請求失敗。',
+    },
+    record_not_found: {
+      en: 'This record could not be found.',
+      zh: '找不到這筆紀錄。',
+    },
+  };
+  const message = messages[reason ?? ''];
+  if (message) return language === 'en-US' ? message.en : message.zh;
+  return language === 'en-US' ? `Summary was not generated: ${reason ?? 'unknown'}.` : `摘要未產生：${reason ?? 'unknown'}。`;
+}
+
+function summaryReasonNeedsSettings(reason: string | undefined): boolean {
+  return reason === 'summary_disabled' || reason === 'api_key_required' || reason === 'model_required';
+}
+
 async function loadBundle(record: LibraryRecord): Promise<RecordBundle> {
   const assets = await assetRepository.byRecord(record.id);
   const fileRecords: FileRecord[] = [];
@@ -43,6 +89,7 @@ export default function App() {
   const [filterCategories, setFilterCategories] = useState<string[]>([]);
   const [categoryDrafts, setCategoryDrafts] = useState<CategoryDraft[]>([]);
   const [assetIndex, setAssetIndex] = useState<Map<string, Asset[]>>(new Map());
+  const [dragOverCategoryId, setDragOverCategoryId] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
   const { categories } = useTaxonomy(refresh);
   const reload = () => setRefresh((x) => x + 1);
@@ -70,6 +117,13 @@ export default function App() {
 
   const toggleCategoryFilter = (categoryId: string) => {
     setFilterCategories((ids) => (ids.includes(categoryId) ? ids.filter((id) => id !== categoryId) : [...ids, categoryId]));
+  };
+
+  const assignRecordCategory = async (recordId: string, categoryId: string) => {
+    const record = await recordRepository.get(recordId);
+    if (!record || record.categoryId === categoryId) return;
+    await recordRepository.save({ ...record, categoryId, updatedAt: new Date().toISOString() });
+    reload();
   };
 
   const addCategoryDraft = () => {
@@ -166,13 +220,33 @@ export default function App() {
               <button
                 type="button"
                 key={category.id}
-                className={filterCategories.includes(category.id) ? 'filter-option is-active' : 'filter-option'}
-                style={{ paddingLeft: 12 + depth * 10 }}
+                className={[
+                  'filter-option',
+                  filterCategories.includes(category.id) ? 'is-active' : '',
+                  dragOverCategoryId === category.id ? 'is-drop-target' : '',
+                ].filter(Boolean).join(' ')}
+                style={categoryColorStyle(category.color, { '--category-indent': `${depth * 10}px` })}
                 aria-pressed={filterCategories.includes(category.id)}
+                onDragOver={(e) => {
+                  if (!e.dataTransfer.types.includes('application/x-promptrace-record-id')) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  setDragOverCategoryId(category.id);
+                }}
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragOverCategoryId(null);
+                }}
+                onDrop={async (e) => {
+                  const recordId = e.dataTransfer.getData('application/x-promptrace-record-id');
+                  if (!recordId) return;
+                  e.preventDefault();
+                  setDragOverCategoryId(null);
+                  await assignRecordCategory(recordId, category.id);
+                }}
                 onClick={() => toggleCategoryFilter(category.id)}
               >
-                <span>{categoryLabel(category, language)}</span>
                 <i aria-hidden="true" />
+                <span>{categoryLabel(category, language)}</span>
               </button>
             ))}
             {categoryDrafts.map((draft) => (
@@ -236,6 +310,7 @@ export default function App() {
                 t={t}
                 language={language}
                 onOpen={() => setSelectedId(record.id)}
+                onDragDone={() => setDragOverCategoryId(null)}
               />
             ))}
           </section>
@@ -274,8 +349,9 @@ function RecordCard(props: {
   t: UiText;
   language: ResolvedLanguage;
   onOpen: () => void;
+  onDragDone: () => void;
 }) {
-  const { record, assets, categories, selected, layout, t, language, onOpen } = props;
+  const { record, assets, categories, selected, layout, t, language, onOpen, onDragDone } = props;
   const category = categories.find((c) => c.id === record.categoryId);
   const copyAssets = async (pickedAssets: Asset[]) => {
     onOpen();
@@ -291,6 +367,13 @@ function RecordCard(props: {
       className={`record-card ${selected ? 'is-selected' : ''}`}
       role="button"
       tabIndex={0}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('application/x-promptrace-record-id', record.id);
+        e.dataTransfer.setData('text/plain', record.title || record.id);
+      }}
+      onDragEnd={onDragDone}
       onFocus={onOpen}
       onClick={onOpen}
       onKeyDown={(e) => {
@@ -301,8 +384,13 @@ function RecordCard(props: {
       }}
     >
       <div className="record-card-topline">
-        <span>{category ? categoryLabel(category, language) : t.uncategorized}</span>
-        <span>{assets.length} {t.assets}</span>
+        <span
+          className={category ? 'record-category-pill' : 'record-category-pill is-empty'}
+          style={categoryColorStyle(category?.color)}
+        >
+          {category ? categoryLabel(category, language) : t.uncategorized}
+        </span>
+        <span className="record-asset-count">{assets.length} {t.assets}</span>
       </div>
       <div className="record-card-summary-slot" aria-label={language === 'en-US' ? 'Summary area' : '摘要保留區'}>
         {record.summary ? (
@@ -329,6 +417,8 @@ function RecordDetail(props: {
 }) {
   const [bundle, setBundle] = useState<RecordBundle | null>(null);
   const [toast, setToast] = useState('');
+  const [summaryNotice, setSummaryNotice] = useState('');
+  const [summaryNoticeReason, setSummaryNoticeReason] = useState<string | undefined>();
   const [summarizing, setSummarizing] = useState(false);
 
   const load = useCallback(async () => {
@@ -338,6 +428,10 @@ function RecordDetail(props: {
   useEffect(() => {
     load();
   }, [load]);
+  useEffect(() => {
+    setSummaryNotice('');
+    setSummaryNoticeReason(undefined);
+  }, [props.recordId]);
 
   const { t, language } = props;
   if (!bundle) return <div className="muted">{t.loading}</div>;
@@ -369,14 +463,21 @@ function RecordDetail(props: {
         payload: { recordId: record.id },
       });
       await load();
-      props.onChanged();
       if (!result?.ok) {
-        say(language === 'en-US' ? `Summary skipped: ${result?.reason ?? 'unknown'}` : `摘要未完成：${result?.reason ?? 'unknown'}`);
+        const message = summaryResultMessage(result?.reason, language);
+        setSummaryNotice(message);
+        setSummaryNoticeReason(result?.reason);
+        if (result?.reason === 'no_prompt_text') props.onChanged();
       } else {
+        setSummaryNotice('');
+        setSummaryNoticeReason(undefined);
+        props.onChanged();
         say(language === 'en-US' ? 'Summary updated.' : '摘要已更新。');
       }
     } catch {
-      say(language === 'en-US' ? 'Summary request failed.' : '摘要請求失敗。');
+      const message = language === 'en-US' ? 'Summary request failed.' : '摘要請求失敗。';
+      setSummaryNotice(message);
+      setSummaryNoticeReason(undefined);
     } finally {
       setSummarizing(false);
     }
@@ -488,6 +589,22 @@ function RecordDetail(props: {
           <p className="muted">{language === 'en-US' ? 'No prompt text was found.' : '沒有找到可摘要的 prompt 文字。'}</p>
         ) : (
           <p className="muted">{language === 'en-US' ? 'No summary yet.' : '尚未摘要。'}</p>
+        )}
+        {summaryNotice && (
+          <div className="record-summary-notice">
+            <span>{summaryNotice}</span>
+            {summaryReasonNeedsSettings(summaryNoticeReason) && (
+              <button
+                type="button"
+                className="record-summary-settings-button"
+                onClick={() => {
+                  location.href = 'settings.html';
+                }}
+              >
+                {t.settings}
+              </button>
+            )}
+          </div>
         )}
         {record.summaryTokenUsage && (
           <div className="record-summary-token-row">

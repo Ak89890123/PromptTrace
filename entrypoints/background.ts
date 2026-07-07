@@ -15,7 +15,7 @@ import { isRoleAllowed } from '@/src/core/domain/validation';
 import { createConflict } from '@/src/core/errors/conflictTypes';
 import { createCaptureError, mapDownloadError } from '@/src/core/errors/errorTypes';
 import type { ExtensionMessage } from '@/src/core/messages';
-import { requestPromptSummary, selectedSummaryModel } from '@/src/core/summary';
+import { requestPromptSummary, selectedSummaryModel, summaryPromptTextFromAssets } from '@/src/core/summary';
 import { commitSessionToLibrary, downloadPathFor } from '@/src/storage/commitSession';
 import {
   assetRepository,
@@ -338,15 +338,6 @@ export default defineBackground(() => {
     }
   }
 
-  function promptTextForSummary(assets: Awaited<ReturnType<typeof assetRepository.byRecord>>): string {
-    return assets
-      .filter((asset) => asset.assetType === 'text' && asset.role === 'input')
-      .map((asset) => asset.textContent?.trim() ?? '')
-      .filter(Boolean)
-      .join('\n\n---\n\n')
-      .trim();
-  }
-
   async function summarizeRecord(recordId: string): Promise<{ ok: boolean; reason?: string }> {
     const settings = await loadSettings();
     const summarySettings = settings.summary;
@@ -354,13 +345,8 @@ export default defineBackground(() => {
     if (!record) return { ok: false, reason: 'record_not_found' };
     if (!summarySettings.enabled) return { ok: false, reason: 'summary_disabled' };
 
-    const model = selectedSummaryModel(summarySettings);
-    const apiKey = summarySettings.apiKeys[summarySettings.provider]?.trim() ?? '';
-    if (!apiKey) return { ok: false, reason: 'api_key_required' };
-    if (!model) return { ok: false, reason: 'model_required' };
-
     const assets = await assetRepository.byRecord(recordId);
-    const promptText = promptTextForSummary(assets);
+    const promptText = summaryPromptTextFromAssets(assets);
     if (!promptText) {
       await recordRepository.save({
         ...record,
@@ -370,6 +356,11 @@ export default defineBackground(() => {
       });
       return { ok: false, reason: 'no_prompt_text' };
     }
+
+    const model = selectedSummaryModel(summarySettings);
+    const apiKey = summarySettings.apiKeys[summarySettings.provider]?.trim() ?? '';
+    if (!apiKey) return { ok: false, reason: 'api_key_required' };
+    if (!model) return { ok: false, reason: 'model_required' };
 
     await recordRepository.save({
       ...record,

@@ -168,14 +168,14 @@
 
 .settings-mode-row {
   display: grid;
-  grid-template-columns: minmax(92px, max-content) minmax(0, 1fr);
+  grid-template-columns: 128px minmax(0, 1fr);
   gap: var(--pt-space-3);
   align-items: center;
   margin-top: var(--pt-space-4);
 }
 
 .settings-mode-row > .muted:first-child {
-  white-space: nowrap;
+  line-height: 1.35;
 }
 
 .settings-mode-row > .settings-segmented,
@@ -389,9 +389,8 @@
 
 .settings-role-legend {
   display: flex;
-  flex-wrap: nowrap;
-  gap: var(--pt-space-1);
-  max-width: 100%;
+  flex-wrap: wrap;
+  gap: var(--pt-space-2);
 }
 
 .settings-display-group {
@@ -756,32 +755,13 @@
 .settings-role-color {
   display: inline-flex;
   align-items: center;
-  gap: var(--pt-space-1);
-  flex: 0 0 auto;
-  min-height: 28px;
-  min-width: 0;
-  padding: 3px var(--pt-space-1) 3px 3px;
+  gap: var(--pt-space-2);
+  min-height: 32px;
+  padding: 3px var(--pt-space-3) 3px 3px;
   border: 1px solid var(--pt-stroke-soft);
   border-radius: var(--pt-radius-control);
   background: var(--pt-surface-card-faint);
   color: var(--pt-color-text-muted);
-  font-size: var(--pt-font-size-tag);
-  line-height: 1.2;
-  white-space: nowrap;
-}
-
-.settings-role-color .settings-color-picker,
-.settings-role-color .settings-color-current {
-  flex: 0 0 auto;
-}
-
-.settings-role-color .settings-color-current {
-  width: 22px;
-  height: 22px;
-}
-
-.settings-role-color span {
-  flex: 0 0 auto;
 }
 
 @media (max-width: 1320px) {

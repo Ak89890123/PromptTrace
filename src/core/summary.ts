@@ -1,3 +1,6 @@
+import type { Asset } from './domain/entities';
+import type { AssetRole } from './domain/enums';
+
 export type SummaryProvider = 'openai' | 'gemini' | 'claude' | 'openrouter';
 
 export type SummaryStatus = 'pending' | 'completed' | 'failed' | 'skipped';
@@ -63,6 +66,8 @@ export const SUMMARY_SYSTEM_PROMPTS: Record<SummaryPromptLanguage, string> = {
 
 export const SUMMARY_SYSTEM_PROMPT = SUMMARY_SYSTEM_PROMPTS['zh-TW'];
 
+const SUMMARY_TEXT_ROLES: AssetRole[] = ['input', 'input_reference', 'negative'];
+
 export const DEFAULT_SUMMARY_SETTINGS: SummarySettings = {
   enabled: false,
   provider: 'openai',
@@ -122,6 +127,16 @@ export function isDefaultSummarySystemPrompt(value: string): boolean {
 
 export function selectedSummaryModel(settings: SummarySettings): string {
   return (settings.models[settings.provider] ?? '').trim();
+}
+
+export function summaryPromptTextFromAssets(assets: Asset[]): string {
+  return assets
+    .filter((asset) => asset.assetType === 'text' && SUMMARY_TEXT_ROLES.includes(asset.role))
+    .sort((a, b) => a.orderIndex - b.orderIndex)
+    .map((asset) => asset.textContent?.trim() ?? '')
+    .filter(Boolean)
+    .join('\n\n---\n\n')
+    .trim();
 }
 
 export function maskApiKey(value: string | undefined): string {
