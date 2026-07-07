@@ -32,12 +32,18 @@ h2 {
 h3 { font-size: var(--pt-font-size-body); margin: var(--pt-space-3) 0 var(--pt-space-1); }
 
 button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
   background: var(--pt-surface-control);
   color: var(--pt-color-text-primary);
   border: 1px solid var(--pt-stroke-glass);
   border-radius: var(--pt-radius-control);
   padding: 5px var(--pt-space-5);
   font-size: var(--pt-font-size-control);
+  line-height: 1.2;
+  text-align: center;
   cursor: pointer;
   backdrop-filter: blur(8px);
   transition: all 0.15s ease;
@@ -61,12 +67,15 @@ button.danger { border-color: var(--pt-color-danger-soft); color: var(--pt-color
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-height: 30px;
   background: var(--pt-surface-control);
   color: var(--pt-color-text-primary);
   border: 1px solid var(--pt-stroke-glass);
   border-radius: var(--pt-radius-control);
   padding: 5px var(--pt-space-5);
   font-size: var(--pt-font-size-control);
+  line-height: 1.2;
+  text-align: center;
   cursor: pointer;
   backdrop-filter: blur(8px);
   transition: all 0.15s ease;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type { Asset, FileRecord, LibraryRecord, RecordCategory } from '@/src/core/domain/entities';
 import {
   backupFilename,
@@ -353,6 +353,7 @@ function CategorySettings({
   language: ResolvedLanguage;
 }) {
   const [newName, setNewName] = useState('');
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const categoryRows = [...categories].sort((a, b) => a.sortOrder - b.sortOrder);
 
   const save = async (c: RecordCategory, patch: Partial<RecordCategory>) => {
@@ -393,6 +394,7 @@ function CategorySettings({
       }
     }
     onChanged();
+    setResetConfirmOpen(false);
   };
 
   return (
@@ -401,8 +403,19 @@ function CategorySettings({
         <div>
           <h2>{t.category}</h2>
         </div>
-        <button onClick={resetBuiltinCategories}>{t.resetBuiltinCategories}</button>
+        <button onClick={() => setResetConfirmOpen(true)}>{t.resetBuiltinCategories}</button>
       </div>
+      {resetConfirmOpen && (
+        <SettingsInlineConfirm
+          className="settings-category-confirm"
+          title={t.resetBuiltinCategoriesTitle}
+          body={t.confirmResetBuiltinCategories}
+          confirmLabel={t.confirm}
+          cancelLabel={t.cancel}
+          onConfirm={resetBuiltinCategories}
+          onCancel={() => setResetConfirmOpen(false)}
+        />
+      )}
       <div className="settings-category-row settings-row-header">
         <span>{t.colorHeader}</span>
         <span>{t.category}</span>
@@ -476,6 +489,44 @@ function CategorySettings({
             {t.addCategory}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function SettingsInlineConfirm({
+  className,
+  title,
+  body,
+  confirmLabel,
+  cancelLabel,
+  onConfirm,
+  onCancel,
+}: {
+  className?: string;
+  title: string;
+  body: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  onConfirm: () => void | Promise<void>;
+  onCancel: () => void;
+}) {
+  const titleId = useId();
+  const bodyId = useId();
+
+  return (
+    <div className={`settings-inline-confirm${className ? ` ${className}` : ''}`} role="alertdialog" aria-labelledby={titleId} aria-describedby={bodyId}>
+      <div>
+        <strong id={titleId}>{title}</strong>
+        <p id={bodyId}>{body}</p>
+      </div>
+      <div className="settings-inline-confirm-actions">
+        <button type="button" className="primary" onClick={onConfirm}>
+          {confirmLabel}
+        </button>
+        <button type="button" onClick={onCancel}>
+          {cancelLabel}
+        </button>
       </div>
     </div>
   );
@@ -669,6 +720,7 @@ function SummarySettingsSection({
   const isCustomModel = currentModel.length > 0 && !knownModels.includes(currentModel);
   const [usageRecords, setUsageRecords] = useState<LibraryRecord[]>([]);
   const [systemPromptEdited, setSystemPromptEdited] = useState(false);
+  const [pendingPromptLanguage, setPendingPromptLanguage] = useState<SummaryPromptLanguage | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -726,6 +778,7 @@ function SummarySettingsSection({
       systemPrompt: defaultSummarySystemPrompt(promptLanguage),
       systemPromptCustomized: false,
     });
+    setPendingPromptLanguage(null);
   };
 
   return (
@@ -871,16 +924,29 @@ function SummarySettingsSection({
           }}
         />
       </label>
-      <div className="row settings-prompt-actions">
-        <button type="button" onClick={() => applyDefaultPrompt('zh-TW')}>
-          {t.applyTraditionalChinesePrompt}
-        </button>
-        <button type="button" onClick={() => applyDefaultPrompt('zh-CN')}>
-          {t.applySimplifiedChinesePrompt}
-        </button>
-        <button type="button" onClick={() => applyDefaultPrompt('en-US')}>
-          {t.applyEnglishPrompt}
-        </button>
+      <div className="settings-prompt-confirm-anchor">
+        {pendingPromptLanguage && (
+          <SettingsInlineConfirm
+            className="settings-summary-confirm"
+            title={t.applyDefaultPromptTitle}
+            body={t.confirmApplyDefaultPrompt}
+            confirmLabel={t.confirm}
+            cancelLabel={t.cancel}
+            onConfirm={() => applyDefaultPrompt(pendingPromptLanguage)}
+            onCancel={() => setPendingPromptLanguage(null)}
+          />
+        )}
+        <div className="row settings-prompt-actions">
+          <button type="button" onClick={() => setPendingPromptLanguage('zh-TW')}>
+            {t.applyTraditionalChinesePrompt}
+          </button>
+          <button type="button" onClick={() => setPendingPromptLanguage('zh-CN')}>
+            {t.applySimplifiedChinesePrompt}
+          </button>
+          <button type="button" onClick={() => setPendingPromptLanguage('en-US')}>
+            {t.applyEnglishPrompt}
+          </button>
+        </div>
       </div>
       <div className="settings-inner-divider" />
       <div className="settings-summary-dashboard">

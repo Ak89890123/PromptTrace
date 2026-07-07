@@ -32,7 +32,7 @@
 
 .settings-layout {
   display: grid;
-  grid-template-columns: minmax(300px, 0.78fr) minmax(272px, 0.69fr) minmax(270px, 0.68fr) minmax(324px, 0.83fr);
+  grid-template-columns: minmax(340px, 0.86fr) minmax(272px, 0.68fr) minmax(270px, 0.67fr) minmax(324px, 0.81fr);
   align-items: stretch;
   gap: var(--pt-space-6);
 }
@@ -56,6 +56,7 @@
 }
 
 .settings-category-column .settings-section {
+  position: relative;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -388,8 +389,9 @@
 
 .settings-role-legend {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--pt-space-2);
+  flex-wrap: nowrap;
+  gap: var(--pt-space-1);
+  max-width: 100%;
 }
 
 .settings-display-group {
@@ -529,6 +531,17 @@
   padding-inline: var(--pt-space-3);
 }
 
+.settings-prompt-confirm-anchor {
+  position: relative;
+  max-width: min(100%, 644px);
+}
+
+.settings-summary-confirm {
+  left: 0;
+  right: 0;
+  bottom: calc(100% + var(--pt-space-2));
+}
+
 .settings-summary-usage-row {
   display: grid;
   grid-template-columns: minmax(120px, 1fr) repeat(3, max-content);
@@ -611,10 +624,52 @@
   align-items: end;
 }
 
+.settings-inline-confirm {
+  position: absolute;
+  z-index: 30;
+  display: grid;
+  gap: var(--pt-space-3);
+  margin: 0;
+  padding: var(--pt-space-4);
+  border: 1px solid var(--pt-stroke-accent-muted);
+  border-radius: var(--pt-radius-control);
+  background: rgba(18, 19, 24, 0.96);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  box-shadow: var(--pt-shadow-popover);
+}
+
+.settings-category-confirm {
+  top: var(--pt-space-2);
+  left: var(--pt-space-2);
+  right: var(--pt-space-2);
+}
+
+.settings-inline-confirm strong {
+  display: block;
+  color: var(--pt-color-text-primary);
+  font-size: var(--pt-font-size-body);
+  line-height: 1.35;
+}
+
+.settings-inline-confirm p {
+  margin: var(--pt-space-2) 0 0;
+  color: var(--pt-color-text-secondary);
+  font-size: var(--pt-font-size-control);
+  line-height: 1.5;
+}
+
+.settings-inline-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--pt-space-2);
+}
+
 .settings-category-list {
   min-height: 0;
-  overflow-y: auto;
-  padding-right: var(--pt-space-2);
+  overflow: visible;
+  padding-right: 0;
 }
 
 .settings-new-row {
@@ -701,13 +756,32 @@
 .settings-role-color {
   display: inline-flex;
   align-items: center;
-  gap: var(--pt-space-2);
-  min-height: 32px;
-  padding: 3px var(--pt-space-3) 3px 3px;
+  gap: var(--pt-space-1);
+  flex: 0 0 auto;
+  min-height: 28px;
+  min-width: 0;
+  padding: 3px var(--pt-space-1) 3px 3px;
   border: 1px solid var(--pt-stroke-soft);
   border-radius: var(--pt-radius-control);
   background: var(--pt-surface-card-faint);
   color: var(--pt-color-text-muted);
+  font-size: var(--pt-font-size-tag);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.settings-role-color .settings-color-picker,
+.settings-role-color .settings-color-current {
+  flex: 0 0 auto;
+}
+
+.settings-role-color .settings-color-current {
+  width: 22px;
+  height: 22px;
+}
+
+.settings-role-color span {
+  flex: 0 0 auto;
 }
 
 @media (max-width: 1320px) {
