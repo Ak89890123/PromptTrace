@@ -60,6 +60,7 @@ export async function commitSessionToLibrary(
       role: p.role ?? 'input',
       textContent: p.textContent,
       originalUrl: p.originalUrl,
+      previewRef: p.originalUrl && isDataUrl(p.originalUrl) ? p.originalUrl : undefined,
       pageUrl: p.pageUrl,
       pageTitle: p.pageTitle,
       orderIndex: i,
@@ -90,12 +91,15 @@ export async function commitSessionToLibrary(
   return { record, assets, pendingDownloads, sourceOnlyAssets };
 }
 
-/** blob:/mediasource URLs cannot be fetched from the background; treat as not downloadable. */
 export function isDownloadableUrl(url: string): boolean {
-  return /^https?:/i.test(url) || /^data:/i.test(url);
+  return /^https?:/i.test(url);
 }
 
 /** Relative download path under the user's Downloads folder. */
 export function downloadPathFor(recordId: string, fileRecord: FileRecord): string {
   return `PrompTrace/${recordId}/${fileRecord.filename}`;
+}
+
+function isDataUrl(url: string): boolean {
+  return /^data:/i.test(url);
 }

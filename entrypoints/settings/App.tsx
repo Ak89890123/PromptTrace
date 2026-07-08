@@ -19,6 +19,7 @@ import {
   type SummaryPromptLanguage,
   type SummaryProvider,
 } from '@/src/core/summary';
+import { summaryUsageStats } from '@/src/core/summaryUsage';
 import {
   assetRepository,
   categoryRepository,
@@ -148,9 +149,11 @@ function LanguageSettings({
 }) {
   return (
     <div className="settings-subsection settings-language-subsection">
-      <h2>{t.languageCard}</h2>
-      <label className="settings-field">
+      <h2 className="settings-language-heading">
+        <span>{t.languageCard}</span>
         <span className="muted">{t.interfaceLanguage}</span>
+      </h2>
+      <label className="settings-field">
         <select
           value={settings.language}
           onChange={(e) => onPatch({ language: e.target.value as DisplaySettings['language'] })}
@@ -732,23 +735,7 @@ function SummarySettingsSection({
     };
   }, []);
 
-  const summarizedRecords = usageRecords.filter((record) => record.summaryGeneratedAt || record.summaryTokenUsage);
-  const usageRecordsWithTokens = summarizedRecords.filter((record) => record.summaryTokenUsage);
-  const usageTotals = summarizedRecords.reduce(
-    (totals, record) => {
-      const usage = record.summaryTokenUsage;
-      return {
-        input: totals.input + (usage?.inputTokens ?? 0),
-        output: totals.output + (usage?.outputTokens ?? 0),
-        total: totals.total + (usage?.totalTokens ?? 0),
-      };
-    },
-    { input: 0, output: 0, total: 0 },
-  );
-  const recentUsageRecords = summarizedRecords
-    .slice()
-    .sort((a, b) => (b.summaryGeneratedAt ?? '').localeCompare(a.summaryGeneratedAt ?? ''))
-    .slice(0, 5);
+  const usageStats = summaryUsageStats(usageRecords);
 
   const patchSummary = (patch: Partial<typeof summary>) => {
     onPatch({ summary: { ...summary, ...patch } });
@@ -797,7 +784,6 @@ function SummarySettingsSection({
       </div>
       <div className="settings-summary-config-row">
         <div className="settings-summary-config-panel">
-          <h2>{t.summarySettings}</h2>
           <label className="settings-field">
             <span className="muted">{t.provider}</span>
             <select value={provider} onChange={(e) => updateProvider(e.target.value as SummaryProvider)}>
@@ -852,14 +838,13 @@ function SummarySettingsSection({
               />
             </label>
           ) : (
-            <div className="settings-field">
+            <div className="settings-field settings-saved-key-row">
               <span className="muted">{t.savedApiKey}</span>
               <span className="settings-secret-preview">{maskApiKey(summary.apiKeys[provider]) || t.apiKeyNotSet}</span>
             </div>
           )}
         </div>
         <div className="settings-summary-config-panel">
-          <h2>{t.scheduledSummarySettings}</h2>
           <label className="row" style={{ gap: 6 }}>
             <input
               type="checkbox"
@@ -953,41 +938,55 @@ function SummarySettingsSection({
         <div className="settings-summary-dashboard-head">
           <h2>{t.tokenDashboard}</h2>
         </div>
-        <div className="settings-summary-metrics">
-          <div>
-            <span className="muted">{t.summarized}</span>
-            <strong>{summarizedRecords.length}</strong>
-          </div>
-          <div>
-            <span className="muted">{t.withUsage}</span>
-            <strong>{usageRecordsWithTokens.length}</strong>
-          </div>
-          <div>
-            <span className="muted">{t.inputToken}</span>
-            <strong>{formatTokenCount(usageTotals.input, language)}</strong>
-          </div>
-          <div>
-            <span className="muted">{t.outputToken}</span>
-            <strong>{formatTokenCount(usageTotals.output, language)}</strong>
-          </div>
-          <div>
-            <span className="muted">{t.totalToken}</span>
-            <strong>{formatTokenCount(usageTotals.total, language)}</strong>
+        <div className="settings-summary-metric-group">
+          <h3>{t.today}</h3>
+          <div className="settings-summary-metrics">
+            <div>
+              <span className="muted">{t.summaryRuns}</span>
+              <strong>{usageStats.todayEvents.length}</strong>
+            </div>
+            <div>
+              <span className="muted">{t.withUsage}</span>
+              <strong>{usageStats.todayEventsWithUsage.length}</strong>
+            </div>
+            <div>
+              <span className="muted">{t.inputToken}</span>
+              <strong>{formatTokenCount(usageStats.todayTotals.input, language)}</strong>
+            </div>
+            <div>
+              <span className="muted">{t.outputToken}</span>
+              <strong>{formatTokenCount(usageStats.todayTotals.output, language)}</strong>
+            </div>
+            <div>
+              <span className="muted">{t.totalToken}</span>
+              <strong>{formatTokenCount(usageStats.todayTotals.total, language)}</strong>
+            </div>
           </div>
         </div>
-        <div className="settings-summary-usage-list">
-          {recentUsageRecords.length === 0 ? (
-            <div className="muted">{t.noSummaryTokenRecords}</div>
-          ) : (
-            recentUsageRecords.map((record) => (
-              <div key={record.id} className="settings-summary-usage-row">
-                <span title={record.title || record.id}>{record.title || t.untitledCard}</span>
-                <span>{t.inputTokenShort} {formatTokenMaybe(record.summaryTokenUsage?.inputTokens, language)}</span>
-                <span>{t.outputTokenShort} {formatTokenMaybe(record.summaryTokenUsage?.outputTokens, language)}</span>
-                <span>{t.totalTokenShort} {formatTokenMaybe(record.summaryTokenUsage?.totalTokens, language)}</span>
-              </div>
-            ))
-          )}
+        <div className="settings-summary-metric-group">
+          <h3>{t.allTime}</h3>
+          <div className="settings-summary-metrics">
+            <div>
+              <span className="muted">{t.summaryRuns}</span>
+              <strong>{usageStats.events.length}</strong>
+            </div>
+            <div>
+              <span className="muted">{t.withUsage}</span>
+              <strong>{usageStats.eventsWithUsage.length}</strong>
+            </div>
+            <div>
+              <span className="muted">{t.inputToken}</span>
+              <strong>{formatTokenCount(usageStats.totals.input, language)}</strong>
+            </div>
+            <div>
+              <span className="muted">{t.outputToken}</span>
+              <strong>{formatTokenCount(usageStats.totals.output, language)}</strong>
+            </div>
+            <div>
+              <span className="muted">{t.totalToken}</span>
+              <strong>{formatTokenCount(usageStats.totals.total, language)}</strong>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -996,10 +995,6 @@ function SummarySettingsSection({
 
 function formatTokenCount(value: number, language: ResolvedLanguage): string {
   return value.toLocaleString(language);
-}
-
-function formatTokenMaybe(value: number | null | undefined, language: ResolvedLanguage): string {
-  return value == null ? '--' : value.toLocaleString(language);
 }
 
 function downloadBlob(filename: string, blob: Blob): void {

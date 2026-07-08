@@ -12,6 +12,18 @@ test('popup renders quick toggles and persists a change across reopen', async ({
   await expect(page.getByText('右邊漂浮小卡')).toBeVisible();
   await expect(page.getByText('選取框線')).toBeVisible();
   await expect(page.getByText('快速複製列')).toHaveCount(0);
+  await expect(page.getByText('LANGUAGE')).toBeVisible();
+  await expect(page.getByText('介面語言')).toBeVisible();
+
+  const languageSelect = page.locator('.pop-language select');
+  await expect(languageSelect).toHaveValue('zh-TW');
+  await languageSelect.selectOption('en-US');
+  await page.waitForTimeout(200);
+  await page.reload();
+  await expect(page.locator('.pop-language select')).toHaveValue('en-US');
+  await page.locator('.pop-language select').selectOption('zh-TW');
+  await page.waitForTimeout(200);
+  await page.reload();
 
   // The real <input> is visually hidden behind the styled .pt-track switch, so
   // a user (and the test) clicks the wrapping <label> to toggle it.

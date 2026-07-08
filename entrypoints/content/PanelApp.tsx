@@ -21,12 +21,34 @@ const openExtensionPage = (page: 'library' | 'settings', hash?: string) =>
   send({ type: 'navigation/openExtensionPage', payload: { page, hash } });
 const ALL_GALLERY_CATEGORIES = '__all__';
 const UNCATEGORIZED_GALLERY_CATEGORY = '__uncategorized__';
+const HOVER_PREVIEW_OPEN_DELAY_MS = 260;
+const HOVER_PREVIEW_CLOSE_DELAY_MS = 180;
 
 type GalleryMoveToast = {
   recordId: string;
   previousCategoryId: string | null;
   previousCategoryName?: string;
   message: string;
+};
+
+type QuickAddContent =
+  | { kind: 'text'; text: string }
+  | { kind: 'image'; dataUrl: string; name?: string };
+
+type QuickAddRequest = {
+  target: { kind: 'record'; record: GalleryRecord } | { kind: 'capture' };
+  mode: 'compose' | 'pasted';
+  content: QuickAddContent;
+  anchorTopPx: number;
+};
+
+type HoverPreviewContent =
+  | { kind: 'text'; label: string; text: string }
+  | { kind: 'image'; label: string; src: string };
+
+type HoverPreviewRequest = {
+  content: HoverPreviewContent;
+  anchorTopPx: number;
 };
 
 export default function PanelApp({ overlay }: { overlay: OverlayManager }) {
@@ -53,7 +75,7 @@ export default function PanelApp({ overlay }: { overlay: OverlayManager }) {
   return (
     <>
       {settings.selectionToolbarEnabled && <SelectionToolbar overlay={overlay} settings={settings} language={language} />}
-      {settings.edgePanelEnabled && <CapturePanel session={session} settings={settings} t={t} />}
+      {settings.edgePanelEnabled && <CapturePanel session={session} settings={settings} t={t} language={language} />}
       {settings.edgePanelEnabled && <GalleryPanel settings={settings} t={t} language={language} />}
     </>
   );
@@ -345,10 +367,21 @@ function selectionEndpointRect(range: Range, forward: boolean): DOMRect {
 /*  Capture panel: top-right corner, shown only while capturing        */
 /* ------------------------------------------------------------------ */
 
-function CapturePanel({ session, settings, t }: { session: CaptureSessionState; settings: DisplaySettings; t: UiText }) {
+function CapturePanel({
+  session,
+  settings,
+  t,
+  language,
+}: {
+  session: CaptureSessionState;
+  settings: DisplaySettings;
+  t: UiText;
+  language: ResolvedLanguage;
+}) {
   const [open, setOpen] = useState(false);
   const prevCount = useRef(0);
   const [wizard, setWizard] = useState<null | 'category'>(null);
+  const [quickTextEditor, setQuickTextEditor] = useState<QuickAddRequest | null>(null);
 
   const count = session.assets.length;
   const active = count > 0 || session.conflicts.length > 0 || session.errors.length > 0;
@@ -367,7 +400,7 @@ function CapturePanel({ session, settings, t }: { session: CaptureSessionState; 
 
   const leave = () => {
     // Never vanish mid-capture; once idle, collapse on leave.
-    if (active || wizard) return;
+    if (active || wizard || quickTextEditor) return;
     setOpen(false);
   };
 
@@ -385,7 +418,15 @@ function CapturePanel({ session, settings, t }: { session: CaptureSessionState; 
           </span>
         </div>
         <div className="pt-panel-body">
-          <CaptureBody session={session} settings={settings} wizard={wizard} setWizard={setWizard} t={t} language={resolveLanguage(settings.language)} />
+          <CaptureBody
+            session={session}
+            settings={settings}
+            wizard={wizard}
+            setWizard={setWizard}
+            t={t}
+            language={language}
+            onQuickAdd={setQuickTextEditor}
+          />
         </div>
         {count > 0 && !wizard && (
           <div className="pt-footer">
@@ -403,6 +444,15 @@ function CapturePanel({ session, settings, t }: { session: CaptureSessionState; 
           </div>
         )}
       </div>
+      {quickTextEditor && (
+        <QuickTextEditor
+          request={quickTextEditor}
+          settings={settings}
+          language={language}
+          onClose={() => setQuickTextEditor(null)}
+          onSaved={() => setQuickTextEditor(null)}
+        />
+      )}
     </div>
   );
 }
@@ -423,6 +473,11 @@ function GalleryPanel({
   const [open, setOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [editing, setEditing] = useState<GalleryRecord | null>(null);
+  const [quickTextEditor, setQuickTextEditor] = useState<QuickAddRequest | null>(null);
+  const [hoverPreview, setHoverPreview] = useState<HoverPreviewRequest | null>(null);
+  const panelCloseTimerRef = useRef<number | null>(null);
+  const hoverPreviewOpenTimerRef = useRef<number | null>(null);
+  const hoverPreviewCloseTimerRef = useRef<number | null>(null);
   const [refreshSignal, setRefreshSignal] = useState(0);
   const panelWidth = settings.cardLayout === 'split' ? 'min(440px, 94vw)' : 'min(267px, 94vw)';
   const edgeStyle = { '--pt-gallery-panel-width': panelWidth } as CSSProperties;
@@ -434,17 +489,91 @@ function GalleryPanel({
   const edgeTop = Math.min(94, Math.max(6, settings.edgeTabTop ?? 50));
   const panelTopVh = Math.min(100 - PANEL_VH - 2, Math.max(2, edgeTop - PANEL_VH / 2));
   const openGallery = () => {
+    if (panelCloseTimerRef.current !== null) {
+      window.clearTimeout(panelCloseTimerRef.current);
+      panelCloseTimerRef.current = null;
+    }
     setOpen(true);
   };
-  const closeGallery = () => {
-    if (editing || pinned) return;
+  const closeGalleryNow = useCallback(() => {
+    if (panelCloseTimerRef.current !== null) {
+      window.clearTimeout(panelCloseTimerRef.current);
+      panelCloseTimerRef.current = null;
+    }
+    if (editing || quickTextEditor || pinned) return;
     setOpen(false);
-  };
+  }, [editing, pinned, quickTextEditor]);
+  const scheduleGalleryClose = useCallback(() => {
+    if (panelCloseTimerRef.current !== null) {
+      window.clearTimeout(panelCloseTimerRef.current);
+    }
+    panelCloseTimerRef.current = window.setTimeout(() => {
+      panelCloseTimerRef.current = null;
+      closeGalleryNow();
+    }, HOVER_PREVIEW_CLOSE_DELAY_MS);
+  }, [closeGalleryNow]);
+  const cancelHoverPreviewOpen = useCallback(() => {
+    if (hoverPreviewOpenTimerRef.current !== null) {
+      window.clearTimeout(hoverPreviewOpenTimerRef.current);
+      hoverPreviewOpenTimerRef.current = null;
+    }
+  }, []);
   const dismissGallery = useCallback(() => {
+    if (panelCloseTimerRef.current !== null) {
+      window.clearTimeout(panelCloseTimerRef.current);
+      panelCloseTimerRef.current = null;
+    }
+    cancelHoverPreviewOpen();
     setPinned(false);
     setEditing(null);
+    setQuickTextEditor(null);
+    setHoverPreview(null);
     setOpen(false);
-  }, []);
+  }, [cancelHoverPreviewOpen]);
+  const openQuickAdd = useCallback((request: QuickAddRequest) => {
+    cancelHoverPreviewOpen();
+    setHoverPreview(null);
+    setQuickTextEditor(request);
+  }, [cancelHoverPreviewOpen]);
+  const keepHoverPreviewOpen = useCallback(() => {
+    cancelHoverPreviewOpen();
+    if (hoverPreviewCloseTimerRef.current !== null) {
+      window.clearTimeout(hoverPreviewCloseTimerRef.current);
+      hoverPreviewCloseTimerRef.current = null;
+    }
+  }, [cancelHoverPreviewOpen]);
+  const closeHoverPreviewNow = useCallback(() => {
+    keepHoverPreviewOpen();
+    setHoverPreview(null);
+  }, [keepHoverPreviewOpen]);
+  const scheduleHoverPreviewClose = useCallback(() => {
+    keepHoverPreviewOpen();
+    hoverPreviewCloseTimerRef.current = window.setTimeout(() => {
+      setHoverPreview(null);
+      hoverPreviewCloseTimerRef.current = null;
+    }, HOVER_PREVIEW_CLOSE_DELAY_MS);
+  }, [keepHoverPreviewOpen]);
+  const showHoverPreview = useCallback((request: HoverPreviewRequest) => {
+    keepHoverPreviewOpen();
+    hoverPreviewOpenTimerRef.current = window.setTimeout(() => {
+      setHoverPreview(request);
+      hoverPreviewOpenTimerRef.current = null;
+    }, HOVER_PREVIEW_OPEN_DELAY_MS);
+  }, [keepHoverPreviewOpen]);
+  useEffect(
+    () => () => {
+      if (panelCloseTimerRef.current !== null) {
+        window.clearTimeout(panelCloseTimerRef.current);
+      }
+      if (hoverPreviewOpenTimerRef.current !== null) {
+        window.clearTimeout(hoverPreviewOpenTimerRef.current);
+      }
+      if (hoverPreviewCloseTimerRef.current !== null) {
+        window.clearTimeout(hoverPreviewCloseTimerRef.current);
+      }
+    },
+    [],
+  );
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -464,7 +593,7 @@ function GalleryPanel({
           className="pt-panel-dock"
           style={{ top: `${panelTopVh}vh` }}
           onMouseEnter={openGallery}
-          onMouseLeave={closeGallery}
+          onMouseLeave={scheduleGalleryClose}
         >
           <div className="pt-glass pt-panel pt-gallery-panel" style={{ maxHeight: `${PANEL_VH}vh` }}>
             <div className="pt-panel-head">
@@ -506,6 +635,10 @@ function GalleryPanel({
                 t={t}
                 language={language}
                 onEdit={setEditing}
+                onQuickAdd={openQuickAdd}
+                onHoverPreview={showHoverPreview}
+                onClearHoverPreview={scheduleHoverPreviewClose}
+                onDismissHoverPreview={closeHoverPreviewNow}
                 refreshSignal={refreshSignal}
               />
             </div>
@@ -537,6 +670,31 @@ function GalleryPanel({
           }}
         />
       )}
+      {hoverPreview && !quickTextEditor && !editing && (
+        <HoverPreview
+          request={hoverPreview}
+          onKeepOpen={() => {
+            openGallery();
+            keepHoverPreviewOpen();
+          }}
+          onRequestClose={() => {
+            scheduleHoverPreviewClose();
+            scheduleGalleryClose();
+          }}
+        />
+      )}
+      {quickTextEditor && (
+        <QuickTextEditor
+          request={quickTextEditor}
+          settings={settings}
+          language={language}
+          onClose={() => setQuickTextEditor(null)}
+          onSaved={() => {
+            setQuickTextEditor(null);
+            setRefreshSignal((n) => n + 1);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -548,6 +706,7 @@ function CaptureBody({
   setWizard,
   t,
   language,
+  onQuickAdd,
 }: {
   session: CaptureSessionState;
   settings: DisplaySettings;
@@ -555,6 +714,7 @@ function CaptureBody({
   setWizard: (w: null | 'category') => void;
   t: UiText;
   language: ResolvedLanguage;
+  onQuickAdd: (request: QuickAddRequest) => void;
 }) {
   const grouped = useMemo(() => {
     const order: (AssetRole | null)[] = [null, 'input', 'input_reference', 'negative', 'output'];
@@ -656,7 +816,14 @@ function CaptureBody({
             {items.length}
           </div>
           {items.map((a) => (
-            <PanelAssetCard key={a.id} asset={a} settings={settings} t={t} language={language} />
+            <PanelAssetCard
+              key={a.id}
+              asset={a}
+              settings={settings}
+              t={t}
+              language={language}
+              onQuickAdd={onQuickAdd}
+            />
           ))}
         </div>
       ))}
@@ -665,10 +832,59 @@ function CaptureBody({
   );
 }
 
-function PanelAssetCard({ asset, settings, t, language }: { asset: PendingAsset; settings: DisplaySettings; t: UiText; language: ResolvedLanguage }) {
+function PanelAssetCard({
+  asset,
+  settings,
+  t,
+  language,
+  onQuickAdd,
+}: {
+  asset: PendingAsset;
+  settings: DisplaySettings;
+  t: UiText;
+  language: ResolvedLanguage;
+  onQuickAdd: (request: QuickAddRequest) => void;
+}) {
   const allowed = allowedRolesFor(asset.assetType);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const closeMenu = () => setMenu(null);
+  const editorAnchorTopForCard = () => {
+    const rect = cardRef.current?.getBoundingClientRect();
+    return rect?.top ?? 8;
+  };
+  const openQuickAdd = (content: QuickAddContent, mode: QuickAddRequest['mode']) => {
+    onQuickAdd({ target: { kind: 'capture' }, content, mode, anchorTopPx: editorAnchorTopForCard() });
+  };
+
   return (
-    <div className="pt-card">
+    <div
+      ref={cardRef}
+      className="pt-card"
+      tabIndex={0}
+      onMouseEnter={() => cardRef.current?.focus({ preventScroll: true })}
+      onPaste={(e) => {
+        if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
+        const imageFile = [...e.clipboardData.files].find((file) => file.type.startsWith('image/'));
+        if (imageFile) {
+          e.preventDefault();
+          e.stopPropagation();
+          fileToDataUrl(imageFile).then((dataUrl) => openQuickAdd({ kind: 'image', dataUrl, name: imageFile.name }, 'pasted'));
+          return;
+        }
+        const text = e.clipboardData.getData('text/plain').trim();
+        if (!text) return;
+        e.preventDefault();
+        e.stopPropagation();
+        openQuickAdd({ kind: 'text', text }, 'pasted');
+      }}
+      onContextMenu={(e) => {
+        if ((e.target as HTMLElement).closest('textarea')) return;
+        e.preventDefault();
+        const rect = e.currentTarget.getBoundingClientRect();
+        setMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+      }}
+    >
       <div className="pt-spread">
         <strong style={{ fontSize: 11.5, textTransform: 'uppercase', opacity: 0.7 }}>{assetTypeLabel(asset.assetType, language)}</strong>
         <button className="pt-small-btn" onClick={() => send({ type: 'capture/removeAsset', payload: { pendingAssetId: asset.id } })}>
@@ -699,6 +915,24 @@ function PanelAssetCard({ asset, settings, t, language }: { asset: PendingAsset;
           );
         })}
       </div>
+      {menu && <div className="pt-menu-backdrop" onClick={closeMenu} role="presentation" />}
+      {menu && (
+        <div
+          className="pt-gmenu"
+          style={{ left: menu.x, top: menu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="pt-gmenu-item"
+            onClick={() => {
+              closeMenu();
+              openQuickAdd({ kind: 'text', text: '' }, 'compose');
+            }}
+          >
+            {language === 'en-US' ? 'Add text' : '新增文字'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -804,6 +1038,18 @@ function setContentEditableText(target: HTMLElement, text: string): void {
   selection?.removeAllRanges();
   selection?.addRange(range);
   target.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, inputType: 'insertText', data: text }));
+}
+
+async function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') resolve(reader.result);
+      else reject(new Error('FILE_READER_NO_RESULT'));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('FILE_READER_FAILED'));
+    reader.readAsDataURL(file);
+  });
 }
 
 async function imageFileFromAsset(asset: GalleryAsset, index: number): Promise<File | null> {
@@ -963,12 +1209,20 @@ function Gallery({
   t,
   language,
   onEdit,
+  onQuickAdd,
+  onHoverPreview,
+  onClearHoverPreview,
+  onDismissHoverPreview,
   refreshSignal,
 }: {
   settings: DisplaySettings;
   t: UiText;
   language: ResolvedLanguage;
   onEdit: (r: GalleryRecord) => void;
+  onQuickAdd: (request: QuickAddRequest) => void;
+  onHoverPreview: (request: HoverPreviewRequest) => void;
+  onClearHoverPreview: () => void;
+  onDismissHoverPreview: () => void;
   refreshSignal: number;
 }) {
   const [records, setRecords] = useState<GalleryRecord[] | null>(null);
@@ -1225,6 +1479,10 @@ function Gallery({
             t={t}
             language={language}
             onEdit={onEdit}
+            onQuickAdd={onQuickAdd}
+            onHoverPreview={onHoverPreview}
+            onClearHoverPreview={onClearHoverPreview}
+            onDismissHoverPreview={onDismissHoverPreview}
             onChanged={refresh}
             onCategoryDragStart={onRecordDragStart}
             onCategoryDragEnd={onRecordDragEnd}
@@ -1269,6 +1527,10 @@ function GalleryCard({
   t,
   language,
   onEdit,
+  onQuickAdd,
+  onHoverPreview,
+  onClearHoverPreview,
+  onDismissHoverPreview,
   onChanged,
   onCategoryDragStart,
   onCategoryDragEnd,
@@ -1279,6 +1541,10 @@ function GalleryCard({
   t: UiText;
   language: ResolvedLanguage;
   onEdit: (r: GalleryRecord) => void;
+  onQuickAdd: (request: QuickAddRequest) => void;
+  onHoverPreview: (request: HoverPreviewRequest) => void;
+  onClearHoverPreview: () => void;
+  onDismissHoverPreview: () => void;
   onChanged: () => void;
   onCategoryDragStart: (record: GalleryRecord, e: ReactDragEvent<HTMLButtonElement>) => void;
   onCategoryDragEnd: () => void;
@@ -1286,6 +1552,7 @@ function GalleryCard({
 }) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [confirmDel, setConfirmDel] = useState(false);
+  const cardRef = useRef<HTMLDivElement | null>(null);
 
   const closeMenu = () => {
     setMenu(null);
@@ -1307,10 +1574,43 @@ function GalleryCard({
     onChanged();
   };
 
+  const editorAnchorTopForCard = () => {
+    const rect = cardRef.current?.getBoundingClientRect();
+    return rect?.top ?? 8;
+  };
+
+  const openQuickAdd = (content: QuickAddContent, mode: QuickAddRequest['mode']) => {
+    onQuickAdd({ target: { kind: 'record', record }, content, mode, anchorTopPx: editorAnchorTopForCard() });
+  };
+  const showTextPreview = (label: string, text: string, el: HTMLElement) => {
+    onHoverPreview({ content: { kind: 'text', label, text }, anchorTopPx: el.getBoundingClientRect().top });
+  };
+
   return (
     <div
+      ref={cardRef}
       className={`pt-gcard${isOutputOnly || isInputOnly ? ' pt-gcard--single-column' : ''}${singleColumnHasMedia ? ' pt-gcard--single-column-media' : ''}${isDragging ? ' pt-gcard--dragging' : ''}`}
+      tabIndex={0}
+      onMouseEnter={() => cardRef.current?.focus({ preventScroll: true })}
+      onPaste={(e) => {
+        if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
+        onDismissHoverPreview();
+        const imageFile = [...e.clipboardData.files].find((file) => file.type.startsWith('image/'));
+        if (imageFile) {
+          e.preventDefault();
+          e.stopPropagation();
+          fileToDataUrl(imageFile).then((dataUrl) => openQuickAdd({ kind: 'image', dataUrl, name: imageFile.name }, 'pasted'));
+          return;
+        }
+        const text = e.clipboardData.getData('text/plain').trim();
+        if (!text) return;
+        e.preventDefault();
+        e.stopPropagation();
+        openQuickAdd({ kind: 'text', text }, 'pasted');
+      }}
       onContextMenu={(e) => {
+        if ((e.target as HTMLElement).closest('textarea')) return;
+        onDismissHoverPreview();
         e.preventDefault();
         const rect = e.currentTarget.getBoundingClientRect();
         setMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top });
@@ -1331,13 +1631,48 @@ function GalleryCard({
           <span className="pt-gtag">{categoryText}</span>
         </button>
       </div>
+      {record.summary?.trim() && (
+        <div
+          className="pt-gsummary"
+          onMouseEnter={(e) => showTextPreview(language === 'en-US' ? 'Summary' : '摘要', record.summary?.trim() ?? '', e.currentTarget)}
+          onMouseLeave={onClearHoverPreview}
+        >
+          {record.summary.trim()}
+        </div>
+      )}
       <div className="pt-gcols">
         {isInputOnly ? (
-          <GalleryColumn label={t.inputReference} assets={left} settings={settings} t={t} language={language} />
+          <GalleryColumn
+            label={t.inputReference}
+            assets={left}
+            settings={settings}
+            t={t}
+            language={language}
+            onHoverPreview={onHoverPreview}
+            onClearHoverPreview={onClearHoverPreview}
+          />
         ) : !isOutputOnly && (
-          <GalleryColumn label={t.inputReference} assets={left} settings={settings} t={t} language={language} />
+          <GalleryColumn
+            label={t.inputReference}
+            assets={left}
+            settings={settings}
+            t={t}
+            language={language}
+            onHoverPreview={onHoverPreview}
+            onClearHoverPreview={onClearHoverPreview}
+          />
         )}
-        {!isInputOnly && <GalleryColumn label={t.output} assets={right} settings={settings} t={t} language={language} />}
+        {!isInputOnly && (
+          <GalleryColumn
+            label={t.output}
+            assets={right}
+            settings={settings}
+            t={t}
+            language={language}
+            onHoverPreview={onHoverPreview}
+            onClearHoverPreview={onClearHoverPreview}
+          />
+        )}
       </div>
 
       {menu && <div className="pt-menu-backdrop" onClick={closeMenu} role="presentation" />}
@@ -1357,6 +1692,15 @@ function GalleryCard({
                 }}
               >
                 {language === 'en-US' ? 'Edit tags' : '編輯標籤'}
+              </button>
+              <button
+                className="pt-gmenu-item"
+                onClick={() => {
+                  closeMenu();
+                  openQuickAdd({ kind: 'text', text: '' }, 'compose');
+                }}
+              >
+                {language === 'en-US' ? 'Add text' : '新增文字'}
               </button>
               <button
                 className="pt-gmenu-item pt-gmenu-item--danger"
@@ -1388,12 +1732,16 @@ function GalleryColumn({
   settings,
   t,
   language,
+  onHoverPreview,
+  onClearHoverPreview,
 }: {
   label: string;
   assets: GalleryAsset[];
   settings: DisplaySettings;
   t: UiText;
   language: ResolvedLanguage;
+  onHoverPreview: (request: HoverPreviewRequest) => void;
+  onClearHoverPreview: () => void;
 }) {
   const copy = async () => {
     if (assets.length === 0) return;
@@ -1428,7 +1776,16 @@ function GalleryColumn({
         {assets.length === 0 ? (
           <div className="pt-gcol-empty">—</div>
         ) : (
-          assets.map((a, i) => <GalleryAssetView key={i} asset={a} settings={settings} language={language} />)
+          assets.map((a, i) => (
+            <GalleryAssetView
+              key={i}
+              asset={a}
+              settings={settings}
+              language={language}
+              onHoverPreview={onHoverPreview}
+              onClearHoverPreview={onClearHoverPreview}
+            />
+          ))
         )}
       </div>
     </div>
@@ -1516,17 +1873,250 @@ function CardEditor({
   );
 }
 
+function QuickTextEditor({
+  request,
+  settings,
+  language,
+  onClose,
+  onSaved,
+}: {
+  request: QuickAddRequest;
+  settings: DisplaySettings;
+  language: ResolvedLanguage;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [text, setText] = useState(request.content.kind === 'text' ? request.content.text : '');
+  const [status, setStatus] = useState('');
+  const [topPx, setTopPx] = useState(request.anchorTopPx);
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const assetType = request.content.kind === 'image' ? 'image' : 'text';
+  const roles = allowedRolesFor(assetType);
+
+  const updatePosition = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const margin = 8;
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+    const maxTop = Math.max(margin, viewportHeight - editor.offsetHeight - margin);
+    setTopPx(Math.min(maxTop, Math.max(margin, request.anchorTopPx)));
+  }, [request.anchorTopPx]);
+
+  useEffect(() => {
+    if (request.mode === 'compose') {
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    }
+  }, [request.mode]);
+
+  useLayoutEffect(() => {
+    updatePosition();
+  }, [updatePosition, request.content.kind, request.mode, text]);
+
+  useEffect(() => {
+    window.addEventListener('resize', updatePosition, { passive: true });
+    window.visualViewport?.addEventListener('resize', updatePosition, { passive: true });
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.visualViewport?.removeEventListener('resize', updatePosition);
+    };
+  }, [updatePosition]);
+
+  const save = async (role: AssetRole) => {
+    if (!allowedRolesFor(assetType).includes(role)) return;
+    setStatus(language === 'en-US' ? 'Saving...' : '儲存中...');
+    const result = request.target.kind === 'capture'
+      ? ((await send({
+          type: 'capture/addManualAsset',
+          payload: request.content.kind === 'image'
+            ? {
+                assetType: 'image',
+                originalUrl: request.content.dataUrl,
+                role,
+                pageUrl: window.location.href,
+                pageTitle: document.title,
+                capturedAt: new Date().toISOString(),
+              }
+            : {
+                assetType: 'text',
+                textContent: text.trim(),
+                role,
+                pageUrl: window.location.href,
+                pageTitle: document.title,
+                capturedAt: new Date().toISOString(),
+              },
+        })) as { ok?: boolean } | undefined)
+      : request.content.kind === 'image'
+        ? ((await send({
+            type: 'library/addRecordMediaAsset',
+            payload: {
+              recordId: request.target.record.id,
+              assetType: 'image',
+              originalUrl: request.content.dataUrl,
+              previewRef: request.content.dataUrl,
+              role,
+            },
+          })) as { ok?: boolean } | undefined)
+        : ((await send({
+            type: 'library/addRecordTextAsset',
+            payload: { recordId: request.target.record.id, textContent: text.trim(), role },
+          })) as { ok?: boolean } | undefined);
+    if (!result?.ok) {
+      setStatus(language === 'en-US' ? 'Save failed. Try again.' : '儲存失敗，請重試。');
+      return;
+    }
+    onSaved();
+  };
+
+  const canSave = request.content.kind === 'image' || text.trim().length > 0;
+
+  return (
+    <div
+      ref={editorRef}
+      className="pt-glass pt-geditor pt-quick-editor"
+      style={{ top: topPx }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="pt-geditor-title">
+        {request.content.kind === 'image'
+          ? language === 'en-US'
+            ? 'Add image'
+            : '新增圖片'
+          : language === 'en-US'
+            ? 'Add text'
+            : '新增文字'}
+      </div>
+      {request.mode === 'compose' && (
+        <>
+          <div className="pt-geditor-label">{language === 'en-US' ? 'Text' : '文字'}</div>
+          <textarea
+            ref={textareaRef}
+            value={text}
+            placeholder={language === 'en-US' ? 'Type or paste text, then choose a role.' : '輸入或貼上文字，再選角色。'}
+            onChange={(e) => {
+              setText(e.target.value);
+              setStatus('');
+            }}
+            onPaste={() => setStatus('')}
+          />
+        </>
+      )}
+      {request.mode === 'pasted' && request.content.kind === 'text' && (
+        <>
+          <div className="pt-geditor-label">{language === 'en-US' ? 'Pasted text' : '貼上的文字'}</div>
+          <div className="pt-quick-preview pt-quick-preview--text">{text}</div>
+        </>
+      )}
+      {request.mode === 'pasted' && request.content.kind === 'image' && (
+        <>
+          <div className="pt-geditor-label">{language === 'en-US' ? 'Pasted image' : '貼上的圖片'}</div>
+          <div className="pt-quick-preview pt-quick-preview--image">
+            <img src={request.content.dataUrl} alt="" onLoad={updatePosition} />
+            {request.content.name && <span>{request.content.name}</span>}
+          </div>
+        </>
+      )}
+      <div className="pt-geditor-label">{language === 'en-US' ? 'Role' : '角色'}</div>
+      <div className="pt-choices">
+        {roles.map((role) => (
+          <button
+            key={role}
+            className="pt-choice"
+            type="button"
+            disabled={!canSave}
+            style={{ ['--role-color' as string]: settings.roleColors[role] }}
+            onClick={() => save(role)}
+          >
+            {roleLabel(role, language)}
+          </button>
+        ))}
+      </div>
+      <div className="pt-geditor-actions">
+        <button className="pt-choice pt-choice--sub" onClick={onClose}>
+          {language === 'en-US' ? 'Cancel' : '取消'}
+        </button>
+      </div>
+      {status && <div className="pt-quick-status">{status}</div>}
+    </div>
+  );
+}
+
+function HoverPreview({
+  request,
+  onKeepOpen,
+  onRequestClose,
+}: {
+  request: HoverPreviewRequest;
+  onKeepOpen: () => void;
+  onRequestClose: () => void;
+}) {
+  const [topPx, setTopPx] = useState(request.anchorTopPx);
+  const previewRef = useRef<HTMLDivElement | null>(null);
+
+  const updatePosition = useCallback(() => {
+    const preview = previewRef.current;
+    if (!preview) return;
+    const margin = 8;
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+    const maxTop = Math.max(margin, viewportHeight - preview.offsetHeight - margin);
+    setTopPx(Math.min(maxTop, Math.max(margin, request.anchorTopPx)));
+  }, [request.anchorTopPx]);
+
+  useLayoutEffect(() => {
+    updatePosition();
+  }, [updatePosition, request.content]);
+
+  useEffect(() => {
+    window.addEventListener('resize', updatePosition, { passive: true });
+    window.visualViewport?.addEventListener('resize', updatePosition, { passive: true });
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.visualViewport?.removeEventListener('resize', updatePosition);
+    };
+  }, [updatePosition]);
+
+  return (
+    <div
+      ref={previewRef}
+      className={`pt-glass pt-geditor pt-hover-preview pt-hover-preview--${request.content.kind}`}
+      style={{ top: topPx }}
+      onMouseEnter={onKeepOpen}
+      onMouseLeave={onRequestClose}
+    >
+      <div className="pt-geditor-label">{request.content.label}</div>
+      {request.content.kind === 'image' ? (
+        <img src={request.content.src} alt="" onLoad={updatePosition} />
+      ) : (
+        <div className="pt-hover-preview-text">{request.content.text}</div>
+      )}
+    </div>
+  );
+}
+
 function GalleryAssetView({
   asset,
   settings,
   language,
+  onHoverPreview,
+  onClearHoverPreview,
 }: {
   asset: GalleryAsset;
   settings: DisplaySettings;
   language: ResolvedLanguage;
+  onHoverPreview: (request: HoverPreviewRequest) => void;
+  onClearHoverPreview: () => void;
 }) {
   if (asset.assetType === 'text' && asset.textContent) {
-    return <GalleryPrompt role={asset.role} text={asset.textContent} color={settings.roleColors[asset.role]} language={language} />;
+    return (
+      <GalleryPrompt
+        role={asset.role}
+        text={asset.textContent}
+        color={settings.roleColors[asset.role]}
+        language={language}
+        onHoverPreview={onHoverPreview}
+        onClearHoverPreview={onClearHoverPreview}
+      />
+    );
   }
   // Prefer the durable local thumbnail; the remote originalUrl (e.g. ChatGPT's
   // signed URL) can expire or be blocked by the page CSP, leaving OUTPUT blank.
@@ -1538,6 +2128,13 @@ function GalleryAssetView({
         src={src}
         alt=""
         loading="lazy"
+        onMouseEnter={(e) => {
+          onHoverPreview({
+            content: { kind: 'image', label: roleLabel(asset.role, language), src },
+            anchorTopPx: e.currentTarget.getBoundingClientRect().top,
+          });
+        }}
+        onMouseLeave={onClearHoverPreview}
         onError={(e) => {
           if (asset.previewRef && e.currentTarget.src !== asset.previewRef) {
             e.currentTarget.src = asset.previewRef;
@@ -1551,9 +2148,32 @@ function GalleryAssetView({
   return null;
 }
 
-function GalleryPrompt({ role, text, color, language }: { role: AssetRole; text: string; color: string; language: ResolvedLanguage }) {
+function GalleryPrompt({
+  role,
+  text,
+  color,
+  language,
+  onHoverPreview,
+  onClearHoverPreview,
+}: {
+  role: AssetRole;
+  text: string;
+  color: string;
+  language: ResolvedLanguage;
+  onHoverPreview: (request: HoverPreviewRequest) => void;
+  onClearHoverPreview: () => void;
+}) {
   return (
-    <div className="pt-gprompt">
+    <div
+      className="pt-gprompt"
+      onMouseEnter={(e) => {
+        onHoverPreview({
+          content: { kind: 'text', label: roleLabel(role, language), text },
+          anchorTopPx: e.currentTarget.getBoundingClientRect().top,
+        });
+      }}
+      onMouseLeave={onClearHoverPreview}
+    >
       <div className="pt-gprompt-head">
         <span className="pt-pill" style={{ background: color }}>
           {roleLabel(role, language)}

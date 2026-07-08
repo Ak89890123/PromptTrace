@@ -48,11 +48,20 @@ export type LibraryRecord = {
   summaryModel?: string;
   summaryTokenUsage?: SummaryTokenUsage;
   summaryGeneratedAt?: string;
+  summaryUsageHistory?: SummaryUsageEvent[];
   sourcePageUrl?: string;
   sourcePageTitle?: string;
 
   createdAt: string;
   updatedAt: string;
+};
+
+export type SummaryUsageEvent = {
+  id: string;
+  generatedAt: string;
+  provider?: SummaryProvider;
+  model?: string;
+  usage?: SummaryTokenUsage;
 };
 
 export type Asset = {

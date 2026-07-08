@@ -101,6 +101,20 @@ describe('commit session', () => {
     expect(stored?.assetId).toBe(result.assets[0].id);
   });
 
+  it('keeps data-url images local without starting a browser download', async () => {
+    const dataUrl = `data:image/png;base64,${'A'.repeat(180)}`;
+    const result = await commitSessionToLibrary(
+      [pending({ assetType: 'image', textContent: undefined, originalUrl: dataUrl, role: 'output' })],
+      {},
+    );
+
+    expect(result.pendingDownloads).toHaveLength(0);
+    expect(result.sourceOnlyAssets).toHaveLength(1);
+    expect(result.assets[0].originalUrl).toBe(dataUrl);
+    expect(result.assets[0].previewRef).toBe(dataUrl);
+    expect(await fileRecordRepository.byAsset(result.assets[0].id)).toHaveLength(0);
+  });
+
   it('blob-url video falls back to source-only without failing the record', async () => {
     const result = await commitSessionToLibrary(
       [
@@ -121,9 +135,9 @@ describe('commit session', () => {
     expect(await assetRepository.byRecord(result.record.id)).toHaveLength(2);
   });
 
-  it('isDownloadableUrl rejects blob/mediasource', () => {
+  it('isDownloadableUrl only allows remote media downloads', () => {
     expect(isDownloadableUrl('https://x.test/a.mp4')).toBe(true);
-    expect(isDownloadableUrl('data:image/png;base64,xx')).toBe(true);
+    expect(isDownloadableUrl('data:image/png;base64,xx')).toBe(false);
     expect(isDownloadableUrl('blob:https://x.test/1')).toBe(false);
     expect(isDownloadableUrl('mediasource:whatever')).toBe(false);
   });

@@ -50,6 +50,20 @@
           broadcast();
           return { ok: true };
         }
+        if (msg.type === 'capture/addManualAsset') {
+          session.assets.push({
+            id: 'a' + ++assetSeq,
+            assetType: msg.payload.assetType,
+            role: msg.payload.role,
+            textContent: msg.payload.textContent,
+            originalUrl: msg.payload.originalUrl,
+            pageUrl: msg.payload.pageUrl,
+            pageTitle: msg.payload.pageTitle,
+            capturedAt: msg.payload.capturedAt,
+          });
+          broadcast();
+          return { ok: true };
+        }
         if (msg.type === 'capture/clearSession') {
           session.assets.length = 0;
           broadcast();

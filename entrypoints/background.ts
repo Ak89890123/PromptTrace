@@ -380,6 +380,7 @@ export default defineBackground(() => {
       });
       const fresh = await recordRepository.get(recordId);
       if (!fresh) return { ok: false, reason: 'record_not_found' };
+      const generatedAt = new Date().toISOString();
       await recordRepository.save({
         ...fresh,
         summary: result.summary,
@@ -388,8 +389,18 @@ export default defineBackground(() => {
         summaryProvider: summarySettings.provider,
         summaryModel: model,
         summaryTokenUsage: result.usage,
-        summaryGeneratedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        summaryGeneratedAt: generatedAt,
+        summaryUsageHistory: [
+          ...(fresh.summaryUsageHistory ?? []),
+          {
+            id: crypto.randomUUID(),
+            generatedAt,
+            provider: summarySettings.provider,
+            model,
+            usage: result.usage,
+          },
+        ],
+        updatedAt: generatedAt,
       });
       return { ok: true };
     } catch (error) {
@@ -499,6 +510,31 @@ export default defineBackground(() => {
               .sendMessage(asset.tabId, { type: 'overlay/roleChanged', payload: { pendingAssetId, role } })
               .catch(() => {});
           }
+          return sendResponse({ ok: true });
+        }
+
+        case 'capture/addManualAsset': {
+          if (!isRoleAllowed(message.payload.assetType, message.payload.role)) {
+            return sendResponse({ ok: false, reason: 'role_not_allowed' });
+          }
+          if (message.payload.assetType === 'text' && !message.payload.textContent?.trim()) {
+            return sendResponse({ ok: false, reason: 'empty_text' });
+          }
+          if (message.payload.assetType === 'image' && !message.payload.originalUrl?.trim()) {
+            return sendResponse({ ok: false, reason: 'empty_source' });
+          }
+          const asset: PendingAsset = {
+            id: crypto.randomUUID(),
+            assetType: message.payload.assetType,
+            role: message.payload.role,
+            textContent: message.payload.textContent?.trim(),
+            originalUrl: message.payload.originalUrl?.trim(),
+            pageUrl: message.payload.pageUrl,
+            pageTitle: message.payload.pageTitle,
+            tabId: sender.tab?.id,
+            capturedAt: message.payload.capturedAt,
+          };
+          setSession(addAsset(session, asset));
           return sendResponse({ ok: true });
         }
 
@@ -717,6 +753,7 @@ export default defineBackground(() => {
             .map((r) => ({
               id: r.id,
               title: r.title,
+              summary: r.summary,
               categoryId: r.categoryId,
               categoryName: r.categoryId ? catName.get(r.categoryId) : undefined,
               createdAt: r.createdAt,
@@ -757,6 +794,50 @@ export default defineBackground(() => {
             categoryId: 'categoryId' in p ? (p.categoryId ?? null) : rec.categoryId,
             updatedAt: new Date().toISOString(),
           });
+          return sendResponse({ ok: true });
+        }
+
+        case 'library/addRecordTextAsset': {
+          const rec = await recordRepository.get(message.payload.recordId);
+          if (!rec) return sendResponse({ ok: false, reason: 'record_not_found' });
+          const text = message.payload.textContent.trim();
+          if (!text) return sendResponse({ ok: false, reason: 'empty_text' });
+          const now = new Date().toISOString();
+          const assets = await assetRepository.byRecord(rec.id);
+          await assetRepository.save({
+            id: crypto.randomUUID(),
+            recordId: rec.id,
+            assetType: 'text',
+            role: message.payload.role,
+            textContent: text,
+            orderIndex: Math.max(-1, ...assets.map((asset) => asset.orderIndex)) + 1,
+            capturedAt: now,
+          });
+          await recordRepository.save({ ...rec, updatedAt: now });
+          return sendResponse({ ok: true });
+        }
+
+        case 'library/addRecordMediaAsset': {
+          const rec = await recordRepository.get(message.payload.recordId);
+          if (!rec) return sendResponse({ ok: false, reason: 'record_not_found' });
+          if (!isRoleAllowed(message.payload.assetType, message.payload.role)) {
+            return sendResponse({ ok: false, reason: 'role_not_allowed' });
+          }
+          const source = message.payload.originalUrl.trim();
+          if (!source) return sendResponse({ ok: false, reason: 'empty_source' });
+          const now = new Date().toISOString();
+          const assets = await assetRepository.byRecord(rec.id);
+          await assetRepository.save({
+            id: crypto.randomUUID(),
+            recordId: rec.id,
+            assetType: message.payload.assetType,
+            role: message.payload.role,
+            originalUrl: source,
+            previewRef: message.payload.previewRef ?? source,
+            orderIndex: Math.max(-1, ...assets.map((asset) => asset.orderIndex)) + 1,
+            capturedAt: now,
+          });
+          await recordRepository.save({ ...rec, updatedAt: now });
           return sendResponse({ ok: true });
         }
 

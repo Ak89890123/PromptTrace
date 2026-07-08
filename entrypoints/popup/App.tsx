@@ -55,6 +55,22 @@ export default function App() {
         <button onClick={() => openPage('settings.html')}>⚙ {t.detailedSettings}</button>
       </div>
 
+      <label className="pop-language">
+        <span className="pop-language-title">
+          <span>{t.languageCard.toUpperCase()}</span>
+          <span className="muted">{t.interfaceLanguage}</span>
+        </span>
+        <select
+          value={settings.language}
+          onChange={(e) => patch({ language: e.target.value as DisplaySettings['language'] })}
+        >
+          <option value="system">{t.followSystem}</option>
+          <option value="en-US">{t.english}</option>
+          <option value="zh-TW">{t.traditionalChinese}</option>
+          <option value="zh-CN">{t.simplifiedChinese}</option>
+        </select>
+      </label>
+
       <div className="card">
         <h2>{t.quickToggles}</h2>
         {toggles(t).map((item) => (

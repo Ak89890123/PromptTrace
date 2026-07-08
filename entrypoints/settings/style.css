@@ -55,6 +55,12 @@
   min-height: 0;
 }
 
+.settings-language-heading {
+  display: flex;
+  align-items: baseline;
+  gap: var(--pt-space-2);
+}
+
 .settings-category-column .settings-section {
   position: relative;
   display: flex;
@@ -452,13 +458,27 @@
   background: var(--pt-surface-card-faint);
 }
 
+.settings-saved-key-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--pt-space-3);
+  min-width: 0;
+}
+
+.settings-saved-key-row .muted {
+  flex: 0 0 auto;
+}
+
 .settings-secret-preview {
   display: inline-flex;
-  min-height: 34px;
+  min-width: 0;
   align-items: center;
+  overflow: hidden;
   color: var(--pt-color-text-muted);
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: var(--pt-font-size-control);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-summary-dashboard {
@@ -486,6 +506,19 @@
   margin: 0;
 }
 
+.settings-summary-metric-group {
+  display: grid;
+  gap: var(--pt-space-2);
+  margin-top: var(--pt-space-3);
+}
+
+.settings-summary-metric-group h3 {
+  margin: 0;
+  color: var(--pt-color-text-primary);
+  font-size: var(--pt-font-size-control);
+  font-weight: 700;
+}
+
 .settings-summary-metrics {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -507,12 +540,6 @@
   font-size: var(--pt-font-size-page);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.settings-summary-usage-list {
-  display: grid;
-  gap: var(--pt-space-2);
-  margin-top: var(--pt-space-4);
 }
 
 .settings-prompt-actions {
@@ -539,23 +566,6 @@
   left: 0;
   right: 0;
   bottom: calc(100% + var(--pt-space-2));
-}
-
-.settings-summary-usage-row {
-  display: grid;
-  grid-template-columns: minmax(120px, 1fr) repeat(3, max-content);
-  gap: var(--pt-space-3);
-  align-items: center;
-  min-width: 0;
-  color: var(--pt-color-text-muted);
-  font-size: var(--pt-font-size-control);
-}
-
-.settings-summary-usage-row span:first-child {
-  overflow: hidden;
-  color: var(--pt-color-text-primary);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .settings-page .card {
@@ -802,8 +812,7 @@
     grid-template-columns: 1fr;
   }
 
-  .settings-summary-metrics,
-  .settings-summary-usage-row {
+  .settings-summary-metrics {
     grid-template-columns: 1fr;
   }
 

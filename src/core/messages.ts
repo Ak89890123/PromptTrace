@@ -28,6 +28,19 @@ export type AssignAssetRoleMessage = {
   payload: { pendingAssetId: string; role: AssetRole };
 };
 
+export type AddManualCaptureAssetMessage = {
+  type: 'capture/addManualAsset';
+  payload: {
+    assetType: Extract<AssetType, 'text' | 'image'>;
+    role: AssetRole;
+    textContent?: string;
+    originalUrl?: string;
+    pageUrl: string;
+    pageTitle: string;
+    capturedAt: string;
+  };
+};
+
 export type RemoveAssetMessage = {
   type: 'capture/removeAsset';
   payload: { pendingAssetId: string };
@@ -129,6 +142,7 @@ export type GalleryAsset = {
 export type GalleryRecord = {
   id: string;
   title?: string;
+  summary?: string;
   categoryId?: string | null;
   categoryName?: string;
   createdAt: string;
@@ -158,6 +172,26 @@ export type UpdateRecordMetaMessage = {
   };
 };
 
+export type AddRecordTextAssetMessage = {
+  type: 'library/addRecordTextAsset';
+  payload: {
+    recordId: string;
+    textContent: string;
+    role: AssetRole;
+  };
+};
+
+export type AddRecordMediaAssetMessage = {
+  type: 'library/addRecordMediaAsset';
+  payload: {
+    recordId: string;
+    assetType: 'image';
+    originalUrl: string;
+    previewRef?: string;
+    role: AssetRole;
+  };
+};
+
 export type SummarizeRecordMessage = {
   type: 'summary/summarizeRecord';
   payload: { recordId: string };
@@ -171,6 +205,7 @@ export type RunAutoSummaryMessage = {
 export type ExtensionMessage =
   | CreatePendingAssetMessage
   | AssignAssetRoleMessage
+  | AddManualCaptureAssetMessage
   | RemoveAssetMessage
   | ClearCaptureSessionMessage
   | SetWizardStageMessage
@@ -189,6 +224,8 @@ export type ExtensionMessage =
   | ListRecordsMessage
   | DeleteRecordMessage
   | UpdateRecordMetaMessage
+  | AddRecordTextAssetMessage
+  | AddRecordMediaAssetMessage
   | SummarizeRecordMessage
   | RunAutoSummaryMessage;
 
