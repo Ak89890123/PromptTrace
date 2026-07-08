@@ -16,6 +16,7 @@ import { createConflict } from '@/src/core/errors/conflictTypes';
 import { createCaptureError, mapDownloadError } from '@/src/core/errors/errorTypes';
 import type { ExtensionMessage } from '@/src/core/messages';
 import { requestPromptSummary, selectedSummaryModel, summaryPromptTextFromAssets } from '@/src/core/summary';
+import { isSummaryDailyTokenLimitReached } from '@/src/core/summaryUsage';
 import { commitSessionToLibrary, downloadPathFor } from '@/src/storage/commitSession';
 import {
   assetRepository,
@@ -426,6 +427,10 @@ export default defineBackground(() => {
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
       .slice(0, settings.summary.maxPerRun);
     for (const record of candidates) {
+      if (settings.summary.dailyTokenLimit > 0) {
+        const freshRecords = await recordRepository.list();
+        if (isSummaryDailyTokenLimitReached(freshRecords, settings.summary.dailyTokenLimit)) break;
+      }
       await summarizeRecord(record.id);
     }
   }

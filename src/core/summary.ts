@@ -29,6 +29,7 @@ export type SummarySettings = {
   scanIntervalMinutes: number;
   maxPerRun: number;
   timeoutMs: number;
+  dailyTokenLimit: number;
 };
 
 export type SummaryRequest = {
@@ -84,6 +85,7 @@ export const DEFAULT_SUMMARY_SETTINGS: SummarySettings = {
   scanIntervalMinutes: 15,
   maxPerRun: 5,
   timeoutMs: 30000,
+  dailyTokenLimit: 0,
 };
 
 export const SUMMARY_SCHEMA = {
@@ -114,6 +116,7 @@ export function mergeSummarySettings(stored: Partial<SummarySettings> | undefine
     scanIntervalMinutes: clampNumber(stored?.scanIntervalMinutes, 1, 525600, DEFAULT_SUMMARY_SETTINGS.scanIntervalMinutes),
     maxPerRun: clampNumber(stored?.maxPerRun, 1, 50, DEFAULT_SUMMARY_SETTINGS.maxPerRun),
     timeoutMs: clampNumber(stored?.timeoutMs, 5000, 120000, DEFAULT_SUMMARY_SETTINGS.timeoutMs),
+    dailyTokenLimit: clampNumber(stored?.dailyTokenLimit, 0, 1000000000, DEFAULT_SUMMARY_SETTINGS.dailyTokenLimit),
   };
 }
 

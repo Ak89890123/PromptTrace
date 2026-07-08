@@ -31,6 +31,10 @@ export function summaryUsageEventsForRecord(record: LibraryRecord): SummaryUsage
   ];
 }
 
+export function isSummaryDailyTokenLimitReached(records: LibraryRecord[], dailyTokenLimit: number, now = new Date()): boolean {
+  return dailyTokenLimit > 0 && summaryUsageStats(records, now).todayTotals.total >= dailyTokenLimit;
+}
+
 export function summaryUsageStats(records: LibraryRecord[], now = new Date()): SummaryUsageStats {
   const events = records
     .flatMap(summaryUsageEventsForRecord)

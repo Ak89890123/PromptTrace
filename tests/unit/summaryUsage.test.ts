@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LibraryRecord } from '@/src/core/domain/entities';
-import { summaryUsageStats } from '@/src/core/summaryUsage';
+import { isSummaryDailyTokenLimitReached, summaryUsageStats } from '@/src/core/summaryUsage';
 
 function record(overrides: Partial<LibraryRecord>): LibraryRecord {
   return {
@@ -59,6 +59,24 @@ describe('summary usage stats', () => {
     expect(stats.todayEvents.map((event) => event.id)).toEqual(['today']);
     expect(stats.todayTotals).toEqual({ input: 50, output: 10, total: 60 });
     expect(stats.totals).toEqual({ input: 130, output: 25, total: 155 });
+  });
+
+  it('detects when today reaches the daily token limit', () => {
+    const records = [
+      record({
+        summaryUsageHistory: [
+          {
+            id: 'today',
+            generatedAt: '2026-07-08T01:00:00.000Z',
+            usage: { inputTokens: 80, outputTokens: 20, totalTokens: 100 },
+          },
+        ],
+      }),
+    ];
+
+    expect(isSummaryDailyTokenLimitReached(records, 0, new Date('2026-07-08T12:00:00.000Z'))).toBe(false);
+    expect(isSummaryDailyTokenLimitReached(records, 101, new Date('2026-07-08T12:00:00.000Z'))).toBe(false);
+    expect(isSummaryDailyTokenLimitReached(records, 100, new Date('2026-07-08T12:00:00.000Z'))).toBe(true);
   });
 
   it('backfills one usage event for legacy records without history', () => {

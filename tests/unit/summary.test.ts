@@ -33,6 +33,12 @@ describe('summary helpers', () => {
     expect(migratedCustom.systemPrompt).toBe('Always summarize in Japanese.');
   });
 
+  it('migrates daily token limit with a disabled default', () => {
+    expect(mergeSummarySettings({}).dailyTokenLimit).toBe(0);
+    expect(mergeSummarySettings({ dailyTokenLimit: 1200 }).dailyTokenLimit).toBe(1200);
+    expect(mergeSummarySettings({ dailyTokenLimit: -1 }).dailyTokenLimit).toBe(0);
+  });
+
   it('provides default summary prompts by language', () => {
     expect(defaultSummarySystemPrompt('en-US')).toContain('Use English');
     expect(defaultSummarySystemPrompt('zh-TW')).toContain('繁體中文');

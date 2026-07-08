@@ -32,6 +32,8 @@ import { categoryLabel, resolveLanguage, roleLabel, UI_TEXT, type ResolvedLangua
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type DisplaySettings } from '@/src/ui/roleColors';
 import { useTaxonomy } from '@/src/ui/hooks';
 
+const KOFI_URL = 'https://ko-fi.com/lazydoooog';
+
 const COLOR_PALETTES = [
   {
     id: 'red',
@@ -102,6 +104,10 @@ export default function App() {
     <div className="settings-page">
       <header className="settings-header">
         <h1>{t.settingsTitle}</h1>
+        <a className="settings-support-link" href={KOFI_URL} target="_blank" rel="noreferrer">
+          <span>{t.supportPromptTrace}</span>
+          <strong>{t.buyMeCoffee}</strong>
+        </a>
         <button
           type="button"
           className="settings-nav-button"
@@ -936,7 +942,21 @@ function SummarySettingsSection({
       <div className="settings-inner-divider" />
       <div className="settings-summary-dashboard">
         <div className="settings-summary-dashboard-head">
-          <h2>{t.tokenDashboard}</h2>
+          <div className="settings-summary-dashboard-title">
+            <h2>{t.tokenDashboard}</h2>
+            <span className="muted">{t.dailyTokenLimitHint}</span>
+          </div>
+          <label className="settings-field settings-token-limit-field">
+            <span className="muted">{t.dailyTokenLimit}</span>
+            <input
+              type="number"
+              min={0}
+              step={100}
+              value={summary.dailyTokenLimit}
+              onChange={(e) => patchSummary({ dailyTokenLimit: Math.max(0, Math.floor(Number(e.target.value) || 0)) })}
+              placeholder="0"
+            />
+          </label>
         </div>
         <div className="settings-summary-metric-group">
           <h3>{t.today}</h3>

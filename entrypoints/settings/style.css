@@ -17,6 +17,29 @@
   margin: 0;
 }
 
+.settings-support-link {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--pt-space-2);
+  min-height: 34px;
+  padding: 0 var(--pt-space-4);
+  border: 1px solid var(--pt-stroke-soft);
+  border-radius: var(--pt-radius-thumb);
+  background: var(--pt-surface-card-faint);
+  color: var(--pt-color-text-primary);
+  text-decoration: none;
+}
+
+.settings-support-link span {
+  color: var(--pt-color-text-muted);
+}
+
+.settings-support-link:hover {
+  border-color: var(--pt-color-accent-hover);
+  background: var(--pt-color-accent-softer);
+}
+
 .settings-nav-button {
   flex: 0 0 auto;
   min-height: 34px;
@@ -498,12 +521,33 @@
 
 .settings-summary-dashboard-head {
   display: grid;
-  gap: var(--pt-space-1);
+  grid-template-columns: max-content minmax(96px, 1fr) minmax(142px, 180px);
+  align-items: end;
+  gap: var(--pt-space-4);
   margin-bottom: var(--pt-space-4);
 }
 
 .settings-summary-dashboard-head h2 {
   margin: 0;
+}
+
+.settings-summary-dashboard-title {
+  display: flex;
+  align-items: center;
+  gap: var(--pt-space-3);
+}
+
+.settings-summary-dashboard-title .muted {
+  white-space: nowrap;
+}
+
+.settings-token-limit-field {
+  grid-column: 3;
+  min-width: 0;
+}
+
+.settings-token-limit-field input {
+  min-height: 34px;
 }
 
 .settings-summary-metric-group {
