@@ -50,9 +50,10 @@ export async function commitSessionToLibrary(
   const assets: Asset[] = [];
   const pendingDownloads: CommitResult['pendingDownloads'] = [];
   const sourceOnlyAssets: Asset[] = [];
+  const normalizedAssets = mergeSameRoleTextAssets(pendingAssets);
 
-  for (let i = 0; i < pendingAssets.length; i++) {
-    const p = pendingAssets[i];
+  for (let i = 0; i < normalizedAssets.length; i++) {
+    const p = normalizedAssets[i];
     const asset: Asset = {
       id: crypto.randomUUID(),
       recordId: record.id,
@@ -89,6 +90,32 @@ export async function commitSessionToLibrary(
   }
 
   return { record, assets, pendingDownloads, sourceOnlyAssets };
+}
+
+function mergeSameRoleTextAssets(pendingAssets: PendingAsset[]): PendingAsset[] {
+  const mergedTextByRole = new Map<NonNullable<PendingAsset['role']>, PendingAsset>();
+  const normalized: PendingAsset[] = [];
+
+  for (const asset of pendingAssets) {
+    if (asset.assetType !== 'text' || !asset.textContent?.trim()) {
+      normalized.push(asset);
+      continue;
+    }
+
+    const role = asset.role ?? 'input';
+    const text = asset.textContent.trim();
+    const existing = mergedTextByRole.get(role);
+    if (existing) {
+      existing.textContent = `${existing.textContent?.trim() ?? ''}\n\n${text}`;
+      continue;
+    }
+
+    const mergedAsset = { ...asset, role, textContent: text };
+    mergedTextByRole.set(role, mergedAsset);
+    normalized.push(mergedAsset);
+  }
+
+  return normalized;
 }
 
 export function isDownloadableUrl(url: string): boolean {

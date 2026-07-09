@@ -1736,6 +1736,37 @@ function GalleryCard({
   );
 }
 
+type GalleryColumnItem =
+  | { kind: 'text'; role: AssetRole; text: string }
+  | { kind: 'asset'; asset: GalleryAsset };
+
+function galleryColumnItems(assets: GalleryAsset[]): GalleryColumnItem[] {
+  const groupedText = new Map<AssetRole, string>();
+  const items: GalleryColumnItem[] = [];
+
+  for (const asset of assets) {
+    if (asset.assetType !== 'text' || !asset.textContent?.trim()) {
+      items.push({ kind: 'asset', asset });
+      continue;
+    }
+
+    const previous = groupedText.get(asset.role);
+    if (previous != null) {
+      groupedText.set(asset.role, `${previous}\n\n${asset.textContent.trim()}`);
+      continue;
+    }
+
+    groupedText.set(asset.role, asset.textContent.trim());
+    items.push({ kind: 'text', role: asset.role, text: asset.textContent.trim() });
+  }
+
+  return items.map((item) => (
+    item.kind === 'text'
+      ? { ...item, text: groupedText.get(item.role) ?? item.text }
+      : item
+  ));
+}
+
 function GalleryColumn({
   label,
   assets,
@@ -1753,6 +1784,8 @@ function GalleryColumn({
   onHoverPreview: (request: HoverPreviewRequest) => void;
   onClearHoverPreview: () => void;
 }) {
+  const items = galleryColumnItems(assets);
+
   const copy = async () => {
     if (assets.length === 0) return;
     try {
@@ -1786,15 +1819,27 @@ function GalleryColumn({
         {assets.length === 0 ? (
           <div className="pt-gcol-empty">—</div>
         ) : (
-          assets.map((a, i) => (
-            <GalleryAssetView
-              key={i}
-              asset={a}
-              settings={settings}
-              language={language}
-              onHoverPreview={onHoverPreview}
-              onClearHoverPreview={onClearHoverPreview}
-            />
+          items.map((item, i) => (
+            item.kind === 'text' ? (
+              <GalleryPrompt
+                key={`${item.role}-${i}`}
+                role={item.role}
+                text={item.text}
+                color={settings.roleColors[item.role]}
+                language={language}
+                onHoverPreview={onHoverPreview}
+                onClearHoverPreview={onClearHoverPreview}
+              />
+            ) : (
+              <GalleryAssetView
+                key={i}
+                asset={item.asset}
+                settings={settings}
+                language={language}
+                onHoverPreview={onHoverPreview}
+                onClearHoverPreview={onClearHoverPreview}
+              />
+            )
           ))
         )}
       </div>

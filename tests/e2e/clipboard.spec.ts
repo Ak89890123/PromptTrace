@@ -87,6 +87,46 @@ test('saved prompt has no copy label but still fills from the in-page gallery', 
   await expect(page.locator('#prompt-textarea')).toHaveValue(new RegExp(NEEDLE));
 });
 
+test('same-role text captures render as one gallery prompt block', async ({ context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  const page = await context.newPage();
+  await page.goto('/chatgpt-like.html');
+  await expect(page.locator('prompttrace-ui')).toBeAttached({ timeout: 10_000 });
+
+  async function captureAsInput(selector: string) {
+    await page.evaluate((targetSelector) => {
+      const el = document.querySelector(targetSelector)!;
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const sel = window.getSelection()!;
+      sel.removeAllRanges();
+      sel.addRange(range);
+      window.dispatchEvent(new CustomEvent('prompttrace:summon'));
+    }, selector);
+    const roleButton = page.locator('.pt-toolbar button').first();
+    await expect(roleButton).toBeVisible({ timeout: 5_000 });
+    await roleButton.click();
+  }
+
+  await captureAsInput('#msg-1');
+  await captureAsInput('#msg-2');
+
+  await page.locator('.pt-commit').click();
+  await expect(page.locator('.pt-wizard')).toBeVisible({ timeout: 5_000 });
+  await page.locator('.pt-wizard .pt-choice').first().click();
+
+  await page.locator('.pt-edge-tab').hover();
+  const card = page.locator('.pt-gcard').filter({ hasText: 'A reply message to add vertical content.' }).first();
+  await expect(card).toBeVisible({ timeout: 10_000 });
+
+  const inputPrompts = card.locator('.pt-gcol').first().locator('.pt-gprompt');
+  await expect(inputPrompts).toHaveCount(1);
+  const text = await inputPrompts.locator('.pt-gtext').innerText();
+  expect(text).toContain(NEEDLE);
+  expect(text).toContain('A reply message to add vertical content.');
+  expect(text).toContain('\n\n');
+});
+
 test('saved prompt preserves line breaks when filling a contenteditable composer', async ({ context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   const page = await context.newPage();

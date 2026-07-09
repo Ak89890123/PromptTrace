@@ -87,6 +87,22 @@ describe('commit session', () => {
     expect(result.pendingDownloads).toHaveLength(0);
   });
 
+  it('merges same-role text captures into one text asset', async () => {
+    const result = await commitSessionToLibrary(
+      [
+        pending({ role: 'input', textContent: 'A 文' }),
+        pending({ role: 'input', textContent: 'B 文' }),
+        pending({ role: 'negative', textContent: '不要出現浮水印' }),
+      ],
+      { categoryId: null },
+    );
+
+    const assets = await assetRepository.byRecord(result.record.id);
+    expect(assets).toHaveLength(2);
+    expect(assets.find((asset) => asset.role === 'input')?.textContent).toBe('A 文\n\nB 文');
+    expect(assets.find((asset) => asset.role === 'negative')?.textContent).toBe('不要出現浮水印');
+  });
+
   it('creates pending FileRecord for downloadable media', async () => {
     const result = await commitSessionToLibrary(
       [pending({ assetType: 'image', textContent: undefined, originalUrl: 'https://x.test/a.png', role: 'input' })],
