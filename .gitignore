@@ -3,11 +3,33 @@ node_modules/
 .wxt/
 stats.html
 stats-*.json
+*.log
+*.zip
+*.tsbuildinfo
 .env
 .env.*
+
+# Local agent/dev workspace state
 .gstack/
 .serena/
 .codegraph/
+.agents/
+.codex/
+goals/
+
+# Local editor / OS noise
+.vscode/
+.idea/
+.cursor/
+.DS_Store
+Thumbs.db
+
+# Temporary / cache / coverage artifacts
+.tmp/
+tmp/
+temp/
+.cache/
+coverage/
 
 # Playwright e2e artifacts
 test-results/
