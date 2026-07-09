@@ -209,6 +209,9 @@
   flex-wrap: wrap;
   gap: var(--pt-space-2);
   padding: var(--pt-space-4) var(--pt-space-4) var(--pt-space-3);
+  background: var(--pt-surface-panel);
+  border-bottom: 1px solid var(--pt-stroke-subtle);
+  box-shadow: none;
 }
 .pt-gallery-panel .pt-panel-head .pt-title {
   flex: 1 1 auto;
@@ -425,14 +428,14 @@
 
 /* Gallery: scrollable cards of saved prompts (a lightweight Library). */
 .pt-gallery-filter {
-  position: sticky;
-  top: 0;
+  position: relative;
   z-index: 8;
+  flex: 0 0 auto;
   margin: 0 calc(var(--pt-space-2) * -1) var(--pt-space-2);
   padding: var(--pt-space-1) var(--pt-space-2);
-  background: #1c1c20;
+  background: var(--pt-surface-panel);
   border-bottom: 1px solid var(--pt-stroke-subtle);
-  box-shadow: 0 8px 14px rgba(0, 0, 0, 0.22);
+  box-shadow: none;
 }
 .pt-gallery-filter-scroll {
   display: flex;
@@ -501,7 +504,16 @@
   font-size: var(--pt-font-size-micro);
   opacity: 0.72;
 }
-.pt-gallery { display: flex; flex-direction: column; gap: var(--pt-space-3); }
+.pt-gallery {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--pt-space-3);
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: var(--pt-space-2);
+  scrollbar-width: thin;
+}
 .pt-gcard {
   position: relative;
   background: var(--pt-surface-card-subtle);
@@ -664,6 +676,11 @@
   width: var(--pt-gallery-panel-width, min(440px, 94vw));
 }
 .pt-gallery-panel .pt-panel-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
   padding-inline: var(--pt-space-2);
 }
 .pt-gallery:has(.pt-gcard--single-column) {
