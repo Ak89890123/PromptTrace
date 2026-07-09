@@ -73,6 +73,23 @@ npm test         # unit + integration tests
 3. 「載入未封裝項目」→ 選 `.output/chrome-mv3` 資料夾。
 4. 點 extension 圖示開啟設定彈出框（內含 Library / 詳細設定連結）。
 
+## Release / CD
+
+本專案目前使用安全版 CD：只自動驗證、打包與保存 Chrome extension zip，**不會自動上傳或送審 Chrome Web Store**。
+
+- 手動執行 GitHub Actions 的 `CD` workflow：跑 compile、unit/integration tests、e2e tests，並把 `.output/*.zip` 上傳成 workflow artifact。
+- 推送 `v*` tag（例如 `v0.3.0`）：同樣跑完整驗證與打包，並建立 GitHub Release，附上 extension zip。
+- 第一版尚未上架 Chrome Web Store 前，請從 CD artifact 或 GitHub Release 下載 zip，再到 Chrome Web Store Developer Dashboard 手動建立商品與上傳送審。
+
+本機可先跑：
+
+```bash
+npm run compile
+npm test
+npm run test:e2e
+npm run zip
+```
+
 ## Usage
 
 1. 在任何網頁反白文字 → 按召喚鍵（預設 **Alt+S**）→ 選取處浮出角色選項，點一下即加入（也可在 Settings 改成反白後自動出現，或用右鍵選單）。
