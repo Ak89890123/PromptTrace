@@ -44,11 +44,32 @@ export const categoryRepository = {
   children: (parentId: string) => getByIndex<RecordCategory>(STORES.recordCategories, 'parentId', parentId),
 };
 
+export function isRecordTrashed(record: LibraryRecord): boolean {
+  return Boolean(record.trashedAt);
+}
+
 export const recordRepository = {
   list: () => getAll<LibraryRecord>(STORES.libraryRecords),
+  listActive: async () => (await getAll<LibraryRecord>(STORES.libraryRecords)).filter((record) => !isRecordTrashed(record)),
+  listTrashed: async () => (await getAll<LibraryRecord>(STORES.libraryRecords)).filter(isRecordTrashed),
   get: (id: string) => getOne<LibraryRecord>(STORES.libraryRecords, id),
   save: (r: LibraryRecord) => put(STORES.libraryRecords, r),
   delete: (id: string) => remove(STORES.libraryRecords, id),
+  trash: async (id: string, trashedAt = new Date().toISOString()) => {
+    const record = await getOne<LibraryRecord>(STORES.libraryRecords, id);
+    if (!record) return undefined;
+    const next = { ...record, trashedAt, updatedAt: trashedAt };
+    await put(STORES.libraryRecords, next);
+    return next;
+  },
+  restore: async (id: string) => {
+    const record = await getOne<LibraryRecord>(STORES.libraryRecords, id);
+    if (!record) return undefined;
+    const { trashedAt: _trashedAt, ...restored } = record;
+    const next = { ...restored, updatedAt: new Date().toISOString() };
+    await put(STORES.libraryRecords, next);
+    return next;
+  },
 };
 
 export const assetRepository = {
@@ -80,6 +101,23 @@ export const exportRecordRepository = {
   list: () => getAll<ExportRecordEntry>(STORES.exportRecords),
   save: (e: ExportRecordEntry) => put(STORES.exportRecords, e),
 };
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Permanently delete trashed records older than the retention window. */
+export async function purgeExpiredTrash(
+  retentionDays: number,
+  now: Date = new Date(),
+): Promise<{ recordIds: string[]; fileRecords: FileRecord[] }> {
+  const safeDays = Math.max(1, Math.round(retentionDays));
+  const cutoff = new Date(now.getTime() - safeDays * DAY_MS).toISOString();
+  const expiredRecords = (await recordRepository.listTrashed()).filter((record) => record.trashedAt && record.trashedAt <= cutoff);
+  const deletedFileRecords: FileRecord[] = [];
+  for (const record of expiredRecords) {
+    deletedFileRecords.push(...(await deleteRecordCascade(record.id)));
+  }
+  return { recordIds: expiredRecords.map((record) => record.id), fileRecords: deletedFileRecords };
+}
 
 /** Delete a record and its assets / file records / tags. Returns the file records that existed. */
 export async function deleteRecordCascade(recordId: string): Promise<FileRecord[]> {

@@ -19,6 +19,32 @@
   font-family: var(--pt-font-family-ui);
 }
 
+.pt-wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  color: var(--pt-color-text-primary);
+  font-weight: 850;
+  letter-spacing: -0.055em;
+  line-height: 1;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.pt-wordmark .pt-wordmark-promp {
+  color: #fff;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.22);
+}
+
+.pt-wordmark .pt-wordmark-t {
+  color: #f7b500;
+  text-shadow: 0 0 12px rgba(247, 181, 0, 0.3);
+}
+
+.pt-wordmark .pt-wordmark-race {
+  color: #009b9a;
+  text-shadow: 0 0 12px rgba(0, 155, 154, 0.28);
+}
+
 .pt-glass {
   background: var(--pt-surface-panel-strong);
   backdrop-filter: blur(24px) saturate(180%);
@@ -895,7 +921,7 @@
 .pt-gprompt:first-of-type { margin-top: 0; }
 .pt-gcol--copyable:hover .pt-gprompt,
 .pt-gcol--copyable:focus-visible .pt-gprompt {
-  border-left-color: var(--pt-stroke-accent-muted);
+  border-left-color: transparent;
   background: var(--pt-surface-input);
 }
 .pt-gprompt-head {

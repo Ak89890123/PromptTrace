@@ -35,6 +35,8 @@ export type DisplaySettings = {
   cardLayout: 'split' | 'input-only' | 'output-only';
   /** Vertical position of the right-edge gallery tab, 0 (top)–100 (bottom). */
   edgeTabTop: number;
+  /** How long soft-deleted records stay in trash before permanent purge. */
+  trashRetentionDays: number;
   summary: SummarySettings;
 };
 
@@ -51,6 +53,7 @@ export const DEFAULT_SETTINGS: DisplaySettings = {
   toolbarRoles: ['input', 'input_reference', 'negative', 'output'],
   cardLayout: 'split',
   edgeTabTop: 50,
+  trashRetentionDays: 10,
   summary: DEFAULT_SUMMARY_SETTINGS,
 };
 
@@ -67,11 +70,15 @@ function withDefaults(stored: Partial<DisplaySettings> | undefined): DisplaySett
     stored.cardLayout === 'split' || stored.cardLayout === 'input-only' || stored.cardLayout === 'output-only'
       ? stored.cardLayout
       : DEFAULT_SETTINGS.cardLayout;
+  const trashRetentionDays = Number.isFinite(stored.trashRetentionDays)
+    ? Math.min(365, Math.max(1, Math.round(stored.trashRetentionDays ?? DEFAULT_SETTINGS.trashRetentionDays)))
+    : DEFAULT_SETTINGS.trashRetentionDays;
   return {
     ...DEFAULT_SETTINGS,
     ...stored,
     language,
     cardLayout,
+    trashRetentionDays,
     roleColors: { ...DEFAULT_ROLE_COLORS, ...(stored.roleColors ?? {}) },
     toolbarRoles:
       stored.toolbarRoles && stored.toolbarRoles.length >= 2

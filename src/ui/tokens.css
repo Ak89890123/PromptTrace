@@ -47,10 +47,10 @@
   --pt-color-link: #8ad7e8;
 
   --pt-surface-canvas: #0b0b0f;
-  --pt-surface-panel: rgba(28, 28, 32, 0.55);
-  --pt-surface-panel-strong: rgba(28, 28, 32, 0.6);
-  --pt-surface-page: rgba(18, 19, 24, 0.84);
-  --pt-surface-elevated: rgba(28, 30, 36, 0.72);
+  --pt-surface-panel: rgba(28, 28, 32, 0.75);
+  --pt-surface-panel-strong: rgba(28, 28, 32, 0.75);
+  --pt-surface-page: rgba(18, 19, 24, 0.75);
+  --pt-surface-elevated: rgba(28, 30, 36, 0.75);
   --pt-surface-card: rgba(255, 255, 255, 0.07);
   --pt-surface-card-subtle: rgba(255, 255, 255, 0.05);
   --pt-surface-card-faint: rgba(255, 255, 255, 0.03);
@@ -59,13 +59,13 @@
   --pt-surface-control-hover: rgba(255, 255, 255, 0.15);
   --pt-surface-input: rgba(0, 0, 0, 0.3);
   --pt-surface-input-strong: rgba(0, 0, 0, 0.32);
-  --pt-surface-record-hover: rgba(32, 36, 43, 0.78);
-  --pt-surface-record-selected: rgba(32, 36, 43, 0.86);
-  --pt-surface-menu: rgba(40, 40, 46, 0.98);
-  --pt-surface-close: rgba(20, 20, 24, 0.92);
-  --pt-surface-rail: rgba(8, 8, 12, 0.76);
-  --pt-surface-rail-strong: rgba(8, 10, 14, 0.68);
-  --pt-surface-drawer: rgba(12, 13, 18, 0.9);
+  --pt-surface-record-hover: rgba(32, 36, 43, 0.75);
+  --pt-surface-record-selected: rgba(32, 36, 43, 0.75);
+  --pt-surface-menu: rgba(40, 40, 46, 0.75);
+  --pt-surface-close: rgba(20, 20, 24, 0.75);
+  --pt-surface-rail: rgba(8, 8, 12, 0.75);
+  --pt-surface-rail-strong: rgba(8, 10, 14, 0.75);
+  --pt-surface-drawer: rgba(12, 13, 18, 0.75);
 
   --pt-stroke-glass: rgba(255, 255, 255, 0.14);
   --pt-stroke-soft: rgba(255, 255, 255, 0.1);

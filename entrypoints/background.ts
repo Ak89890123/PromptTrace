@@ -23,6 +23,7 @@ import {
   categoryRepository,
   deleteRecordCascade,
   fileRecordRepository,
+  purgeExpiredTrash,
   recordRepository,
 } from '@/src/storage/repositories';
 import { seedDefaults } from '@/src/storage/seed';
@@ -33,6 +34,7 @@ const MENU_TEXT = 'prompttrace-add-selection';
 const MENU_IMAGE = 'prompttrace-add-image';
 const MENU_VIDEO = 'prompttrace-add-video';
 const SUMMARY_ALARM = 'prompttrace-summary-auto';
+const TRASH_ALARM = 'prompttrace-trash-auto-purge';
 
 export default defineBackground(() => {
   let session: CaptureSessionState = emptySession();
@@ -76,6 +78,32 @@ export default defineBackground(() => {
     });
   }
 
+  async function removeDownloadedFiles(fileRecords: Awaited<ReturnType<typeof deleteRecordCascade>>): Promise<void> {
+    for (const f of fileRecords) {
+      if (f.downloadId == null) continue;
+      try {
+        await chrome.downloads.removeFile(f.downloadId);
+      } catch {
+        // file may already be gone / moved — ignore
+      }
+    }
+  }
+
+  async function purgeExpiredTrashNow(): Promise<{ deletedCount: number }> {
+    const settings = await loadSettings();
+    const result = await purgeExpiredTrash(settings.trashRetentionDays);
+    await removeDownloadedFiles(result.fileRecords);
+    return { deletedCount: result.recordIds.length };
+  }
+
+  async function syncTrashAlarm(): Promise<void> {
+    await chrome.alarms.clear(TRASH_ALARM);
+    chrome.alarms.create(TRASH_ALARM, {
+      periodInMinutes: 24 * 60,
+      delayInMinutes: 5,
+    });
+  }
+
   function updateContextMenus(): void {
     menuTitles()
       .then((t) => {
@@ -95,18 +123,24 @@ export default defineBackground(() => {
     createContextMenus().catch(() => {});
     seedDefaults().catch((e) => console.error('[PrompTrace] seed failed', e));
     syncSummaryAlarm().catch(() => {});
+    syncTrashAlarm().catch(() => {});
+    purgeExpiredTrashNow().catch(() => {});
   });
   chrome.runtime.onStartup.addListener(() => {
     syncSummaryAlarm().catch(() => {});
+    syncTrashAlarm().catch(() => {});
+    purgeExpiredTrashNow().catch(() => {});
   });
   onSettingsChanged(() => {
     updateContextMenus();
     syncSummaryAlarm().catch(() => {});
+    syncTrashAlarm().catch(() => {});
   });
   seedDefaults().catch(() => {});
 
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === SUMMARY_ALARM) runAutoSummary().catch(() => {});
+    if (alarm.name === TRASH_ALARM) purgeExpiredTrashNow().catch(() => {});
   });
 
   // Browser-level shortcut: overrides page key handlers, rebindable at
@@ -421,14 +455,14 @@ export default defineBackground(() => {
   async function runAutoSummary(): Promise<void> {
     const settings = await loadSettings();
     if (!settings.summary.enabled || !settings.summary.autoEnabled) return;
-    const records = await recordRepository.list();
+    const records = await recordRepository.listActive();
     const candidates = records
       .filter((record) => !record.summaryStatus && !record.summaryGeneratedAt)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
       .slice(0, settings.summary.maxPerRun);
     for (const record of candidates) {
       if (settings.summary.dailyTokenLimit > 0) {
-        const freshRecords = await recordRepository.list();
+        const freshRecords = await recordRepository.listActive();
         if (isSummaryDailyTokenLimitReached(freshRecords, settings.summary.dailyTokenLimit)) break;
       }
       await summarizeRecord(record.id);
@@ -733,7 +767,7 @@ export default defineBackground(() => {
         }
 
         case 'navigation/openExtensionPage': {
-          const page = message.payload.page === 'settings' ? 'settings.html' : 'library.html';
+          const page = message.payload.page === 'settings' ? 'settings.html' : message.payload.page === 'trash' ? 'trash.html' : 'library.html';
           const hash = message.payload.hash?.startsWith('#') ? message.payload.hash : '';
           await chrome.tabs.create({ url: chrome.runtime.getURL(`${page}${hash}`) });
           return sendResponse({ ok: true });
@@ -741,7 +775,7 @@ export default defineBackground(() => {
 
         case 'library/listRecords': {
           const [records, allAssets, categories] = await Promise.all([
-            recordRepository.list(),
+            recordRepository.listActive(),
             assetRepository.list(),
             categoryRepository.list(),
           ]);
@@ -776,17 +810,24 @@ export default defineBackground(() => {
           return sendResponse({ records: gallery });
         }
 
+        case 'library/trashRecord': {
+          const record = await recordRepository.trash(message.payload.recordId);
+          return sendResponse({ ok: Boolean(record), trashedAt: record?.trashedAt });
+        }
+
+        case 'library/restoreRecord': {
+          const record = await recordRepository.restore(message.payload.recordId);
+          return sendResponse({ ok: Boolean(record) });
+        }
+
+        case 'library/purgeExpiredTrash': {
+          const result = await purgeExpiredTrashNow();
+          return sendResponse({ ok: true, ...result });
+        }
+
         case 'library/deleteRecord': {
           const fileRecords = await deleteRecordCascade(message.payload.recordId);
-          for (const f of fileRecords) {
-            if (f.downloadId != null) {
-              try {
-                await chrome.downloads.removeFile(f.downloadId);
-              } catch {
-                // file may already be gone / moved — ignore
-              }
-            }
-          }
+          await removeDownloadedFiles(fileRecords);
           return sendResponse({ ok: true });
         }
 

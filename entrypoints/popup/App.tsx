@@ -7,6 +7,7 @@ import {
   type DisplaySettings,
 } from '@/src/ui/roleColors';
 import { resolveLanguage, UI_TEXT, type UiText } from '@/src/ui/i18n';
+import { PrompTraceWordmark } from '@/src/ui/PrompTraceWordmark';
 
 /** The boolean quick-switches surfaced in the popup. Everything else lives in
  *  the full settings page (詳細設定). */
@@ -46,7 +47,7 @@ export default function App() {
       <div className="pop-head">
         <span className="pop-title">
           <img className="pop-logo" src="/icon/128.png" alt="" />
-          PrompTrace
+          <PrompTraceWordmark className="pop-wordmark" />
         </span>
       </div>
 

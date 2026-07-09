@@ -7,6 +7,7 @@ import {
   assetRepository,
   categoryRepository,
   deleteRecordCascade,
+  purgeExpiredTrash,
   fileRecordRepository,
   recordRepository,
   tagRepository,
@@ -172,7 +173,43 @@ describe('download status transitions', () => {
   });
 });
 
-describe('delete record with file linkage', () => {
+describe('trash and delete record with file linkage', () => {
+  it('soft-deletes records into trash and restores them without touching assets', async () => {
+    const result = await commitSessionToLibrary(
+      [pending({ role: 'input', textContent: 'temporary prompt' })],
+      {},
+    );
+
+    await recordRepository.trash(result.record.id, '2026-07-01T00:00:00.000Z');
+    expect(await recordRepository.listActive()).toHaveLength(0);
+    expect((await recordRepository.listTrashed()).map((record) => record.id)).toEqual([result.record.id]);
+    expect(await assetRepository.byRecord(result.record.id)).toHaveLength(1);
+
+    await recordRepository.restore(result.record.id);
+    expect(await recordRepository.listActive()).toHaveLength(1);
+    expect(await recordRepository.listTrashed()).toHaveLength(0);
+  });
+
+  it('purges expired trash records by retention window', async () => {
+    const oldRecord = await commitSessionToLibrary(
+      [pending({ role: 'input', textContent: 'old' })],
+      {},
+    );
+    const freshRecord = await commitSessionToLibrary(
+      [pending({ role: 'input', textContent: 'fresh' })],
+      {},
+    );
+    await recordRepository.trash(oldRecord.record.id, '2026-07-01T00:00:00.000Z');
+    await recordRepository.trash(freshRecord.record.id, '2026-07-09T00:00:00.000Z');
+
+    const purged = await purgeExpiredTrash(7, new Date('2026-07-09T00:00:01.000Z'));
+
+    expect(purged.recordIds).toEqual([oldRecord.record.id]);
+    expect(await recordRepository.get(oldRecord.record.id)).toBeUndefined();
+    expect(await recordRepository.get(freshRecord.record.id)).toBeTruthy();
+    expect((await recordRepository.listTrashed()).map((record) => record.id)).toEqual([freshRecord.record.id]);
+  });
+
   it('cascade removes record, assets, file records and tags, returning file records', async () => {
     const result = await commitSessionToLibrary(
       [

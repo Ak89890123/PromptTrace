@@ -106,7 +106,7 @@ export type FileRecordChangedMessage = {
 export type OpenExtensionPageMessage = {
   type: 'navigation/openExtensionPage';
   payload: {
-    page: 'library' | 'settings';
+    page: 'library' | 'settings' | 'trash';
     hash?: string;
   };
 };
@@ -157,7 +157,25 @@ export type ListRecordsMessage = {
 
 export type ListRecordsResult = { records: GalleryRecord[] };
 
-/** Content script → background: delete a saved record (cascade + local files). */
+/** Extension pages/content → background: move a saved record to the restore-able trash. */
+export type TrashRecordMessage = {
+  type: 'library/trashRecord';
+  payload: { recordId: string };
+};
+
+/** Extension pages/content → background: restore a record from trash. */
+export type RestoreRecordMessage = {
+  type: 'library/restoreRecord';
+  payload: { recordId: string };
+};
+
+/** Extension pages/background alarm → background: permanently delete expired trash records. */
+export type PurgeExpiredTrashMessage = {
+  type: 'library/purgeExpiredTrash';
+  payload: Record<string, never>;
+};
+
+/** Content script → background: permanently delete a saved record (cascade + local files). */
 export type DeleteRecordMessage = {
   type: 'library/deleteRecord';
   payload: { recordId: string };
@@ -222,6 +240,9 @@ export type ExtensionMessage =
   | TaxonomyGetMessage
   | TaxonomyQuickAddCategoryMessage
   | ListRecordsMessage
+  | TrashRecordMessage
+  | RestoreRecordMessage
+  | PurgeExpiredTrashMessage
   | DeleteRecordMessage
   | UpdateRecordMetaMessage
   | AddRecordTextAssetMessage

@@ -89,7 +89,10 @@ export default function App() {
   const [filterCategories, setFilterCategories] = useState<string[]>([]);
   const [categoryDrafts, setCategoryDrafts] = useState<CategoryDraft[]>([]);
   const [assetIndex, setAssetIndex] = useState<Map<string, Asset[]>>(new Map());
+  const [draggingRecordId, setDraggingRecordId] = useState<string | null>(null);
   const [dragOverCategoryId, setDragOverCategoryId] = useState<string | null>(null);
+  const [dragOverTrash, setDragOverTrash] = useState(false);
+  const [deleteStatus, setDeleteStatus] = useState('');
   const [refresh, setRefresh] = useState(0);
   const { categories } = useTaxonomy(refresh);
   const reload = () => setRefresh((x) => x + 1);
@@ -101,9 +104,29 @@ export default function App() {
   const language = resolveLanguage(settings.language);
   const t = UI_TEXT[language];
 
+  const clearDragState = () => {
+    setDraggingRecordId(null);
+    setDragOverCategoryId(null);
+    setDragOverTrash(false);
+  };
+
+  const moveRecordToTrash = async (recordId: string) => {
+    await chrome.runtime.sendMessage({ type: 'library/trashRecord', payload: { recordId } });
+    setRecords((items) => items.filter((item) => item.id !== recordId));
+    setAssetIndex((idx) => {
+      const next = new Map(idx);
+      next.delete(recordId);
+      return next;
+    });
+    if (selectedId === recordId) setSelectedId(null);
+    setDeleteStatus(t.recordMovedToTrash);
+    window.setTimeout(() => setDeleteStatus(''), 1800);
+    reload();
+  };
+
   useEffect(() => {
     (async () => {
-      const all = await recordRepository.list();
+      const all = await recordRepository.listActive();
       all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       setRecords(all);
       const idx = new Map<string, Asset[]>();
@@ -280,6 +303,25 @@ export default function App() {
             </button>
           </div>
         </div>
+        <TrashDropZone
+          isDragging={draggingRecordId !== null}
+          isArmed={dragOverTrash}
+          t={t}
+          onArmedChange={setDragOverTrash}
+          onOpenTrash={() => {
+            location.href = 'trash.html';
+          }}
+          onDropRecord={async (recordId) => {
+            setDragOverCategoryId(null);
+            setDragOverTrash(false);
+            await moveRecordToTrash(recordId);
+          }}
+        />
+        {deleteStatus && (
+          <div className="library-rail-toast" role="status">
+            {deleteStatus}
+          </div>
+        )}
       </aside>
 
       <main className="library-main">
@@ -306,11 +348,13 @@ export default function App() {
                 assets={assetIndex.get(record.id) ?? []}
                 categories={categories}
                 selected={record.id === selectedId}
+                dragging={record.id === draggingRecordId}
                 layout={settings.cardLayout}
                 t={t}
                 language={language}
                 onOpen={() => setSelectedId(record.id)}
-                onDragDone={() => setDragOverCategoryId(null)}
+                onDragStart={() => setDraggingRecordId(record.id)}
+                onDragDone={clearDragState}
               />
             ))}
           </section>
@@ -340,18 +384,84 @@ export default function App() {
   );
 }
 
+function TrashDropZone(props: {
+  isDragging: boolean;
+  isArmed: boolean;
+  t: UiText;
+  onArmedChange: (armed: boolean) => void;
+  onOpenTrash: () => void;
+  onDropRecord: (recordId: string) => Promise<void>;
+}) {
+  const { isDragging, isArmed, t, onArmedChange, onOpenTrash, onDropRecord } = props;
+  const recordDragType = 'application/x-promptrace-record-id';
+
+  const acceptsRecordDrag = (types: DataTransfer['types']) => Array.from(types).includes(recordDragType);
+
+  return (
+    <div
+      className={[
+        'library-trash-zone',
+        isDragging ? 'is-dragging' : '',
+        isArmed ? 'is-open' : '',
+      ].filter(Boolean).join(' ')}
+      role="button"
+      tabIndex={0}
+      aria-label={t.trashOpen}
+      onClick={onOpenTrash}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpenTrash();
+        }
+      }}
+      onDragEnter={(e) => {
+        if (!acceptsRecordDrag(e.dataTransfer.types)) return;
+        e.preventDefault();
+        onArmedChange(true);
+      }}
+      onDragOver={(e) => {
+        if (!acceptsRecordDrag(e.dataTransfer.types)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        onArmedChange(true);
+      }}
+      onDragLeave={(e) => {
+        const nextTarget = e.relatedTarget;
+        if (nextTarget instanceof Node && e.currentTarget.contains(nextTarget)) return;
+        onArmedChange(false);
+      }}
+      onDrop={async (e) => {
+        const recordId = e.dataTransfer.getData(recordDragType);
+        if (!recordId) return;
+        e.preventDefault();
+        onArmedChange(false);
+        await onDropRecord(recordId);
+      }}
+    >
+      <span className="library-trash-icon" aria-hidden="true">
+        <span className="library-trash-lid" />
+        <span className="library-trash-bin" />
+      </span>
+      <span className="library-trash-title">{t.trashTitle}</span>
+      <span className="library-trash-hint">{isArmed ? t.trashReady : t.trashHint}</span>
+    </div>
+  );
+}
+
 function RecordCard(props: {
   record: LibraryRecord;
   assets: Asset[];
   categories: ReturnType<typeof useTaxonomy>['categories'];
   selected: boolean;
+  dragging: boolean;
   layout: DisplaySettings['cardLayout'];
   t: UiText;
   language: ResolvedLanguage;
   onOpen: () => void;
+  onDragStart: () => void;
   onDragDone: () => void;
 }) {
-  const { record, assets, categories, selected, layout, t, language, onOpen, onDragDone } = props;
+  const { record, assets, categories, selected, dragging, layout, t, language, onOpen, onDragStart, onDragDone } = props;
   const category = categories.find((c) => c.id === record.categoryId);
   const copyAssets = async (pickedAssets: Asset[]) => {
     onOpen();
@@ -364,11 +474,16 @@ function RecordCard(props: {
 
   return (
     <article
-      className={`record-card ${selected ? 'is-selected' : ''}`}
+      className={[
+        'record-card',
+        selected ? 'is-selected' : '',
+        dragging ? 'is-dragging' : '',
+      ].filter(Boolean).join(' ')}
       role="button"
       tabIndex={0}
       draggable
       onDragStart={(e) => {
+        onDragStart();
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('application/x-promptrace-record-id', record.id);
         e.dataTransfer.setData('text/plain', record.title || record.id);

@@ -15,6 +15,7 @@ import { assetTypeLabel, categoryLabel, resolveLanguage, roleLabel, UI_TEXT, typ
 import type { OverlayManager } from './overlay';
 import { LOGO_DATA_URL } from './logo';
 import type { GalleryAsset, GalleryRecord, ListRecordsResult } from '@/src/core/messages';
+import { PrompTraceWordmark } from '@/src/ui/PrompTraceWordmark';
 
 const send = (message: unknown) => chrome.runtime.sendMessage(message).catch(() => undefined);
 const openExtensionPage = (page: 'library' | 'settings', hash?: string) =>
@@ -410,7 +411,7 @@ function CapturePanel({
         <div className="pt-panel-head">
           <span className="pt-title">
             <img className="pt-logo-img" src={LOGO_DATA_URL} alt="" />
-            PrompTrace
+            <PrompTraceWordmark className="pt-panel-wordmark" />
           </span>
           <span className="pt-links">
             <a onClick={() => openExtensionPage('library')}>{t.goLibrary}</a>
@@ -599,7 +600,7 @@ function GalleryPanel({
             <div className="pt-panel-head">
               <span className="pt-title">
                 <img className="pt-logo-img" src={LOGO_DATA_URL} alt="" />
-                PrompTrace
+                <PrompTraceWordmark className="pt-panel-wordmark" />
               </span>
               <span className="pt-links">
                 <a onClick={() => openExtensionPage('library')}>{t.goLibrary}</a>
@@ -1580,7 +1581,7 @@ function GalleryCard({
 
   const remove = async () => {
     closeMenu();
-    await send({ type: 'library/deleteRecord', payload: { recordId: record.id } });
+    await send({ type: 'library/trashRecord', payload: { recordId: record.id } });
     onChanged();
   };
 
@@ -1721,9 +1722,9 @@ function GalleryCard({
             </>
           ) : (
             <>
-              <div className="pt-gmenu-confirm">{language === 'en-US' ? 'Delete this record? Local files will be removed too.' : '刪除這筆？本機檔案也會移除。'}</div>
+              <div className="pt-gmenu-confirm">{language === 'en-US' ? 'Move this record to Trash? You can restore it before auto-delete.' : '移到垃圾桶？自動刪除前可以還原。'}</div>
               <button className="pt-gmenu-item pt-gmenu-item--danger" onClick={remove}>
-                {language === 'en-US' ? 'Delete' : '確定刪除'}
+                {language === 'en-US' ? 'Move to Trash' : '移到垃圾桶'}
               </button>
               <button className="pt-gmenu-item" onClick={() => setConfirmDel(false)}>
                 {language === 'en-US' ? 'Cancel' : '取消'}

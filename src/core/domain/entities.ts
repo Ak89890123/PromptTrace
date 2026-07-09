@@ -52,6 +52,9 @@ export type LibraryRecord = {
   sourcePageUrl?: string;
   sourcePageTitle?: string;
 
+  /** Soft-delete marker. Records stay restorable until the trash retention policy purges them. */
+  trashedAt?: string;
+
   createdAt: string;
   updatedAt: string;
 };

@@ -30,6 +30,7 @@ import {
 import { BUILTIN_CATEGORY_DEFAULTS } from '@/src/storage/seed';
 import { categoryLabel, resolveLanguage, roleLabel, UI_TEXT, type ResolvedLanguage, type UiText } from '@/src/ui/i18n';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type DisplaySettings } from '@/src/ui/roleColors';
+import { PrompTraceWordmark } from '@/src/ui/PrompTraceWordmark';
 import { useTaxonomy } from '@/src/ui/hooks';
 
 const KOFI_URL = 'https://ko-fi.com/lazydoooog';
@@ -103,9 +104,9 @@ export default function App() {
   return (
     <div className="settings-page">
       <header className="settings-header">
-        <h1>{t.settingsTitle}</h1>
+        <h1><PrompTraceWordmark className="settings-wordmark" /> <span>{t.settings}</span></h1>
         <a className="settings-support-link" href={KOFI_URL} target="_blank" rel="noreferrer">
-          <span>{t.supportPromptTrace}</span>
+          <span>{language === 'en-US' ? 'Support ' : '支持 '}<PrompTraceWordmark className="settings-support-wordmark" /></span>
           <strong>{t.buyMeCoffee}</strong>
         </a>
         <button
