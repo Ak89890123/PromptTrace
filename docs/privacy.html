@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PrompTrace Privacy Policy</title>
+    <meta
+      name="description"
+      content="Privacy Policy for PrompTrace, a local-first Chrome extension for saving and organizing prompt workflow assets."
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0b0f;
+        --panel: rgba(28, 30, 36, 0.78);
+        --panel-soft: rgba(255, 255, 255, 0.045);
+        --stroke: rgba(255, 255, 255, 0.13);
+        --text: #f5f5f7;
+        --muted: rgba(245, 245, 247, 0.64);
+        --faint: rgba(245, 245, 247, 0.42);
+        --cyan: #22d3ee;
+        --teal: #009b9a;
+        --gold: #f7b500;
+        --green: #34d399;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(900px 520px at 82% -10%, rgba(34, 211, 238, 0.15), transparent 62%),
+          radial-gradient(760px 520px at 6% 110%, rgba(52, 211, 153, 0.11), transparent 64%),
+          var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+        line-height: 1.65;
+      }
+
+      a {
+        color: #8ad7e8;
+      }
+
+      .page {
+        width: min(980px, calc(100vw - 40px));
+        margin: 0 auto;
+        padding: 56px 0 72px;
+      }
+
+      .hero,
+      .card {
+        border: 1px solid var(--stroke);
+        border-radius: 22px;
+        background: var(--panel);
+        box-shadow: 0 18px 54px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(20px) saturate(160%);
+      }
+
+      .hero {
+        padding: 34px;
+        margin-bottom: 18px;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: baseline;
+        margin-bottom: 14px;
+        font-size: clamp(40px, 7vw, 72px);
+        font-weight: 850;
+        letter-spacing: -0.065em;
+        line-height: 1;
+      }
+
+      .brand-promp {
+        color: #fff;
+        text-shadow: 0 0 12px rgba(255, 255, 255, 0.24);
+      }
+
+      .brand-t {
+        color: var(--gold);
+        text-shadow: 0 0 15px rgba(247, 181, 0, 0.32);
+      }
+
+      .brand-race {
+        color: var(--teal);
+        text-shadow: 0 0 15px rgba(0, 155, 154, 0.32);
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: clamp(28px, 4vw, 46px);
+        letter-spacing: -0.045em;
+        line-height: 1.08;
+      }
+
+      .lead {
+        max-width: 760px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 17px;
+      }
+
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 20px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid var(--stroke);
+        border-radius: 999px;
+        background: var(--panel-soft);
+        color: var(--muted);
+        padding: 6px 10px;
+        font-size: 13px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+        margin-top: 18px;
+      }
+
+      .card {
+        padding: 24px;
+      }
+
+      .wide {
+        grid-column: 1 / -1;
+      }
+
+      h2 {
+        margin: 0 0 10px;
+        color: var(--text);
+        font-size: 20px;
+        letter-spacing: -0.02em;
+        line-height: 1.2;
+      }
+
+      h3 {
+        margin: 20px 0 8px;
+        color: var(--text);
+        font-size: 16px;
+      }
+
+      p {
+        margin: 0 0 12px;
+        color: var(--muted);
+      }
+
+      ul {
+        margin: 10px 0 0;
+        padding-left: 20px;
+        color: var(--muted);
+      }
+
+      li + li {
+        margin-top: 7px;
+      }
+
+      strong {
+        color: var(--text);
+      }
+
+      .notice {
+        border-left: 3px solid var(--cyan);
+        background: rgba(34, 211, 238, 0.08);
+        border-radius: 12px;
+        padding: 12px 14px;
+      }
+
+      .zh {
+        color: rgba(245, 245, 247, 0.7);
+        font-size: 14px;
+      }
+
+      footer {
+        margin-top: 22px;
+        color: var(--faint);
+        font-size: 13px;
+        text-align: center;
+      }
+
+      @media (max-width: 760px) {
+        .page {
+          width: min(100vw - 24px, 980px);
+          padding-top: 24px;
+        }
+
+        .hero,
+        .card {
+          border-radius: 16px;
+        }
+
+        .hero {
+          padding: 24px;
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <div class="brand" aria-label="PrompTrace">
+          <span class="brand-promp">Promp</span><span class="brand-t">T</span><span class="brand-race">race</span>
+        </div>
+        <h1>Privacy Policy</h1>
+        <p class="lead">
+          PrompTrace is a local-first Chrome extension for saving selected prompt workflow assets into a private browser library.
+          This policy explains what data the extension handles and how it is used.
+        </p>
+        <p class="lead zh">
+          PrompTrace 是一個 local-first 的 Chrome 擴充功能，用來把使用者主動選取的 prompt、參考、輸出等素材保存到本機瀏覽器紀錄庫。本頁說明擴充功能會處理哪些資料，以及資料如何被使用。
+        </p>
+        <div class="meta">
+          <span class="pill">Last updated: July 9, 2026</span>
+          <span class="pill">Local-first</span>
+          <span class="pill">No advertising analytics</span>
+        </div>
+      </section>
+
+      <section class="grid" aria-label="Privacy policy sections">
+        <article class="card wide notice">
+          <h2>Summary</h2>
+          <p>
+            PrompTrace stores captured records locally in the user's browser using IndexedDB, chrome.storage, and browser-managed Downloads.
+            The extension does not sell user data, does not use advertising analytics, and does not transfer user data to third parties except when the user explicitly enables and configures an optional summary provider.
+          </p>
+          <p class="zh">
+            簡單說：PrompTrace 的資料預設保存在你的瀏覽器本機，不賣資料、不做廣告追蹤。只有在你主動啟用摘要功能並設定 API provider 時，才會把需要摘要的紀錄文字送到你設定的摘要服務。
+          </p>
+        </article>
+
+        <article class="card">
+          <h2>Data handled by PrompTrace</h2>
+          <p>The extension may handle the following data only to provide its core features:</p>
+          <ul>
+            <li><strong>Website content:</strong> selected text, image URLs, video URLs, previews, and saved prompt workflow assets intentionally captured by the user.</li>
+            <li><strong>Web history metadata:</strong> source page URL and page title for saved records, so users can organize and trace where a record came from.</li>
+            <li><strong>User settings:</strong> language, role colors, hotkey, UI preferences, summary settings, trash retention settings, and optional API key.</li>
+            <li><strong>Local file metadata:</strong> filenames, download IDs, download status, and file status for media downloaded by the extension.</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <h2>Where data is stored</h2>
+          <p>PrompTrace stores data locally in:</p>
+          <ul>
+            <li>IndexedDB for saved records, assets, categories, tags, and metadata.</li>
+            <li>chrome.storage for extension settings.</li>
+            <li>The browser Downloads folder for user-selected downloaded media, under a PrompTrace folder.</li>
+          </ul>
+          <p>PrompTrace does not operate a backend account system or cloud sync service.</p>
+        </article>
+
+        <article class="card">
+          <h2>Optional summary provider</h2>
+          <p>
+            If the user enables prompt summaries and provides an API key, selected record text may be sent to the user-configured summary provider only to generate summaries.
+            API responses are treated as data and are not executed as code.
+          </p>
+          <p>
+            Users can disable summaries, remove the API key, or choose a different provider in the extension settings.
+          </p>
+        </article>
+
+        <article class="card">
+          <h2>What PrompTrace does not do</h2>
+          <ul>
+            <li>Does not sell user data.</li>
+            <li>Does not use saved content for advertising or analytics.</li>
+            <li>Does not track users across websites for behavioral advertising.</li>
+            <li>Does not read clipboard contents.</li>
+            <li>Does not inspect, manage, or modify unrelated downloads.</li>
+            <li>Does not use remote executable code. All extension JavaScript is bundled in the extension package.</li>
+          </ul>
+        </article>
+
+        <article class="card wide">
+          <h2>Permissions and why they are used</h2>
+          <ul>
+            <li><strong>contextMenus:</strong> adds PrompTrace actions to save selected text, images, or videos when the user chooses the menu item.</li>
+            <li><strong>downloads:</strong> downloads user-selected media into a PrompTrace folder and removes extension-created files when records are permanently deleted.</li>
+            <li><strong>storage:</strong> stores settings and local metadata.</li>
+            <li><strong>alarms:</strong> runs local scheduled tasks, such as optional summary checks and trash retention cleanup.</li>
+            <li><strong>activeTab:</strong> interacts with the active tab after a user-initiated action.</li>
+            <li><strong>scripting:</strong> injects packaged PrompTrace UI and content scripts into pages where the user uses the extension.</li>
+            <li><strong>clipboardWrite:</strong> writes saved prompt text to the clipboard when the user clicks copy actions.</li>
+            <li><strong>Host permissions:</strong> allow PrompTrace to work on user-selected content across websites where the user chooses to use the extension.</li>
+          </ul>
+        </article>
+
+        <article class="card wide">
+          <h2>User control and deletion</h2>
+          <p>
+            Users can edit, restore, export, or delete saved records from the local library. Records moved to Trash remain restorable until the configured retention period expires. Users may also permanently delete records immediately.
+          </p>
+          <p>
+            Permanent deletion removes the record, related local metadata, related assets, tags, and extension-created local file records. When possible, the extension also removes downloaded files that it created through the browser downloads API.
+          </p>
+        </article>
+
+        <article class="card wide">
+          <h2>Contact</h2>
+          <p>
+            For privacy questions or extension support, open an issue on the PrompTrace repository:
+            <a href="https://github.com/Ak89890123/PromptTrace" rel="noreferrer">https://github.com/Ak89890123/PromptTrace</a>
+          </p>
+        </article>
+      </section>
+
+      <footer>
+        PrompTrace Privacy Policy · Local-first Chrome extension
+      </footer>
+    </main>
+  </body>
+</html>
