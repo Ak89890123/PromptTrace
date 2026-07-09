@@ -48,9 +48,15 @@ jobs:
         run: npm run zip
 
       - name: Collect packaged extension artifact
+        shell: bash
         run: |
           mkdir -p artifacts
-          cp .output/*.zip artifacts/
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            RELEASE_NAME="${GITHUB_REF_NAME}"
+          else
+            RELEASE_NAME="v$(node -p "require('./package.json').version")"
+          fi
+          cp .output/*.zip "artifacts/promptrace-${RELEASE_NAME}-chrome.zip"
 
       - name: Upload packaged extension artifact
         uses: actions/upload-artifact@v4

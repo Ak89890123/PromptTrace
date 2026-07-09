@@ -5,7 +5,7 @@ export default defineConfig({
   manifest: {
     name: 'PrompTrace',
     description:
-      'Local-first capture of AI workflow assets: mark text/images/videos as Input, Input Reference, Negative or Output and save them into a local, searchable Prompt Asset Library.',
+      'Capture and organize AI prompts, references, negatives, and outputs in a local searchable library.',
     permissions: [
       'contextMenus',
       'downloads',
