@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "wxt build && playwright test",
+    "test:e2e:headed": "wxt build && playwright test --headed",
     "postinstall": "wxt prepare"
   },
   "dependencies": {
