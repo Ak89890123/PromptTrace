@@ -677,7 +677,7 @@ export default defineBackground(() => {
             const result = await commitSessionToLibrary(session.assets, message.payload);
             const tabIds = new Set(session.assets.map((a) => a.tabId).filter((t): t is number => t != null));
             conflictCandidates.clear();
-            setSession({ ...emptySession(), lastCommittedRecordId: result.record.id });
+            setSession(emptySession());
             for (const tabId of tabIds) {
               chrome.tabs.sendMessage(tabId, { type: 'overlay/clearAll' }).catch(() => {});
             }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type SyntheticEvent as ReactSyntheticEvent } from 'react';
 import type { CaptureSessionState } from '@/src/core/capture/session';
 import { canCommit, emptySession } from '@/src/core/capture/session';
 import type { PendingAsset, RecordCategory } from '@/src/core/domain/entities';
@@ -24,6 +24,7 @@ const ALL_GALLERY_CATEGORIES = '__all__';
 const UNCATEGORIZED_GALLERY_CATEGORY = '__uncategorized__';
 const HOVER_PREVIEW_OPEN_DELAY_MS = 260;
 const HOVER_PREVIEW_CLOSE_DELAY_MS = 180;
+const SAVED_TOAST_DISMISS_MS = 6000;
 
 type GalleryMoveToast = {
   recordId: string;
@@ -92,6 +93,38 @@ type ToolbarTarget =
 
 type ToolbarPlacement = 'above' | 'below';
 type ToolbarPosition = { x: number; top: number; bottom: number; placement: ToolbarPlacement };
+type ViewportPoint = { x: number; y: number };
+
+function isMediaElement(el: Element | null): el is HTMLImageElement | HTMLVideoElement {
+  return !!el && (el.tagName === 'IMG' || el.tagName === 'VIDEO');
+}
+
+function rectContainsPoint(rect: DOMRect, point: ViewportPoint): boolean {
+  return rect.width > 0 && rect.height > 0 && point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom;
+}
+
+function mediaFromElementAtPoint(el: Element, point: ViewportPoint): HTMLImageElement | HTMLVideoElement | null {
+  if (isMediaElement(el) && rectContainsPoint(el.getBoundingClientRect(), point)) return el;
+
+  for (const media of el.querySelectorAll('img,video')) {
+    if (isMediaElement(media) && rectContainsPoint(media.getBoundingClientRect(), point)) return media;
+  }
+  return null;
+}
+
+function mediaFromViewportPoint(point: ViewportPoint): HTMLImageElement | HTMLVideoElement | null {
+  for (const el of document.elementsFromPoint(point.x, point.y)) {
+    const media = mediaFromElementAtPoint(el, point);
+    if (media) return media;
+  }
+  return null;
+}
+
+function blockToolbarPageEvent(e: ReactSyntheticEvent<HTMLElement>) {
+  e.preventDefault();
+  e.stopPropagation();
+  e.nativeEvent.stopImmediatePropagation?.();
+}
 
 function SelectionToolbar({ overlay, settings, language }: { overlay: OverlayManager; settings: DisplaySettings; language: ResolvedLanguage }) {
   const [pos, setPos] = useState<ToolbarPosition | null>(null);
@@ -125,17 +158,14 @@ function SelectionToolbar({ overlay, settings, language }: { overlay: OverlayMan
     });
   }, []);
 
-  /** Media under the cursor, piercing overlay layers. ChatGPT stacks an action
-   *  bar over generated images, so plain hover lands on a <div>, not the <img>;
-   *  elementsFromPoint sees through to the image beneath. */
+  /** Media under the cursor, piercing overlay layers. Threads/Instagram often
+   *  places an absolutely-positioned span above <picture><img>, so inspect
+   *  elements at the pointer and their media descendants, not only the event target. */
   const findMedia = useCallback((): HTMLImageElement | HTMLVideoElement | null => {
     const p = lastPointer.current;
     if (p) {
-      for (const el of document.elementsFromPoint(p.x, p.y)) {
-        if (el.tagName === 'IMG' || el.tagName === 'VIDEO') {
-          return el as HTMLImageElement | HTMLVideoElement;
-        }
-      }
+      const media = mediaFromViewportPoint(p);
+      if (media) return media;
     }
     const hov = hoveredMedia.current;
     if (hov && hov.isConnected) return hov;
@@ -185,15 +215,16 @@ function SelectionToolbar({ overlay, settings, language }: { overlay: OverlayMan
 
   useEffect(() => {
     const onSummon = () => summon();
+    const rememberPointerMedia = (point: ViewportPoint) => {
+      lastPointer.current = point;
+      const media = mediaFromViewportPoint(point);
+      if (media) hoveredMedia.current = media;
+    };
     const onMouseOver = (e: MouseEvent) => {
-      lastPointer.current = { x: e.clientX, y: e.clientY };
-      const el = e.target as Element | null;
-      if (el && (el.tagName === 'IMG' || el.tagName === 'VIDEO')) {
-        hoveredMedia.current = el as HTMLImageElement | HTMLVideoElement;
-      }
+      rememberPointerMedia({ x: e.clientX, y: e.clientY });
     };
     const onMouseMove = (e: MouseEvent) => {
-      lastPointer.current = { x: e.clientX, y: e.clientY };
+      rememberPointerMedia({ x: e.clientX, y: e.clientY });
     };
     const onMouseDown = (e: MouseEvent) => {
       if (e.button !== 0) return;
@@ -203,14 +234,9 @@ function SelectionToolbar({ overlay, settings, language }: { overlay: OverlayMan
       hide();
     };
     const onContextMenu = (e: MouseEvent) => {
-      lastPointer.current = { x: e.clientX, y: e.clientY };
-      lastContextMedia.current = null;
-      for (const el of document.elementsFromPoint(e.clientX, e.clientY)) {
-        if (el.tagName === 'IMG' || el.tagName === 'VIDEO') {
-          lastContextMedia.current = el as HTMLImageElement | HTMLVideoElement;
-          break;
-        }
-      }
+      const point = { x: e.clientX, y: e.clientY };
+      lastPointer.current = point;
+      lastContextMedia.current = mediaFromViewportPoint(point);
     };
     const onMouseUp = (e: MouseEvent) => {
       if ((e.target as Element | null)?.tagName?.toLowerCase().includes('prompttrace')) return;
@@ -239,6 +265,7 @@ function SelectionToolbar({ overlay, settings, language }: { overlay: OverlayMan
     document.addEventListener('mousedown', onMouseDown, true);
     document.addEventListener('contextmenu', onContextMenu, true);
     document.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('keydown', onKeyDown, true);
     document.addEventListener('keydown', onKeyDown, true);
     // Capture phase so scrolling a nested overflow container (e.g. the ChatGPT
     // conversation pane) also dismisses the toolbar — those scrolls don't bubble.
@@ -250,6 +277,7 @@ function SelectionToolbar({ overlay, settings, language }: { overlay: OverlayMan
       document.removeEventListener('mousedown', onMouseDown, true);
       document.removeEventListener('contextmenu', onContextMenu, true);
       document.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('keydown', onKeyDown, true);
       document.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('scroll', onScroll, true);
     };
@@ -309,10 +337,22 @@ function SelectionToolbar({ overlay, settings, language }: { overlay: OverlayMan
       ref={toolbarRef}
       className="pt-glass pt-toolbar"
       style={{ left: pos.x, top, transform: 'translateX(-50%)' }}
-      onMouseDown={(e) => e.preventDefault() /* keep the selection alive */}
+      onPointerDownCapture={blockToolbarPageEvent}
+      onMouseDownCapture={blockToolbarPageEvent}
+      onMouseUpCapture={blockToolbarPageEvent}
+      onTouchStartCapture={blockToolbarPageEvent}
+      onClick={blockToolbarPageEvent}
     >
       {roles.map((role) => (
-        <button key={role} style={{ ['--role-color' as string]: settings.roleColors[role] }} onClick={() => capture(role)}>
+        <button
+          key={role}
+          type="button"
+          style={{ ['--role-color' as string]: settings.roleColors[role] }}
+          onClick={(e) => {
+            blockToolbarPageEvent(e);
+            capture(role);
+          }}
+        >
           {roleLabel(role, language)}
         </button>
       ))}
@@ -383,10 +423,11 @@ function CapturePanel({
   const prevCount = useRef(0);
   const [wizard, setWizard] = useState<null | 'category'>(null);
   const [quickTextEditor, setQuickTextEditor] = useState<QuickAddRequest | null>(null);
+  const [savedToastRecordId, setSavedToastRecordId] = useState<string | null>(null);
 
   const count = session.assets.length;
   const active = count > 0 || session.conflicts.length > 0 || session.errors.length > 0;
-  const justSaved = !active && !!session.lastCommittedRecordId;
+  const justSaved = !active && !!savedToastRecordId;
 
   // Auto-peek when a new asset / conflict / error lands in the session.
   useEffect(() => {
@@ -395,6 +436,17 @@ function CapturePanel({
     }
     prevCount.current = session.assets.length;
   }, [session.assets.length, session.conflicts.length, session.errors.length]);
+
+  // Saved confirmation is local toast UI.
+  useEffect(() => {
+    if (!savedToastRecordId) return;
+    setOpen(true);
+    const timer = window.setTimeout(() => {
+      setSavedToastRecordId(null);
+      setOpen(false);
+    }, SAVED_TOAST_DISMISS_MS);
+    return () => window.clearTimeout(timer);
+  }, [savedToastRecordId]);
 
   // Nothing to show when idle — browsing saved prompts lives in GalleryPanel.
   if (!open || (!active && !justSaved)) return null;
@@ -426,6 +478,8 @@ function CapturePanel({
             setWizard={setWizard}
             t={t}
             language={language}
+            savedRecordId={savedToastRecordId}
+            onCommitted={setSavedToastRecordId}
             onQuickAdd={setQuickTextEditor}
           />
         </div>
@@ -707,6 +761,8 @@ function CaptureBody({
   setWizard,
   t,
   language,
+  savedRecordId,
+  onCommitted,
   onQuickAdd,
 }: {
   session: CaptureSessionState;
@@ -715,6 +771,8 @@ function CaptureBody({
   setWizard: (w: null | 'category') => void;
   t: UiText;
   language: ResolvedLanguage;
+  savedRecordId: string | null;
+  onCommitted: (recordId: string) => void;
   onQuickAdd: (request: QuickAddRequest) => void;
 }) {
   const grouped = useMemo(() => {
@@ -735,6 +793,7 @@ function CaptureBody({
         outputTypes={session.assets.filter((a) => a.role === 'output').map((a) => a.assetType)}
         t={t}
         language={language}
+        onCommitted={onCommitted}
       />
     );
   }
@@ -793,12 +852,12 @@ function CaptureBody({
       {session.assets.length === 0 &&
         session.conflicts.length === 0 &&
         session.errors.length === 0 &&
-        session.lastCommittedRecordId && (
+        savedRecordId && (
           <div className="pt-card">
             ✅ {t.saved}{' '}
             <a
               style={{ color: '#8ad7e8', cursor: 'pointer' }}
-              onClick={() => openExtensionPage('library', `#record=${session.lastCommittedRecordId}`)}
+              onClick={() => openExtensionPage('library', `#record=${savedRecordId}`)}
             >
               {t.openInLibrary}
             </a>
@@ -2256,11 +2315,13 @@ function Wizard({
   outputTypes,
   t,
   language,
+  onCommitted,
 }: {
   setStage: (w: null | 'category') => void;
   outputTypes?: PendingAsset['assetType'][];
   t: UiText;
   language: ResolvedLanguage;
+  onCommitted: (recordId: string) => void;
 }) {
   const [categories, setCategories] = useState<RecordCategory[]>([]);
 
@@ -2306,7 +2367,10 @@ function Wizard({
 
   const commit = async (nextCategoryId: unknown = categoryId) => {
     const resolvedCategoryId = typeof nextCategoryId === 'string' || nextCategoryId === null ? nextCategoryId : categoryId;
-    await send({ type: 'capture/commitSession', payload: { categoryId: resolvedCategoryId } });
+    const result = (await send({ type: 'capture/commitSession', payload: { categoryId: resolvedCategoryId } })) as
+      | { ok?: boolean; recordId?: string }
+      | undefined;
+    if (result?.ok && result.recordId) onCommitted(result.recordId);
     setStage(null);
   };
 

@@ -10,8 +10,6 @@ export type CaptureSessionState = {
   conflicts: CaptureConflict[];
   errors: CaptureError[];
   wizardStage: WizardStage;
-  /** Last committed record id, so the panel can link to the Library. */
-  lastCommittedRecordId?: string;
 };
 
 export function emptySession(): CaptureSessionState {
