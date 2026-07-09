@@ -384,7 +384,7 @@ export default defineBackground(() => {
       const generatedAt = new Date().toISOString();
       await recordRepository.save({
         ...fresh,
-        summary: result.summary,
+        summary: result.purpose ? `${result.purpose}｜${result.summary}` : result.summary,
         summaryStatus: 'completed',
         summaryError: undefined,
         summaryProvider: summarySettings.provider,

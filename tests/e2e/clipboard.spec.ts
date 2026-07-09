@@ -87,6 +87,53 @@ test('saved prompt has no copy label but still fills from the in-page gallery', 
   await expect(page.locator('#prompt-textarea')).toHaveValue(new RegExp(NEEDLE));
 });
 
+test('saved prompt preserves line breaks when filling a contenteditable composer', async ({ context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  const page = await context.newPage();
+  await page.goto('/chatgpt-like.html');
+  await expect(page.locator('prompttrace-ui')).toBeAttached({ timeout: 10_000 });
+
+  const multiLineText = '第一行 prompt\n第二行 reference\n\n第四行 constraint';
+  await page.evaluate((text) => {
+    const target = document.querySelector('#prompt-textarea')!;
+    const editor = document.createElement('div');
+    editor.id = 'prompt-textarea';
+    editor.dataset.testid = 'prompt-textarea';
+    editor.setAttribute('aria-label', 'Message Prompt');
+    editor.setAttribute('contenteditable', 'true');
+    editor.setAttribute('role', 'textbox');
+    target.replaceWith(editor);
+
+    const source = document.createElement('div');
+    source.id = 'multiline-prompt-source';
+    source.style.whiteSpace = 'pre-wrap';
+    source.textContent = text;
+    document.querySelector('#thread')!.prepend(source);
+
+    const range = document.createRange();
+    range.selectNodeContents(source);
+    const sel = window.getSelection()!;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    window.dispatchEvent(new CustomEvent('prompttrace:summon'));
+  }, multiLineText);
+
+  const roleButton = page.locator('.pt-toolbar button').first();
+  await expect(roleButton).toBeVisible({ timeout: 5_000 });
+  await roleButton.click();
+  await page.locator('.pt-commit').click();
+  await expect(page.locator('.pt-wizard')).toBeVisible({ timeout: 5_000 });
+  await page.locator('.pt-wizard .pt-choice').first().click();
+
+  await page.locator('.pt-edge-tab').hover();
+  const column = page.locator('.pt-gcol--copyable').filter({ hasText: '第一行 prompt' });
+  await expect(column).toBeVisible({ timeout: 10_000 });
+  await column.click();
+
+  const editorText = await page.locator('#prompt-textarea').evaluate((el) => (el as HTMLElement).innerText.replace(/\u200B/g, ''));
+  expect(editorText).toContain(multiLineText);
+});
+
 test('saved image has no copy label but still copies from the in-page gallery', async ({ context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   const page = await context.newPage();

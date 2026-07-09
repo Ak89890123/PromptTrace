@@ -402,10 +402,11 @@
   position: sticky;
   top: 0;
   z-index: 8;
-  margin: 0 0 var(--pt-space-2);
-  padding: var(--pt-space-2) 0 var(--pt-space-3);
-  background: transparent;
+  margin: 0 calc(var(--pt-space-2) * -1) var(--pt-space-2);
+  padding: var(--pt-space-1) var(--pt-space-2);
+  background: #1c1c20;
   border-bottom: 1px solid var(--pt-stroke-subtle);
+  box-shadow: 0 8px 14px rgba(0, 0, 0, 0.22);
 }
 .pt-gallery-filter-scroll {
   display: flex;

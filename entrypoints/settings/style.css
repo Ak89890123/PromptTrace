@@ -519,10 +519,14 @@
   max-width: none;
 }
 
+.settings-summary-section .settings-token-dashboard-divider {
+  margin-bottom: var(--pt-space-4);
+}
+
 .settings-summary-dashboard-head {
   display: grid;
   grid-template-columns: max-content minmax(96px, 1fr) minmax(142px, 180px);
-  align-items: end;
+  align-items: start;
   gap: var(--pt-space-4);
   margin-bottom: var(--pt-space-4);
 }
@@ -538,6 +542,17 @@
 }
 
 .settings-summary-dashboard-title .muted {
+  white-space: nowrap;
+}
+
+.settings-token-limit-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--pt-space-2);
+  min-width: 0;
+}
+
+.settings-token-limit-hint {
   white-space: nowrap;
 }
 

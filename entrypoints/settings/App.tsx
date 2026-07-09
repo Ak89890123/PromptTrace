@@ -939,15 +939,17 @@ function SummarySettingsSection({
           </button>
         </div>
       </div>
-      <div className="settings-inner-divider" />
+      <div className="settings-inner-divider settings-token-dashboard-divider" />
       <div className="settings-summary-dashboard">
         <div className="settings-summary-dashboard-head">
           <div className="settings-summary-dashboard-title">
             <h2>{t.tokenDashboard}</h2>
-            <span className="muted">{t.dailyTokenLimitHint}</span>
           </div>
           <label className="settings-field settings-token-limit-field">
-            <span className="muted">{t.dailyTokenLimit}</span>
+            <span className="settings-token-limit-title">
+              <span className="muted">{t.dailyTokenLimit}</span>
+              <span className="muted settings-token-limit-hint">{t.dailyTokenLimitHint}</span>
+            </span>
             <input
               type="number"
               min={0}

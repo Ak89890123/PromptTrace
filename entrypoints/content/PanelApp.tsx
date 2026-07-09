@@ -1027,10 +1027,20 @@ function setTextInputValue(target: HTMLInputElement | HTMLTextAreaElement, text:
   target.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
+function appendPlainTextToContentEditable(target: HTMLElement, text: string): void {
+  const normalized = text.replace(/\r\n?/g, '\n');
+  const lines = normalized.split('\n');
+  lines.forEach((line, index) => {
+    if (index > 0) target.append(document.createElement('br'));
+    if (line) target.append(document.createTextNode(line));
+  });
+}
+
 function setContentEditableText(target: HTMLElement, text: string): void {
   target.focus();
-  const next = appendWithSeparator(target.innerText, text);
-  target.textContent = next;
+  const next = appendWithSeparator(target.innerText, text).replace(/\r\n?/g, '\n');
+  target.replaceChildren();
+  appendPlainTextToContentEditable(target, next);
   const range = document.createRange();
   range.selectNodeContents(target);
   range.collapse(false);
