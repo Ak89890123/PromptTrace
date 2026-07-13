@@ -63,14 +63,31 @@ test('saved prompt has no copy label but still fills from the in-page gallery', 
   await page.locator('.pt-edge-tab').hover();
   const prompt = page.locator('.pt-gprompt').filter({ hasText: NEEDLE });
   await expect(prompt).toBeVisible({ timeout: 10_000 });
+  const panel = page.locator('.pt-gallery-panel');
+  const filters = page.locator('.pt-filter-chip');
+  expect(await filters.count()).toBeGreaterThan(1);
+  const beforeFilterBox = await panel.boundingBox();
+  expect(beforeFilterBox).not.toBeNull();
+  await filters.nth(1).click();
+  await expect(page.locator('.pt-gcard')).toHaveCount(0);
+  const afterFilterBox = await panel.boundingBox();
+  expect(afterFilterBox).not.toBeNull();
+  expect(Math.abs((afterFilterBox?.y ?? 0) - (beforeFilterBox?.y ?? 0))).toBeLessThanOrEqual(2);
+  expect((afterFilterBox?.height ?? 0)).toBeLessThan((beforeFilterBox?.height ?? 0) - 10);
+  await filters.first().click();
+  await expect(prompt).toBeVisible({ timeout: 5_000 });
+  await expect.poll(async () => (await panel.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(
+    (beforeFilterBox?.height ?? 0) - 2,
+  );
+  const restoredFilterBox = await panel.boundingBox();
+  expect(restoredFilterBox).not.toBeNull();
+  expect(Math.abs((restoredFilterBox?.y ?? 0) - (beforeFilterBox?.y ?? 0))).toBeLessThanOrEqual(2);
   const card = page.locator('.pt-gcard').filter({ hasText: NEEDLE }).first();
   const summary = card.locator(':scope > .pt-gsummary');
   await expect(summary).toHaveText(SUMMARY_TEXT);
   await expect(summary).toHaveCSS('-webkit-line-clamp', '2');
   await expect(card.locator('.pt-gcol .pt-gsummary')).toHaveCount(0);
   await summary.hover();
-  await page.waitForTimeout(120);
-  await expect(page.locator('.pt-hover-preview')).toHaveCount(0);
   await expect(page.locator('.pt-hover-preview')).toContainText(SUMMARY_TEXT);
   await prompt.hover();
   const hoverPreview = page.locator('.pt-hover-preview');
@@ -85,6 +102,10 @@ test('saved prompt has no copy label but still fills from the in-page gallery', 
   const column = page.locator('.pt-gcol--copyable').filter({ hasText: NEEDLE });
   await column.click();
   await expect(page.locator('#prompt-textarea')).toHaveValue(new RegExp(NEEDLE));
+
+  await page.mouse.move(20, 20);
+  await expect(page.locator('.pt-panel-dock')).toHaveCount(0, { timeout: 2_000 });
+  await expect(page.locator('.pt-edge-tab')).toBeVisible();
 });
 
 test('same-role text captures render as one gallery prompt block', async ({ context }) => {

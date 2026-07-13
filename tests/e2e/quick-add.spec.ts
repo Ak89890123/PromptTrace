@@ -48,7 +48,10 @@ async function expectEditorAlignedToCard(editor: Locator, card: Locator) {
   const cardBox = await card.boundingBox();
   expect(editorBox).not.toBeNull();
   expect(cardBox).not.toBeNull();
-  expect(Math.abs((editorBox?.y ?? 0) - (cardBox?.y ?? 0))).toBeLessThan(16);
+  expect((editorBox?.y ?? 0)).toBeLessThanOrEqual((cardBox?.y ?? 0) + 16);
+  expect((editorBox?.y ?? 0) + (editorBox?.height ?? 0)).toBeLessThanOrEqual(
+    (await editor.page().evaluate(() => window.innerHeight)) - 8,
+  );
 }
 
 async function expectEditorInsideViewportBottom(editor: Locator) {

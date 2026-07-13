@@ -533,16 +533,21 @@ function GalleryPanel({
   const panelCloseTimerRef = useRef<number | null>(null);
   const hoverPreviewOpenTimerRef = useRef<number | null>(null);
   const hoverPreviewCloseTimerRef = useRef<number | null>(null);
+  const panelDockRef = useRef<HTMLDivElement | null>(null);
+  const panelPlacementLockedRef = useRef(false);
+  const [panelTopPx, setPanelTopPx] = useState<number | null>(null);
   const [refreshSignal, setRefreshSignal] = useState(0);
   const panelWidth = settings.cardLayout === 'split' ? 'min(440px, 94vw)' : 'min(267px, 94vw)';
   const edgeStyle = { '--pt-gallery-panel-width': panelWidth } as CSSProperties;
-  // The tab sits where the user put it; the panel keeps its full height and only
-  // shifts enough to stay on-screen while still covering the tab (so hover-open
+  // The tab sits where the user put it; the panel keeps its natural content height
+  // and shifts just enough to stay on-screen while still covering the tab (so hover-open
   // holds). Tab high → panel pinned near the top (extends down); tab low → pinned
   // near the bottom (extends up). It never shrinks to a sliver.
   const PANEL_VH = 86;
   const edgeTop = Math.min(94, Math.max(6, settings.edgeTabTop ?? 50));
-  const panelTopVh = Math.min(100 - PANEL_VH - 2, Math.max(2, edgeTop - PANEL_VH / 2));
+  const fallbackPanelTopVh = Math.min(100 - PANEL_VH - 2, Math.max(2, edgeTop - PANEL_VH / 2));
+  const resolvedPanelTopPx = panelTopPx ?? (window.innerHeight * fallbackPanelTopVh) / 100;
+  const panelTopVh = (resolvedPanelTopPx / Math.max(1, window.innerHeight)) * 100;
   const openGallery = () => {
     if (panelCloseTimerRef.current !== null) {
       window.clearTimeout(panelCloseTimerRef.current);
@@ -557,8 +562,17 @@ function GalleryPanel({
     }
     if (editing || quickTextEditor || pinned) return;
     setOpen(false);
+    panelPlacementLockedRef.current = false;
+    setPanelTopPx(null);
   }, [editing, pinned, quickTextEditor]);
+  const cancelHoverPreviewOpen = useCallback(() => {
+    if (hoverPreviewOpenTimerRef.current !== null) {
+      window.clearTimeout(hoverPreviewOpenTimerRef.current);
+      hoverPreviewOpenTimerRef.current = null;
+    }
+  }, []);
   const scheduleGalleryClose = useCallback(() => {
+    cancelHoverPreviewOpen();
     if (panelCloseTimerRef.current !== null) {
       window.clearTimeout(panelCloseTimerRef.current);
     }
@@ -566,13 +580,7 @@ function GalleryPanel({
       panelCloseTimerRef.current = null;
       closeGalleryNow();
     }, HOVER_PREVIEW_CLOSE_DELAY_MS);
-  }, [closeGalleryNow]);
-  const cancelHoverPreviewOpen = useCallback(() => {
-    if (hoverPreviewOpenTimerRef.current !== null) {
-      window.clearTimeout(hoverPreviewOpenTimerRef.current);
-      hoverPreviewOpenTimerRef.current = null;
-    }
-  }, []);
+  }, [cancelHoverPreviewOpen, closeGalleryNow]);
   const dismissGallery = useCallback(() => {
     if (panelCloseTimerRef.current !== null) {
       window.clearTimeout(panelCloseTimerRef.current);
@@ -584,6 +592,8 @@ function GalleryPanel({
     setQuickTextEditor(null);
     setHoverPreview(null);
     setOpen(false);
+    panelPlacementLockedRef.current = false;
+    setPanelTopPx(null);
   }, [cancelHoverPreviewOpen]);
   const openQuickAdd = useCallback((request: QuickAddRequest) => {
     cancelHoverPreviewOpen();
@@ -639,18 +649,52 @@ function GalleryPanel({
     document.addEventListener('keydown', onKeyDown, true);
     return () => document.removeEventListener('keydown', onKeyDown, true);
   }, [open, dismissGallery]);
+  useLayoutEffect(() => {
+    if (!open) {
+      panelPlacementLockedRef.current = false;
+      return;
+    }
+    const dock = panelDockRef.current;
+    if (!dock) return;
+    panelPlacementLockedRef.current = false;
+
+    const alignPanelToTab = (force = false) => {
+      if (panelPlacementLockedRef.current && !force) return;
+      const viewportHeight = window.innerHeight;
+      const panelHeight = dock.getBoundingClientRect().height;
+      const desiredTop = (viewportHeight * edgeTop) / 100 - panelHeight / 2;
+      const maxTop = Math.max(8, viewportHeight - panelHeight - 8);
+      const nextTop = Math.min(maxTop, Math.max(8, desiredTop));
+      setPanelTopPx((current) => (current !== null && Math.abs(current - nextTop) < 0.5 ? current : nextTop));
+
+      const loading = dock.querySelector('[data-gallery-loading="true"]');
+      const contentReady = !loading && Boolean(dock.querySelector('.pt-gallery, .pt-empty'));
+      if (contentReady) panelPlacementLockedRef.current = true;
+    };
+
+    alignPanelToTab();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => alignPanelToTab());
+    observer?.observe(dock);
+    const onResize = () => alignPanelToTab(true);
+    window.addEventListener('resize', onResize);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', onResize);
+    };
+  }, [edgeTop, open]);
   return (
     <div className="pt-gallery-edge" style={edgeStyle}>
       {open ? (
         // The dock's padding-right keeps the visual gap to the screen edge part of
         // the hover zone, so sliding into it doesn't drop hover and flicker shut.
         <div
+          ref={panelDockRef}
           className="pt-panel-dock"
-          style={{ top: `${panelTopVh}vh` }}
+          style={{ top: `${resolvedPanelTopPx}px` }}
           onMouseEnter={openGallery}
           onMouseLeave={scheduleGalleryClose}
         >
-          <div className="pt-glass pt-panel pt-gallery-panel" style={{ maxHeight: `${PANEL_VH}vh` }}>
+          <div className="pt-glass pt-panel pt-gallery-panel">
             <div className="pt-panel-head">
               <span className="pt-title">
                 <img className="pt-logo-img" src={LOGO_DATA_URL} alt="" />
@@ -1486,7 +1530,7 @@ function Gallery({
     }
   }, [activeCategory, categoryFilters]);
 
-  if (records === null) return <div className="pt-empty">{t.loading}</div>;
+  if (records === null) return <div className="pt-empty" data-gallery-loading="true">{t.loading}</div>;
   if (records.length === 0) {
     return (
       <div className="pt-empty">
