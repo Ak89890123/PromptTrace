@@ -10,11 +10,11 @@ import {
   type CaptureSessionState,
 } from '@/src/core/capture/session';
 import { checkSelection } from '@/src/core/capture/overlap';
-import type { PendingAsset } from '@/src/core/domain/entities';
+import type { Asset, FileRecord, PendingAsset } from '@/src/core/domain/entities';
 import { isRoleAllowed } from '@/src/core/domain/validation';
 import { createConflict } from '@/src/core/errors/conflictTypes';
 import { createCaptureError, mapDownloadError } from '@/src/core/errors/errorTypes';
-import type { ExtensionMessage } from '@/src/core/messages';
+import type { ExtensionMessage, GenerateVideoPreviewResult } from '@/src/core/messages';
 import { requestPromptSummary, selectedSummaryModel, summaryPromptTextFromAssets } from '@/src/core/summary';
 import { isSummaryDailyTokenLimitReached } from '@/src/core/summaryUsage';
 import { commitSessionToLibrary, downloadPathFor } from '@/src/storage/commitSession';
@@ -345,13 +345,14 @@ export default defineBackground(() => {
    * can grab the bytes while the URL is still valid and keep a local copy.
    * Best-effort: any failure just leaves the gallery falling back to originalUrl.
    */
-  async function cacheAssetPreview(assetId: string, url: string): Promise<void> {
+  async function cacheAssetPreview(assetId: string, url: string): Promise<string | undefined> {
     try {
-      if (!/^https?:/i.test(url)) return;
+      if (!/^https?:/i.test(url)) return undefined;
       const asset = await assetRepository.get(assetId);
-      if (!asset || asset.assetType !== 'image' || asset.previewRef) return;
+      if (!asset || asset.assetType !== 'image') return undefined;
+      if (asset.previewRef) return asset.previewRef;
       const resp = await fetch(url);
-      if (!resp.ok) return;
+      if (!resp.ok) return undefined;
       const bitmap = await createImageBitmap(await resp.blob());
       const scale = Math.min(1, MAX_PREVIEW_DIM / Math.max(bitmap.width, bitmap.height));
       const w = Math.max(1, Math.round(bitmap.width * scale));
@@ -360,7 +361,7 @@ export default defineBackground(() => {
       const ctx = canvas.getContext('2d');
       if (!ctx) {
         bitmap.close();
-        return;
+        return undefined;
       }
       ctx.drawImage(bitmap, 0, 0, w, h);
       bitmap.close();
@@ -368,8 +369,86 @@ export default defineBackground(() => {
       const previewRef = await blobToDataUrl(thumb);
       const fresh = await assetRepository.get(assetId);
       if (fresh) await assetRepository.save({ ...fresh, previewRef });
+      return previewRef;
     } catch {
       // best-effort; the gallery falls back to the original URL
+      return undefined;
+    }
+  }
+
+  async function downloadCompressedImage(fileRecordId: string, assetId: string, url: string, recordId: string): Promise<void> {
+    const previewRef = await cacheAssetPreview(assetId, url);
+    if (previewRef) await startDownload(fileRecordId, previewRef, recordId);
+    else {
+      const fileRecord = await fileRecordRepository.get(fileRecordId);
+      if (fileRecord) {
+        await fileRecordRepository.save({
+          ...fileRecord,
+          downloadStatus: 'failed',
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    }
+  }
+
+  async function retryMediaDownload(fileRecord: FileRecord, asset: Asset): Promise<void> {
+    if (!asset.originalUrl) return;
+    const settings = await loadSettings();
+    if (asset.assetType === 'image' && settings.mediaStorage.image === 'webp') {
+      await downloadCompressedImage(fileRecord.id, asset.id, asset.originalUrl, asset.recordId);
+    } else if (asset.assetType === 'video' && settings.mediaStorage.video === 'preview-only') {
+      await cacheVideoPreview(asset.id, asset.originalUrl);
+      await fileRecordRepository.save({
+        ...fileRecord,
+        downloadStatus: 'not_required',
+        updatedAt: new Date().toISOString(),
+      });
+    } else {
+      await startDownload(fileRecord.id, asset.originalUrl, asset.recordId);
+    }
+  }
+
+  let creatingOffscreenDocument: Promise<void> | undefined;
+
+  async function ensureOffscreenDocument(): Promise<void> {
+    const offscreenUrl = chrome.runtime.getURL('offscreen.html');
+    const contexts = await chrome.runtime.getContexts({
+      contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
+      documentUrls: [offscreenUrl],
+    });
+    if (contexts.length > 0) return;
+    if (!creatingOffscreenDocument) {
+      creatingOffscreenDocument = chrome.offscreen
+        .createDocument({
+          url: 'offscreen.html',
+          reasons: [chrome.offscreen.Reason.BLOBS],
+          justification: 'Decode locally downloaded videos and create short GIF previews.',
+        })
+        .finally(() => {
+          creatingOffscreenDocument = undefined;
+        });
+    }
+    await creatingOffscreenDocument;
+  }
+
+  /** Generate a short local GIF (or still-image fallback) for a saved video. */
+  async function cacheVideoPreview(assetId: string, url: string): Promise<void> {
+    try {
+      if (!/^https?:/i.test(url)) return;
+      const asset = await assetRepository.get(assetId);
+      if (!asset || asset.assetType !== 'video' || asset.previewRef) return;
+      await ensureOffscreenDocument();
+      const result = await chrome.runtime.sendMessage<ExtensionMessage, GenerateVideoPreviewResult>({
+        type: 'media/generateVideoPreview',
+        payload: { url },
+      });
+      if (!result.ok || !result.previewRef) return;
+      const fresh = await assetRepository.get(assetId);
+      if (fresh && !fresh.previewRef) {
+        await assetRepository.save({ ...fresh, previewRef: result.previewRef });
+      }
+    } catch {
+      // Best-effort only. The original video download remains authoritative.
     }
   }
 
@@ -656,7 +735,7 @@ export default defineBackground(() => {
               const asset = await assetRepository.get(error.assetId);
               if (asset?.originalUrl) {
                 setSession(dismissError(session, message.payload.errorId));
-                await startDownload(fileRecord.id, asset.originalUrl, asset.recordId);
+                await retryMediaDownload(fileRecord, asset);
                 return sendResponse({ ok: true });
               }
             } else if (message.payload.action === 'save_source_only' && fileRecord) {
@@ -674,18 +753,27 @@ export default defineBackground(() => {
 
         case 'capture/commitSession': {
           try {
-            const result = await commitSessionToLibrary(session.assets, message.payload);
+            const settings = await loadSettings();
+            const result = await commitSessionToLibrary(session.assets, message.payload, settings.mediaStorage);
             const tabIds = new Set(session.assets.map((a) => a.tabId).filter((t): t is number => t != null));
             conflictCandidates.clear();
             setSession(emptySession());
             for (const tabId of tabIds) {
               chrome.tabs.sendMessage(tabId, { type: 'overlay/clearAll' }).catch(() => {});
             }
-            for (const { fileRecord, url } of result.pendingDownloads) {
-              startDownload(fileRecord.id, url, result.record.id);
-              // Best-effort: stash a durable local thumbnail so the gallery keeps
-              // showing the image after the remote (often signed/expiring) URL dies.
-              void cacheAssetPreview(fileRecord.assetId, url);
+            for (const { fileRecord, url, mode } of result.pendingDownloads) {
+              if (mode === 'image-webp') {
+                void downloadCompressedImage(fileRecord.id, fileRecord.assetId, url, result.record.id);
+              } else {
+                void startDownload(fileRecord.id, url, result.record.id);
+              }
+            }
+            for (const { assetId, assetType, url } of result.pendingPreviews) {
+              if (assetType === 'image' && settings.mediaStorage.image === 'original') {
+                void cacheAssetPreview(assetId, url);
+              } else if (assetType === 'video') {
+                void cacheVideoPreview(assetId, url);
+              }
             }
             sendResponse({ ok: true, recordId: result.record.id });
           } catch (e) {
@@ -705,7 +793,7 @@ export default defineBackground(() => {
           if (!fileRecord) return sendResponse({ ok: false });
           const asset = await assetRepository.get(fileRecord.assetId);
           if (asset?.originalUrl) {
-            await startDownload(fileRecord.id, asset.originalUrl, asset.recordId);
+            await retryMediaDownload(fileRecord, asset);
             return sendResponse({ ok: true });
           }
           return sendResponse({ ok: false });

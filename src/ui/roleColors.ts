@@ -1,5 +1,11 @@
 import type { AssetRole } from '../core/domain/enums';
 import { DEFAULT_SUMMARY_SETTINGS, mergeSummarySettings, type SummarySettings } from '../core/summary';
+import {
+  DEFAULT_MEDIA_STORAGE_POLICY,
+  LEGACY_MEDIA_STORAGE_POLICY,
+  mergeMediaStoragePolicy,
+  type MediaStoragePolicy,
+} from '../core/media/storagePolicy';
 
 export type RoleColorMap = Record<AssetRole | 'pending', string>;
 
@@ -37,6 +43,8 @@ export type DisplaySettings = {
   edgeTabTop: number;
   /** How long soft-deleted records stay in trash before permanent purge. */
   trashRetentionDays: number;
+  /** Controls whether original media or compact local previews are downloaded. */
+  mediaStorage: MediaStoragePolicy;
   summary: SummarySettings;
 };
 
@@ -54,6 +62,7 @@ export const DEFAULT_SETTINGS: DisplaySettings = {
   cardLayout: 'split',
   edgeTabTop: 50,
   trashRetentionDays: 10,
+  mediaStorage: DEFAULT_MEDIA_STORAGE_POLICY,
   summary: DEFAULT_SUMMARY_SETTINGS,
 };
 
@@ -84,6 +93,7 @@ function withDefaults(stored: Partial<DisplaySettings> | undefined): DisplaySett
       stored.toolbarRoles && stored.toolbarRoles.length >= 2
         ? stored.toolbarRoles
         : DEFAULT_SETTINGS.toolbarRoles,
+    mediaStorage: mergeMediaStoragePolicy(stored.mediaStorage, LEGACY_MEDIA_STORAGE_POLICY),
     summary: mergeSummarySettings(stored.summary),
   };
 }

@@ -126,7 +126,12 @@ export default function App() {
             <div className="settings-inner-divider settings-primary-divider" />
             <InteractionDisplaySettings settings={settings} onPatch={patchSettings} t={t} language={language} />
             <div className="settings-inner-divider settings-primary-divider" />
-            <DataFilesSettingsSection t={t} />
+            <DataFilesSettingsSection
+              t={t}
+              language={language}
+              settings={settings}
+              onPatch={patchSettings}
+            />
           </section>
         </div>
         <div className="settings-column settings-category-column">
@@ -1030,6 +1035,7 @@ function downloadBlob(filename: string, blob: Blob): void {
 }
 
 function mediaExtension(asset: Asset, blob?: Blob): string {
+  if (blob?.type === 'image/gif') return 'gif';
   if (blob?.type === 'image/webp') return 'webp';
   if (blob?.type === 'image/jpeg') return 'jpg';
   if (blob?.type === 'image/png') return 'png';
@@ -1053,7 +1059,14 @@ async function blobFromRef(ref: string | undefined): Promise<{ blob: Blob; sourc
   return null;
 }
 
-async function mediaBlobForBackup(asset: Asset): Promise<{ blob: Blob; source: BackupMediaEntry['source'] } | null> {
+async function mediaBlobForBackup(
+  asset: Asset,
+  existingFile: FileRecord | undefined,
+): Promise<{ blob: Blob; source: BackupMediaEntry['source'] } | null> {
+  const compactOnly =
+    (asset.assetType === 'image' && existingFile?.mimeType === 'image/webp') ||
+    (asset.assetType === 'video' && !existingFile);
+  if (compactOnly) return blobFromRef(asset.previewRef);
   return (await blobFromRef(asset.originalUrl)) ?? (await blobFromRef(asset.previewRef));
 }
 
@@ -1082,9 +1095,9 @@ async function exportPromptTraceBackup(): Promise<{ records: number; mediaFiles:
   const mediaFiles = new Map<string, Blob>();
   for (const asset of assets) {
     if (asset.assetType === 'text') continue;
-    const mediaBlob = await mediaBlobForBackup(asset);
-    if (!mediaBlob) continue;
     const existing = originalFileByAsset.get(asset.id);
+    const mediaBlob = await mediaBlobForBackup(asset, existing);
+    if (!mediaBlob) continue;
     const fileRecord: FileRecord = existing
       ? sanitizeBackupFileRecord(existing)
       : {
@@ -1177,13 +1190,55 @@ async function restorePromptTraceBackup(file: File): Promise<{ records: number; 
   return { records: parsed.data.records.length, mediaFiles: restoredMedia };
 }
 
-function DataFilesSettingsSection({ t }: { t: UiText }) {
+function DataFilesSettingsSection({
+  t,
+  language,
+  settings,
+  onPatch,
+}: {
+  t: UiText;
+  language: ResolvedLanguage;
+  settings: DisplaySettings;
+  onPatch: (patch: Partial<DisplaySettings>) => void;
+}) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
+  const isEnglish = language === 'en-US';
 
   return (
     <div className="settings-subsection settings-files-subsection">
       <h2>{t.files}</h2>
+      <div className="settings-control-stack settings-media-storage">
+        <label className="settings-field">
+          <span>{isEnglish ? 'Image storage' : '圖片保存'}</span>
+          <select
+            value={settings.mediaStorage.image}
+            onChange={(event) => onPatch({
+              mediaStorage: { ...settings.mediaStorage, image: event.target.value as DisplaySettings['mediaStorage']['image'] },
+            })}
+          >
+            <option value="original">{isEnglish ? 'Keep original + WebP preview' : '保留原圖＋WebP 預覽'}</option>
+            <option value="webp">{isEnglish ? 'Compressed WebP only' : '只保存壓縮 WebP'}</option>
+          </select>
+        </label>
+        <label className="settings-field">
+          <span>{isEnglish ? 'Video storage' : '影片保存'}</span>
+          <select
+            value={settings.mediaStorage.video}
+            onChange={(event) => onPatch({
+              mediaStorage: { ...settings.mediaStorage, video: event.target.value as DisplaySettings['mediaStorage']['video'] },
+            })}
+          >
+            <option value="original">{isEnglish ? 'Keep original + GIF preview' : '保留原片＋GIF 預覽'}</option>
+            <option value="preview-only">{isEnglish ? 'GIF preview only' : '只保存 GIF 預覽'}</option>
+          </select>
+        </label>
+        <p className="muted">
+          {isEnglish
+            ? 'Preview-only modes skip the original download. Existing downloaded files are not removed.'
+            : '只保存預覽會直接略過原始檔下載，不會刪除既有的下載檔案。'}
+        </p>
+      </div>
       <div className="row settings-file-actions">
         <button
           type="button"
@@ -1274,4 +1329,3 @@ async function openPromptTraceFolder(): Promise<void> {
 
   throw new Error('NO_PROMPTTRACE_DOWNLOADS');
 }
-

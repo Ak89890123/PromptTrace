@@ -654,8 +654,10 @@ function RecordDetail(props: {
                 <TextAssetEditor asset={a} language={language} onSave={(textContent) => updateTextAsset(a, textContent)} />
               ) : a.assetType === 'image' ? (
                 <img className="thumb" src={a.previewRef ?? a.originalUrl} alt="asset" />
-              ) : a.previewRef?.startsWith('data:') ? (
-                <video className="thumb" src={a.previewRef} controls />
+              ) : a.previewRef?.startsWith('data:image/') ? (
+                <img className="thumb" src={a.previewRef} alt="video preview" />
+              ) : a.previewRef?.startsWith('data:video/') ? (
+                <video className="thumb" src={a.previewRef} controls muted />
               ) : (
                 <div className="preview-text">🎞 {language === 'en-US' ? 'Video file' : '影片檔案'}</div>
               )}

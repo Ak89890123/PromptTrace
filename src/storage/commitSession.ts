@@ -2,6 +2,7 @@ import type { Asset, FileRecord, LibraryRecord, PendingAsset } from '../core/dom
 import type { CommitCaptureSessionMessage } from '../core/messages';
 import { safeFilename } from '../core/domain/validation';
 import { assetRepository, fileRecordRepository, recordRepository } from './repositories';
+import { DEFAULT_MEDIA_STORAGE_POLICY, type MediaStoragePolicy } from '../core/media/storagePolicy';
 
 const MEDIA_EXT: Record<'image' | 'video', string> = { image: 'png', video: 'mp4' };
 
@@ -20,7 +21,9 @@ export type CommitResult = {
   record: LibraryRecord;
   assets: Asset[];
   /** Media file records that need a download attempt (status 'pending'). */
-  pendingDownloads: { fileRecord: FileRecord; url: string }[];
+  pendingDownloads: { fileRecord: FileRecord; url: string; mode: 'original' | 'image-webp' }[];
+  /** Downloadable media that should receive a durable local preview. */
+  pendingPreviews: { assetId: string; assetType: 'image' | 'video'; url: string }[];
   /** Media assets without a usable URL (source-only fallback). */
   sourceOnlyAssets: Asset[];
 };
@@ -33,6 +36,7 @@ export type CommitResult = {
 export async function commitSessionToLibrary(
   pendingAssets: PendingAsset[],
   meta: CommitCaptureSessionMessage['payload'],
+  mediaStorage: MediaStoragePolicy = DEFAULT_MEDIA_STORAGE_POLICY,
 ): Promise<CommitResult> {
   const now = new Date().toISOString();
   const first = pendingAssets[0];
@@ -49,6 +53,7 @@ export async function commitSessionToLibrary(
 
   const assets: Asset[] = [];
   const pendingDownloads: CommitResult['pendingDownloads'] = [];
+  const pendingPreviews: CommitResult['pendingPreviews'] = [];
   const sourceOnlyAssets: Asset[] = [];
   const normalizedAssets = mergeSameRoleTextAssets(pendingAssets);
 
@@ -72,24 +77,30 @@ export async function commitSessionToLibrary(
 
     if (p.assetType !== 'text') {
       if (p.originalUrl && !p.sourceOnly && isDownloadableUrl(p.originalUrl)) {
-        const filename = mediaFilename(p.originalUrl, p.assetType);
-        const fileRecord: FileRecord = {
-          id: crypto.randomUUID(),
-          assetId: asset.id,
-          filename: `${asset.id.slice(0, 8)}-${filename}`,
-          downloadStatus: 'pending',
-          deleteStatus: 'not_deleted',
-          updatedAt: now,
-        };
-        await fileRecordRepository.save(fileRecord);
-        pendingDownloads.push({ fileRecord, url: p.originalUrl });
+        pendingPreviews.push({ assetId: asset.id, assetType: p.assetType, url: p.originalUrl });
+        const shouldDownload = p.assetType === 'image' || mediaStorage.video === 'original';
+        if (shouldDownload) {
+          const imageWebp = p.assetType === 'image' && mediaStorage.image === 'webp';
+          const filename = imageWebp ? `${asset.id.slice(0, 8)}-preview.webp` : `${asset.id.slice(0, 8)}-${mediaFilename(p.originalUrl, p.assetType)}`;
+          const fileRecord: FileRecord = {
+            id: crypto.randomUUID(),
+            assetId: asset.id,
+            filename,
+            mimeType: imageWebp ? 'image/webp' : undefined,
+            downloadStatus: 'pending',
+            deleteStatus: 'not_deleted',
+            updatedAt: now,
+          };
+          await fileRecordRepository.save(fileRecord);
+          pendingDownloads.push({ fileRecord, url: p.originalUrl, mode: imageWebp ? 'image-webp' : 'original' });
+        }
       } else {
         sourceOnlyAssets.push(asset);
       }
     }
   }
 
-  return { record, assets, pendingDownloads, sourceOnlyAssets };
+  return { record, assets, pendingDownloads, pendingPreviews, sourceOnlyAssets };
 }
 
 function mergeSameRoleTextAssets(pendingAssets: PendingAsset[]): PendingAsset[] {

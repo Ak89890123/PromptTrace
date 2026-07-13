@@ -102,6 +102,19 @@ export type FileRecordChangedMessage = {
   payload: { fileRecordId: string };
 };
 
+/** Background -> offscreen document: create a durable local preview for a video. */
+export type GenerateVideoPreviewMessage = {
+  type: 'media/generateVideoPreview';
+  payload: { url: string };
+};
+
+export type GenerateVideoPreviewResult = {
+  ok: boolean;
+  previewRef?: string;
+  kind?: 'gif' | 'still';
+  reason?: string;
+};
+
 /** Content script / popup → background: open an extension page from extension context. */
 export type OpenExtensionPageMessage = {
   type: 'navigation/openExtensionPage';
@@ -235,6 +248,7 @@ export type ExtensionMessage =
   | RetryDownloadMessage
   | DeleteRecordFilesMessage
   | FileRecordChangedMessage
+  | GenerateVideoPreviewMessage
   | OpenExtensionPageMessage
   | FlashOverlayMessage
   | TaxonomyGetMessage

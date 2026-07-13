@@ -118,6 +118,36 @@ describe('commit session', () => {
     expect(stored?.assetId).toBe(result.assets[0].id);
   });
 
+  it('plans a compressed WebP download instead of the original image', async () => {
+    const result = await commitSessionToLibrary(
+      [pending({ assetType: 'image', textContent: undefined, originalUrl: 'https://x.test/large.png', role: 'output' })],
+      {},
+      { image: 'webp', video: 'original' },
+    );
+
+    expect(result.pendingDownloads).toHaveLength(1);
+    expect(result.pendingDownloads[0].mode).toBe('image-webp');
+    expect(result.pendingDownloads[0].fileRecord.filename).toMatch(/-preview\.webp$/);
+    expect(result.pendingDownloads[0].fileRecord.mimeType).toBe('image/webp');
+    expect(result.pendingPreviews).toEqual([
+      expect.objectContaining({ assetId: result.assets[0].id, assetType: 'image' }),
+    ]);
+  });
+
+  it('keeps only a GIF preview plan when original video downloads are disabled', async () => {
+    const result = await commitSessionToLibrary(
+      [pending({ assetType: 'video', textContent: undefined, originalUrl: 'https://x.test/large.mp4', role: 'output' })],
+      {},
+      { image: 'original', video: 'preview-only' },
+    );
+
+    expect(result.pendingDownloads).toHaveLength(0);
+    expect(result.pendingPreviews).toEqual([
+      expect.objectContaining({ assetId: result.assets[0].id, assetType: 'video' }),
+    ]);
+    expect(await fileRecordRepository.byAsset(result.assets[0].id)).toHaveLength(0);
+  });
+
   it('keeps data-url images local without starting a browser download', async () => {
     const dataUrl = `data:image/png;base64,${'A'.repeat(180)}`;
     const result = await commitSessionToLibrary(

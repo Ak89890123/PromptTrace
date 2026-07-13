@@ -14,6 +14,7 @@ export default defineConfig({
       'activeTab',
       'scripting',
       'clipboardWrite',
+      'offscreen',
     ],
     host_permissions: ['<all_urls>'],
     // default_popup + default_title are derived by WXT from the popup entrypoint
