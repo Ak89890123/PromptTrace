@@ -9,7 +9,9 @@ async function setLatestRecordSummary(context: BrowserContext, extensionId: stri
   await extensionPage.goto(`chrome-extension://${extensionId}/popup.html`);
   await extensionPage.evaluate(async (nextSummary) => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open('promptrace', 1);
+      // Let the extension open the current schema version; this helper only
+      // edits record metadata and should not pin the test to an old version.
+      const request = indexedDB.open('promptrace');
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });

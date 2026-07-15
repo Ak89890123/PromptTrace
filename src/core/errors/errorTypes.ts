@@ -1,5 +1,6 @@
 export type ErrorType =
   | 'MEDIA_URL_NOT_FOUND'
+  | 'MEDIA_PREVIEW_FAILED'
   | 'MEDIA_DOWNLOAD_FAILED'
   | 'DOWNLOAD_PERMISSION_DENIED'
   | 'DOWNLOAD_INTERRUPTED'
@@ -33,6 +34,11 @@ export const ERROR_INFO: Record<
     message: '無法取得媒體的可下載 URL。',
     probableCause: '影片/圖片使用 blob、MediaSource 串流、DRM，或由 player 動態組合。',
     suggestedAction: '可改為只保存來源頁面連結，或改用網站提供的下載功能。',
+  },
+  MEDIA_PREVIEW_FAILED: {
+    message: 'Media preview generation failed.',
+    probableCause: 'The media could not be validated, decoded, or encoded into the compact local preview format.',
+    suggestedAction: 'Capture the media again or keep the original source URL when one is available.',
   },
   MEDIA_DOWNLOAD_FAILED: {
     message: '媒體下載失敗。',

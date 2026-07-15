@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
-import type { Asset, FileRecord, LibraryRecord } from '@/src/core/domain/entities';
+import type { Asset, LibraryRecord } from '@/src/core/domain/entities';
+import type { MediaPreviewChangedMessage } from '@/src/core/messages';
+import { formatIndexedDbSize, indexedDbPreviewStorageBytes } from '@/src/core/media/storageSize';
 import { ROLE_LABELS, type AssetRole } from '@/src/core/domain/enums';
 import {
   allowedRolesFor,
@@ -10,7 +12,6 @@ import {
 import {
   assetRepository,
   categoryRepository,
-  fileRecordRepository,
   recordRepository,
 } from '@/src/storage/repositories';
 import { assetTypeLabel, categoryLabel, resolveLanguage, roleLabel, UI_TEXT, type ResolvedLanguage, type UiText } from '@/src/ui/i18n';
@@ -20,7 +21,6 @@ import { flattenTree, useTaxonomy } from '@/src/ui/hooks';
 type RecordBundle = {
   record: LibraryRecord;
   assets: Asset[];
-  fileRecords: FileRecord[];
 };
 
 type CategoryDraft = {
@@ -75,9 +75,7 @@ function summaryReasonNeedsSettings(reason: string | undefined): boolean {
 
 async function loadBundle(record: LibraryRecord): Promise<RecordBundle> {
   const assets = await assetRepository.byRecord(record.id);
-  const fileRecords: FileRecord[] = [];
-  for (const a of assets) fileRecords.push(...(await fileRecordRepository.byAsset(a.id)));
-  return { record, assets, fileRecords };
+  return { record, assets };
 }
 
 export default function App() {
@@ -137,6 +135,14 @@ export default function App() {
       setAssetIndex(idx);
     })();
   }, [refresh]);
+
+  useEffect(() => {
+    const onMessage = (message: MediaPreviewChangedMessage) => {
+      if (message?.type === 'media/previewChanged') setRefresh((value) => value + 1);
+    };
+    chrome.runtime.onMessage.addListener(onMessage);
+    return () => chrome.runtime.onMessage.removeListener(onMessage);
+  }, []);
 
   const toggleCategoryFilter = (categoryId: string) => {
     setFilterCategories((ids) => (ids.includes(categoryId) ? ids.filter((id) => id !== categoryId) : [...ids, categoryId]));
@@ -535,6 +541,7 @@ function RecordDetail(props: {
   const [summaryNotice, setSummaryNotice] = useState('');
   const [summaryNoticeReason, setSummaryNoticeReason] = useState<string | undefined>();
   const [summarizing, setSummarizing] = useState(false);
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
 
   const load = useCallback(async () => {
     const record = await recordRepository.get(props.recordId);
@@ -544,13 +551,31 @@ function RecordDetail(props: {
     load();
   }, [load]);
   useEffect(() => {
+    const onMessage = (message: MediaPreviewChangedMessage) => {
+      if (message?.type === 'media/previewChanged' && message.payload.recordId === props.recordId) {
+        load();
+      }
+    };
+    chrome.runtime.onMessage.addListener(onMessage);
+    return () => chrome.runtime.onMessage.removeListener(onMessage);
+  }, [load, props.recordId]);
+  useEffect(() => {
     setSummaryNotice('');
     setSummaryNoticeReason(undefined);
   }, [props.recordId]);
 
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setLightbox(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [lightbox]);
+
   const { t, language } = props;
   if (!bundle) return <div className="muted">{t.loading}</div>;
-  const { record, assets, fileRecords } = bundle;
+  const { record, assets } = bundle;
 
   const say = (msg: string) => {
     setToast(msg);
@@ -610,9 +635,8 @@ function RecordDetail(props: {
         </h2>
         {items.length === 0 && <div className="muted">{language === 'en-US' ? 'None' : '無'}</div>}
         {items.map((a) => {
-          const file = fileRecords.find((f) => f.assetId === a.id);
           return (
-            <div className="card" key={a.id}>
+            <div className="card asset-detail-card" key={a.id}>
               <div className="spread">
                 <strong>{assetTypeLabel(a.assetType, language)}</strong>
                 <div className="row">
@@ -636,12 +660,10 @@ function RecordDetail(props: {
                       </option>
                     ))}
                   </select>
-                  {file && <FileRecordLine file={file} language={language} onSay={say} />}
                   <button
                     className="danger"
                     onClick={async () => {
                       await assetRepository.delete(a.id);
-                      if (file) await fileRecordRepository.delete(file.id);
                       await load();
                       props.onChanged();
                     }}
@@ -650,14 +672,41 @@ function RecordDetail(props: {
                   </button>
                 </div>
               </div>
+              {a.previewStatus === 'processing' || a.previewStatus === 'pending' ? (
+                <div className="muted">{language === 'en-US' ? 'Preparing local preview…' : '正在準備本機預覽…'}</div>
+              ) : a.previewStatus === 'failed' ? (
+                <div className="muted">{language === 'en-US' ? 'Preview failed; showing the source when available.' : '預覽失敗，若來源可用則顯示來源。'}</div>
+              ) : null}
               {a.assetType === 'text' ? (
                 <TextAssetEditor asset={a} language={language} onSave={(textContent) => updateTextAsset(a, textContent)} />
               ) : a.assetType === 'image' ? (
-                <img className="thumb" src={a.previewRef ?? a.originalUrl} alt="asset" />
+                <div className="asset-media-preview">
+                  <img
+                    className="thumb library-detail-media-thumb"
+                    src={a.previewRef ?? a.originalUrl}
+                    alt="asset"
+                    onClick={() => {
+                      const src = a.previewRef ?? a.originalUrl;
+                      if (src) setLightbox({ src, alt: 'asset' });
+                    }}
+                  />
+                  <AssetStorageBadge asset={a} language={language} />
+                </div>
               ) : a.previewRef?.startsWith('data:image/') ? (
-                <img className="thumb" src={a.previewRef} alt="video preview" />
+                <div className="asset-media-preview">
+                  <img
+                    className="thumb library-detail-media-thumb"
+                    src={a.previewRef}
+                    alt="video preview"
+                    onClick={() => setLightbox({ src: a.previewRef!, alt: 'video preview' })}
+                  />
+                  <AssetStorageBadge asset={a} language={language} />
+                </div>
               ) : a.previewRef?.startsWith('data:video/') ? (
-                <video className="thumb" src={a.previewRef} controls muted />
+                <div className="asset-media-preview">
+                  <video className="thumb" src={a.previewRef} controls muted />
+                  <AssetStorageBadge asset={a} language={language} />
+                </div>
               ) : (
                 <div className="preview-text">🎞 {language === 'en-US' ? 'Video file' : '影片檔案'}</div>
               )}
@@ -737,12 +786,48 @@ function RecordDetail(props: {
           {(['input', 'input_reference', 'negative', 'output'] as AssetRole[]).map(roleSection)}
         </div>
       </div>
+      {lightbox && (
+        <div
+          className="library-image-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label={language === 'en-US' ? 'Image preview' : '圖片預覽'}
+          onClick={() => setLightbox(null)}
+        >
+          <img
+            className="library-image-lightbox-image"
+            src={lightbox.src}
+            alt={lightbox.alt}
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
 
 function formatTokenMaybe(value: number | null | undefined, language: ResolvedLanguage): string {
   return value == null ? '--' : value.toLocaleString(language);
+}
+
+function AssetStorageBadge({ asset, language }: { asset: Asset; language: ResolvedLanguage }) {
+  if (asset.assetType === 'text') return null;
+  const bytes = indexedDbPreviewStorageBytes(asset.previewRef);
+  const value = bytes == null
+    ? asset.previewStatus === 'pending' || asset.previewStatus === 'processing'
+      ? language === 'en-US' ? 'Preparing' : '準備中'
+      : '--'
+    : formatIndexedDbSize(bytes);
+  const title = bytes == null
+    ? language === 'en-US' ? 'No canonical media preview is stored in IndexedDB yet.' : '目前尚未在 IndexedDB 儲存標準媒體預覽。'
+    : language === 'en-US'
+      ? 'Estimated UTF-8 size of the canonical preview string stored in IndexedDB.'
+      : 'IndexedDB 中標準預覽字串的 UTF-8 大小估算。';
+  return (
+    <div className="asset-storage-badge" title={title}>
+      <strong>{value}</strong>
+    </div>
+  );
 }
 
 function TextAssetEditor({
@@ -791,6 +876,7 @@ function TextAssetEditor({
   );
 }
 
+/* Legacy FileRecord UI is intentionally retired; metadata remains read-only in storage.
 function FileRecordLine({
   file,
   language,
@@ -803,7 +889,7 @@ function FileRecordLine({
   const openLocation = () => {
     if (file.downloadId == null) return;
     try {
-      chrome.downloads.show(file.downloadId);
+      onSay(language === 'en-US' ? 'Legacy file metadata is read-only.' : '舊版檔案中繼資料僅供讀取。');
     } catch {
       onSay(language === 'en-US' ? 'Could not open the file location.' : '無法開啟檔案位置。');
     }
@@ -836,6 +922,7 @@ function FileRecordLine({
   );
 }
 
+*/
 async function copyPreviewAssetsToClipboard(assets: Asset[]): Promise<void> {
   const texts = assets
     .filter((asset) => asset.assetType === 'text')

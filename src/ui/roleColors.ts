@@ -1,11 +1,6 @@
 import type { AssetRole } from '../core/domain/enums';
+import { DEFAULT_MEDIA_QUALITY, normalizeMediaQuality, type MediaQuality } from '../core/media/quality';
 import { DEFAULT_SUMMARY_SETTINGS, mergeSummarySettings, type SummarySettings } from '../core/summary';
-import {
-  DEFAULT_MEDIA_STORAGE_POLICY,
-  LEGACY_MEDIA_STORAGE_POLICY,
-  mergeMediaStoragePolicy,
-  type MediaStoragePolicy,
-} from '../core/media/storagePolicy';
 
 export type RoleColorMap = Record<AssetRole | 'pending', string>;
 
@@ -43,8 +38,8 @@ export type DisplaySettings = {
   edgeTabTop: number;
   /** How long soft-deleted records stay in trash before permanent purge. */
   trashRetentionDays: number;
-  /** Controls whether original media or compact local previews are downloaded. */
-  mediaStorage: MediaStoragePolicy;
+  /** Quality used for canonical image/video previews created after capture. */
+  mediaQuality: MediaQuality;
   summary: SummarySettings;
 };
 
@@ -62,7 +57,7 @@ export const DEFAULT_SETTINGS: DisplaySettings = {
   cardLayout: 'split',
   edgeTabTop: 50,
   trashRetentionDays: 10,
-  mediaStorage: DEFAULT_MEDIA_STORAGE_POLICY,
+  mediaQuality: DEFAULT_MEDIA_QUALITY,
   summary: DEFAULT_SUMMARY_SETTINGS,
 };
 
@@ -71,6 +66,11 @@ const LEGACY_SETTINGS_KEY = 'prompttrace:settings';
 
 function withDefaults(stored: Partial<DisplaySettings> | undefined): DisplaySettings {
   if (!stored) return DEFAULT_SETTINGS;
+  // Remove the retired media-storage setting so legacy `original` values can
+  // never leak back into the runtime or remain in chrome.storage.local.
+  const { mediaStorage: _legacyMediaStorage, ...storedWithoutMediaStorage } = stored as Partial<DisplaySettings> & {
+    mediaStorage?: unknown;
+  };
   const language =
     stored.language === 'system' || stored.language === 'en-US' || stored.language === 'zh-TW' || stored.language === 'zh-CN'
       ? stored.language
@@ -84,16 +84,16 @@ function withDefaults(stored: Partial<DisplaySettings> | undefined): DisplaySett
     : DEFAULT_SETTINGS.trashRetentionDays;
   return {
     ...DEFAULT_SETTINGS,
-    ...stored,
+    ...storedWithoutMediaStorage,
     language,
     cardLayout,
     trashRetentionDays,
+    mediaQuality: normalizeMediaQuality(stored.mediaQuality),
     roleColors: { ...DEFAULT_ROLE_COLORS, ...(stored.roleColors ?? {}) },
     toolbarRoles:
       stored.toolbarRoles && stored.toolbarRoles.length >= 2
         ? stored.toolbarRoles
         : DEFAULT_SETTINGS.toolbarRoles,
-    mediaStorage: mergeMediaStoragePolicy(stored.mediaStorage, LEGACY_MEDIA_STORAGE_POLICY),
     summary: mergeSummarySettings(stored.summary),
   };
 }
@@ -102,12 +102,19 @@ export async function loadSettings(): Promise<DisplaySettings> {
   try {
     const data = await chrome.storage.local.get([SETTINGS_KEY, LEGACY_SETTINGS_KEY]);
     const stored = data[SETTINGS_KEY] as Partial<DisplaySettings> | undefined;
-    if (stored) return withDefaults(stored);
+    if (stored) {
+      const normalized = withDefaults(stored);
+      if (Object.prototype.hasOwnProperty.call(stored, 'mediaStorage')) {
+        await chrome.storage.local.set({ [SETTINGS_KEY]: normalized });
+      }
+      return normalized;
+    }
 
     const legacy = data[LEGACY_SETTINGS_KEY] as Partial<DisplaySettings> | undefined;
     if (legacy) {
-      await chrome.storage.local.set({ [SETTINGS_KEY]: legacy });
-      return withDefaults(legacy);
+      const normalized = withDefaults(legacy);
+      await chrome.storage.local.set({ [SETTINGS_KEY]: normalized });
+      return normalized;
     }
     return DEFAULT_SETTINGS;
   } catch {

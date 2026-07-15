@@ -45,7 +45,7 @@ PrompTrace 会把这些分散的素材整理成可搜索的本地记录库。
 - **垃圾桶与保留时间**：记录可移到垃圾桶、恢复、立即永久删除，或按设置天数自动清理。
 - **可选摘要功能**：使用自己的 API key 与摘要 provider。摘要功能为可选并由用户设置。
 - **备份与恢复**：把本地记录库导出 / 导入为 ZIP，包含 metadata 与可取得的媒体文件。
-- **Local-first 存储**：记录保存在 IndexedDB，设置保存在 chrome.storage，下载媒体放在浏览器 Downloads 文件夹。
+- **Local-first 存储**：记录和固定格式的精简媒体预览保存在 IndexedDB，设置保存在 chrome.storage；旧版下载元数据仍可读取。
 
 ## 架构
 
@@ -54,7 +54,7 @@ Content Script  ── 选择 / overlay / 页内 UI ──▶ Background Service
       ▲                                      │
       │                                      ├─ IndexedDB repositories
       │                                      ├─ chrome.storage settings
-      │                                      ├─ chrome.downloads media files
+      │                                      ├─ IndexedDB canonical media previews
       │                                      └─ 定时摘要 / 垃圾桶清理
       │
       └── 右侧浮动面板 / Gallery
@@ -80,7 +80,7 @@ Extension pages: Popup · Library · Settings · Trash
 
 ## 技术栈
 
-WXT · TypeScript · React · Chrome Extension Manifest V3 · IndexedDB · chrome.storage · chrome.contextMenus · chrome.downloads · Vitest · Playwright
+WXT · TypeScript · React · Chrome Extension Manifest V3 · IndexedDB · chrome.storage · chrome.contextMenus · Vitest · Playwright
 
 ## 开发安装
 
@@ -127,7 +127,6 @@ npm run test:e2e     # 构建并运行 Playwright extension tests
 | 权限 | PrompTrace 使用原因 |
 | --- | --- |
 | `contextMenus` | 添加用户主动触发的 PrompTrace 右键动作，用于保存选中文字、图片或视频。 |
-| `downloads` | 把用户选择的媒体下载到 PrompTrace 文件夹；永久删除时尽可能移除 extension 创建的文件。 |
 | `storage` | 存储 UI 偏好、角色颜色、快捷键、摘要设置、垃圾桶保留天数等设置。 |
 | `alarms` | 执行本地定时任务，例如可选摘要检查与垃圾桶清理。 |
 | `activeTab` | 在用户触发动作后与当前标签页交互。 |
@@ -141,7 +140,7 @@ PrompTrace 采用 local-first 设计。
 
 - Captured records 保存在用户浏览器本地。
 - 用户设置保存在 `chrome.storage`。
-- 下载媒体保存在浏览器 Downloads 文件夹。
+- 固定格式的精简媒体预览保存在 IndexedDB；新流程不会创建或修改本地媒体文件。
 - 不出售用户数据。
 - 不使用广告 analytics。
 - 不使用远程可执行代码。
@@ -159,7 +158,7 @@ https://ak89890123.github.io/PromptTrace/privacy.html
 
 - 部分媒体无法下载，例如 blob URL、MediaSource 串流、DRM 保护媒体、需要授权的媒体、防盗链来源。
 - 远程媒体 URL 过期时，PrompTrace 会尽可能保留 metadata 与可用预览。
-- `chrome.downloads.removeFile` 只能移除 extension 创建且 Chrome 仍能识别的下载文件。
+- 旧版下载元数据只读；新捕获、删除、垃圾桶清理、备份和还原都不会触碰文件系统。
 - 重新加载未打包 extension 后，已有标签页需要刷新才会套用新的 content script。
 - 目前主要支持 Chrome。
 

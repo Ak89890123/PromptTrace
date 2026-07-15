@@ -16,9 +16,9 @@
 1. 開任意有圖片的頁面。
 2. 右鍵圖片 → **PrompTrace：加入圖片**。注意 Negative 按鈕是 disabled 的（tooltip 顯示原因）。
 3. 標記 **Input** → 按 ✓ → 分類選「生圖」→ Model 選 Custom 輸入任意名稱 → 保存。
-4. 確認 `Downloads/PrompTrace/{recordId}/` 出現圖片檔。
-5. Library 中該 record 顯示圖片 preview 與下載狀態 completed。
-6. 開 Library 確認圖片 preview、下載狀態與本地路徑。
+4. 等待 Library/Gallery 顯示本機 WebP preview 與 `ready` 狀態；不會建立 Downloads 檔案。
+5. 重新載入 Library，確認 preview 仍可顯示。
+6. 讓來源 URL 失效或切換頁面，確認 IndexedDB preview 仍可用。
 
 ## Demo 3：影片失敗 fallback
 
@@ -26,7 +26,7 @@
 2. 右鍵影片 → **PrompTrace：加入影片**。
 3. 若拿不到 URL → Side Panel 顯示 **Error Card（MEDIA_URL_NOT_FOUND）**，含可能原因與建議。
 4. 點 **只保存來源** → session 出現 source-only video asset。
-5. 標記 Input/Output → 保存 → Library 顯示影片 file card（來源頁連結）。全程不 crash。
+5. 標記 Input/Output → 保存 → Library 顯示 GIF/still preview 或 source fallback。全程不 crash。
 
 ## Demo 4：重複 / 重疊選取
 
@@ -43,11 +43,10 @@
 
 ## Demo 6：備份與還原
 
-1. 到 Settings → **備份與還原** → **匯出紀錄庫 ZIP**，下載包含 `promptrace-manifest.json`、`records.json` 與可取得 media 檔的備份包。
-2. 用 **匯入紀錄庫 ZIP** 選剛剛的備份包 → 紀錄合併回 IndexedDB，media 檔重新寫入 `Downloads/PrompTrace/{recordId}/`。
+1. 到 Settings → **備份與還原** → **匯出紀錄庫 ZIP**，下載包含 v2 manifest、`records.json`、SHA-256 metadata 與 canonical media 檔的備份包。
+2. 用 **匯入紀錄庫 ZIP** 選剛剛的備份包 → 先驗證/轉碼，再以單一 transaction 還原 Record、Asset 與 IndexedDB preview；不建立 Downloads 媒體檔。
 
 ## Demo 7：刪除連動
 
-1. 按 **刪除 Record** → 出現兩個選項。
-2. 選 **連同本地檔案刪除** → `Downloads/PrompTrace/{recordId}/` 內由 extension 下載的檔案被刪除，record 從 Library 消失。
-3. 若檔案已被手動移走 → 不 crash，提示手動處理。
+1. 按 **刪除 Record** → record、assets、preview state、tags 與 legacy FileRecord metadata 從 IndexedDB 消失。
+2. 確認既有檔案不會被刪除、搬移或修改。

@@ -1,5 +1,6 @@
-import type { AssetRole, AssetType } from './domain/enums';
+import type { AssetRole, AssetType, PreviewStatus } from './domain/enums';
 import type { CaptureSessionState } from './capture/session';
+import type { MediaQuality } from './media/quality';
 
 /**
  * Message contract between content script, background, popup and pages.
@@ -86,26 +87,11 @@ export type SessionUpdatedMessage = {
 };
 
 /** Library page → background: retry/delete a downloaded file. */
-export type RetryDownloadMessage = {
-  type: 'media/retryDownload';
-  payload: { fileRecordId: string };
-};
-
-export type DeleteRecordFilesMessage = {
-  type: 'media/deleteRecordFiles';
-  payload: { recordId: string };
-};
-
 /** Background → all: a file record changed (download progress etc). */
-export type FileRecordChangedMessage = {
-  type: 'media/fileRecordChanged';
-  payload: { fileRecordId: string };
-};
-
 /** Background -> offscreen document: create a durable local preview for a video. */
 export type GenerateVideoPreviewMessage = {
   type: 'media/generateVideoPreview';
-  payload: { url: string };
+  payload: { url: string; quality?: MediaQuality };
 };
 
 export type GenerateVideoPreviewResult = {
@@ -113,6 +99,17 @@ export type GenerateVideoPreviewResult = {
   previewRef?: string;
   kind?: 'gif' | 'still';
   reason?: string;
+};
+
+export type MediaPreviewChangedMessage = {
+  type: 'media/previewChanged';
+  payload: {
+    assetId: string;
+    recordId: string;
+    status: 'pending' | 'processing' | 'ready' | 'failed';
+    previewRef?: string;
+    errorCode?: string;
+  };
 };
 
 /** Content script / popup → background: open an extension page from extension context. */
@@ -149,6 +146,8 @@ export type GalleryAsset = {
   originalUrl?: string;
   /** Durable local data: URL thumbnail; survives remote URL expiry / page CSP. */
   previewRef?: string;
+  previewStatus?: PreviewStatus;
+  previewErrorCode?: string;
 };
 
 /** A saved record, slimmed for the in-page gallery. */
@@ -245,10 +244,8 @@ export type ExtensionMessage =
   | DismissErrorMessage
   | GetSessionMessage
   | SessionUpdatedMessage
-  | RetryDownloadMessage
-  | DeleteRecordFilesMessage
-  | FileRecordChangedMessage
   | GenerateVideoPreviewMessage
+  | MediaPreviewChangedMessage
   | OpenExtensionPageMessage
   | FlashOverlayMessage
   | TaxonomyGetMessage

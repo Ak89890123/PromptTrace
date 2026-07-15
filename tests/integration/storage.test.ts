@@ -5,14 +5,18 @@ import { IDBFactory } from 'fake-indexeddb';
 import { DB_NAME, LEGACY_DB_NAME, resetDbCache, STORES } from '@/src/storage/db';
 import {
   assetRepository,
+  claimNextPreviewJob,
   categoryRepository,
+  completePreviewJob,
   deleteRecordCascade,
+  failPreviewJob,
   purgeExpiredTrash,
   fileRecordRepository,
   recordRepository,
   tagRepository,
+  renewPreviewJob,
 } from '@/src/storage/repositories';
-import { commitSessionToLibrary, downloadPathFor, isDownloadableUrl } from '@/src/storage/commitSession';
+import { commitSessionToLibrary, isDownloadableUrl } from '@/src/storage/commitSession';
 import { BUILTIN_CATEGORY_DEFAULTS, seedDefaults } from '@/src/storage/seed';
 import type { PendingAsset } from '@/src/core/domain/entities';
 
@@ -85,7 +89,6 @@ describe('commit session', () => {
     expect(record?.sourcePageUrl).toBe('https://page.test');
     const assets = await assetRepository.byRecord(result.record.id);
     expect(assets).toHaveLength(2);
-    expect(result.pendingDownloads).toHaveLength(0);
   });
 
   it('merges same-role text captures into one text asset', async () => {
@@ -104,61 +107,55 @@ describe('commit session', () => {
     expect(assets.find((asset) => asset.role === 'negative')?.textContent).toBe('不要出現浮水印');
   });
 
-  it('creates pending FileRecord for downloadable media', async () => {
+  it('creates a durable preview job without a FileRecord or download plan', async () => {
     const result = await commitSessionToLibrary(
       [pending({ assetType: 'image', textContent: undefined, originalUrl: 'https://x.test/a.png', role: 'input' })],
       {},
+      'high',
     );
-    expect(result.pendingDownloads).toHaveLength(1);
-    const { fileRecord, url } = result.pendingDownloads[0];
-    expect(url).toBe('https://x.test/a.png');
-    expect(fileRecord.downloadStatus).toBe('pending');
-    expect(downloadPathFor(result.record.id, fileRecord)).toBe(`PrompTrace/${result.record.id}/${fileRecord.filename}`);
-    const stored = await fileRecordRepository.get(fileRecord.id);
-    expect(stored?.assetId).toBe(result.assets[0].id);
+    expect(result.pendingPreviews).toHaveLength(1);
+    expect(result.assets[0].previewStatus).toBe('pending');
+    expect(result.assets[0].previewQuality).toBe('high');
+    expect(await fileRecordRepository.byAsset(result.assets[0].id)).toHaveLength(0);
+    expect('pendingDownloads' in result).toBe(false);
   });
 
-  it('plans a compressed WebP download instead of the original image', async () => {
+  it('uses the same durable preview job shape for remote images', async () => {
     const result = await commitSessionToLibrary(
       [pending({ assetType: 'image', textContent: undefined, originalUrl: 'https://x.test/large.png', role: 'output' })],
       {},
-      { image: 'webp', video: 'original' },
     );
 
-    expect(result.pendingDownloads).toHaveLength(1);
-    expect(result.pendingDownloads[0].mode).toBe('image-webp');
-    expect(result.pendingDownloads[0].fileRecord.filename).toMatch(/-preview\.webp$/);
-    expect(result.pendingDownloads[0].fileRecord.mimeType).toBe('image/webp');
+    expect(result.assets[0].previewStatus).toBe('pending');
     expect(result.pendingPreviews).toEqual([
       expect.objectContaining({ assetId: result.assets[0].id, assetType: 'image' }),
     ]);
   });
 
-  it('keeps only a GIF preview plan when original video downloads are disabled', async () => {
+  it('keeps only a GIF preview plan for videos', async () => {
     const result = await commitSessionToLibrary(
       [pending({ assetType: 'video', textContent: undefined, originalUrl: 'https://x.test/large.mp4', role: 'output' })],
       {},
-      { image: 'original', video: 'preview-only' },
     );
 
-    expect(result.pendingDownloads).toHaveLength(0);
     expect(result.pendingPreviews).toEqual([
       expect.objectContaining({ assetId: result.assets[0].id, assetType: 'video' }),
     ]);
     expect(await fileRecordRepository.byAsset(result.assets[0].id)).toHaveLength(0);
   });
 
-  it('keeps data-url images local without starting a browser download', async () => {
-    const dataUrl = `data:image/png;base64,${'A'.repeat(180)}`;
+  it('persists only a canonical preview for data-url images', async () => {
+    const dataUrl = 'data:image/png;base64,AAAA';
+    const previewRef = 'data:image/webp;base64,AAAA';
     const result = await commitSessionToLibrary(
-      [pending({ assetType: 'image', textContent: undefined, originalUrl: dataUrl, role: 'output' })],
+      [pending({ assetType: 'image', textContent: undefined, originalUrl: dataUrl, previewRef, role: 'output' })],
       {},
     );
 
-    expect(result.pendingDownloads).toHaveLength(0);
-    expect(result.sourceOnlyAssets).toHaveLength(1);
-    expect(result.assets[0].originalUrl).toBe(dataUrl);
-    expect(result.assets[0].previewRef).toBe(dataUrl);
+    expect(result.sourceOnlyAssets).toHaveLength(0);
+    expect(result.assets[0].originalUrl).toBeUndefined();
+    expect(result.assets[0].previewRef).toBe(previewRef);
+    expect(result.assets[0].previewStatus).toBe('ready');
     expect(await fileRecordRepository.byAsset(result.assets[0].id)).toHaveLength(0);
   });
 
@@ -175,7 +172,6 @@ describe('commit session', () => {
       ],
       {},
     );
-    expect(result.pendingDownloads).toHaveLength(0);
     expect(result.sourceOnlyAssets).toHaveLength(1);
     // The record and both assets still exist.
     expect(await recordRepository.get(result.record.id)).toBeTruthy();
@@ -190,13 +186,47 @@ describe('commit session', () => {
   });
 });
 
-describe('download status transitions', () => {
-  it('failure marks FileRecord failed without touching the asset', async () => {
+describe('preview job transitions', () => {
+  it('claims and completes a pending preview with a fenced token', async () => {
+    const result = await commitSessionToLibrary(
+      [pending({ assetType: 'video', textContent: undefined, originalUrl: 'https://x.test/a.mp4', role: 'output' })],
+      {},
+    );
+    const claim = await claimNextPreviewJob(new Date('2026-07-10T00:00:00.000Z'));
+    expect(claim?.asset.id).toBe(result.assets[0].id);
+    expect(claim?.asset.previewStatus).toBe('processing');
+    expect(await renewPreviewJob(result.assets[0].id, claim!.claimToken, new Date('2026-07-10T00:00:20.000Z'))).toBe(true);
+    const claimedAt = new Date('2026-07-10T00:00:00.000Z');
+    expect(await completePreviewJob(result.assets[0].id, 'stale-token', 'data:image/gif;base64,AAAA', claimedAt)).toBe(false);
+    expect(await completePreviewJob(result.assets[0].id, claim!.claimToken, 'data:image/gif;base64,AAAA', claimedAt)).toBe(true);
+    expect((await assetRepository.get(result.assets[0].id))?.previewStatus).toBe('ready');
+  });
+
+  it('marks a claimed preview failed and does not auto-retry it', async () => {
+    const result = await commitSessionToLibrary(
+      [pending({ assetType: 'image', textContent: undefined, originalUrl: 'https://x.test/a.png', role: 'output' })],
+      {},
+    );
+    const claim = await claimNextPreviewJob();
+    expect(await failPreviewJob(result.assets[0].id, claim!.claimToken, 'MEDIA_PREVIEW_FETCH_404')).toBe(true);
+    expect((await assetRepository.get(result.assets[0].id))?.previewStatus).toBe('failed');
+    expect(await claimNextPreviewJob()).toBeUndefined();
+  });
+
+  it('keeps a failed legacy FileRecord readable without coupling it to new capture', async () => {
     const result = await commitSessionToLibrary(
       [pending({ assetType: 'image', textContent: undefined, originalUrl: 'https://x.test/a.png', role: 'input' })],
       {},
     );
-    const fr = result.pendingDownloads[0].fileRecord;
+    const fr = {
+      id: 'legacy-file',
+      assetId: result.assets[0].id,
+      filename: 'legacy.png',
+      downloadStatus: 'pending' as const,
+      deleteStatus: 'not_deleted' as const,
+      updatedAt: new Date().toISOString(),
+    };
+    await fileRecordRepository.save(fr);
     await fileRecordRepository.save({ ...fr, downloadStatus: 'failed', updatedAt: new Date().toISOString() });
     expect((await fileRecordRepository.get(fr.id))?.downloadStatus).toBe('failed');
     expect(await assetRepository.get(result.assets[0].id)).toBeTruthy();
@@ -240,7 +270,7 @@ describe('trash and delete record with file linkage', () => {
     expect((await recordRepository.listTrashed()).map((record) => record.id)).toEqual([freshRecord.record.id]);
   });
 
-  it('cascade removes record, assets, file records and tags, returning file records', async () => {
+  it('cascade removes record, assets, legacy file records and tags without file deletion', async () => {
     const result = await commitSessionToLibrary(
       [
         pending({ role: 'input', textContent: 'p' }),
@@ -250,6 +280,15 @@ describe('trash and delete record with file linkage', () => {
     );
     await tagRepository.save({ id: 't1', recordId: result.record.id, name: 'tag' });
 
+    await fileRecordRepository.save({
+      id: 'legacy-file',
+      assetId: result.assets[1].id,
+      filename: 'legacy.png',
+      downloadStatus: 'completed',
+      deleteStatus: 'not_deleted',
+      downloadId: 123,
+      updatedAt: new Date().toISOString(),
+    });
     const files = await deleteRecordCascade(result.record.id);
     expect(files).toHaveLength(1);
     expect(await recordRepository.get(result.record.id)).toBeUndefined();

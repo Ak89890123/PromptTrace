@@ -1,11 +1,11 @@
 /**
- * IndexedDB wrapper. Version 1 schema creates all stores + indexes.
+ * IndexedDB wrapper. Version 2 adds the durable preview-state index.
  * Future schema changes bump DB_VERSION and add steps in `migrate`.
  */
 
 export const DB_NAME = 'promptrace';
 export const LEGACY_DB_NAME = 'prompttrace';
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 
 export const STORES = {
   recordCategories: 'recordCategories',
@@ -20,7 +20,7 @@ export const STORES = {
 export type StoreName = (typeof STORES)[keyof typeof STORES];
 const STORE_NAMES = Object.values(STORES) as StoreName[];
 
-function migrate(db: IDBDatabase, oldVersion: number): void {
+function migrate(db: IDBDatabase, oldVersion: number, upgradeTransaction?: IDBTransaction | null): void {
   if (oldVersion < 1) {
     const categories = db.createObjectStore(STORES.recordCategories, { keyPath: 'id' });
     categories.createIndex('parentId', 'parentId');
@@ -57,6 +57,12 @@ function migrate(db: IDBDatabase, oldVersion: number): void {
     const exports = db.createObjectStore(STORES.exportRecords, { keyPath: 'id' });
     exports.createIndex('recordId', 'recordId');
   }
+  if (oldVersion < 2) {
+    if (upgradeTransaction && db.objectStoreNames.contains(STORES.assets)) {
+      const assets = upgradeTransaction.objectStore(STORES.assets);
+      if (!assets.indexNames.contains('previewStatus')) assets.createIndex('previewStatus', 'previewStatus');
+    }
+  }
 }
 
 let dbPromise: Promise<IDBDatabase> | null = null;
@@ -66,7 +72,7 @@ export function openDb(factory: IDBFactory = indexedDB): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
     const req = factory.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = (e) => migrate(req.result, e.oldVersion);
+    req.onupgradeneeded = (e) => migrate(req.result, e.oldVersion, req.transaction);
     req.onsuccess = () => {
       const db = req.result;
       migrateLegacyDb(factory, db).then(() => resolve(db), reject);
@@ -124,7 +130,7 @@ async function copyLegacyDb(factory: IDBFactory, targetDb: IDBDatabase): Promise
 function openRawDb(factory: IDBFactory, name: string): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = factory.open(name, DB_VERSION);
-    req.onupgradeneeded = (e) => migrate(req.result, e.oldVersion);
+    req.onupgradeneeded = (e) => migrate(req.result, e.oldVersion, req.transaction);
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });

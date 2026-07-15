@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Asset, LibraryRecord, RecordCategory } from '@/src/core/domain/entities';
+import type { MediaPreviewChangedMessage } from '@/src/core/messages';
 import { assetRepository, categoryRepository, recordRepository } from '@/src/storage/repositories';
 import { categoryLabel, resolveLanguage, UI_TEXT, type ResolvedLanguage } from '@/src/ui/i18n';
 import { DEFAULT_SETTINGS, loadSettings, onSettingsChanged, saveSettings, type DisplaySettings } from '@/src/ui/roleColors';
@@ -143,6 +144,13 @@ export default function App() {
 
   useEffect(() => {
     chrome.runtime.sendMessage({ type: 'library/purgeExpiredTrash', payload: {} }).finally(load);
+  }, [load]);
+  useEffect(() => {
+    const onMessage = (message: MediaPreviewChangedMessage) => {
+      if (message?.type === 'media/previewChanged') load();
+    };
+    chrome.runtime.onMessage.addListener(onMessage);
+    return () => chrome.runtime.onMessage.removeListener(onMessage);
   }, [load]);
 
   const categoryNames = useMemo(() => new Map(categories.map((category) => [category.id, categoryLabel(category, language)])), [categories, language]);

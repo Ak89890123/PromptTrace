@@ -16,6 +16,8 @@ stats-*.json
 .agents/
 .codex/
 goals/
+outputs/
+registry/
 
 # Local editor / OS noise
 .vscode/

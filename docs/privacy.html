@@ -292,7 +292,6 @@
           <h2>Permissions and why they are used</h2>
           <ul>
             <li><strong>contextMenus:</strong> adds PrompTrace actions to save selected text, images, or videos when the user chooses the menu item.</li>
-            <li><strong>downloads:</strong> downloads user-selected media into a PrompTrace folder and removes extension-created files when records are permanently deleted.</li>
             <li><strong>storage:</strong> stores settings and local metadata.</li>
             <li><strong>alarms:</strong> runs local scheduled tasks, such as optional summary checks and trash retention cleanup.</li>
             <li><strong>activeTab:</strong> interacts with the active tab after a user-initiated action.</li>
@@ -308,7 +307,7 @@
             Users can edit, restore, export, or delete saved records from the local library. Records moved to Trash remain restorable until the configured retention period expires. Users may also permanently delete records immediately.
           </p>
           <p>
-            Permanent deletion removes the record, related local metadata, related assets, tags, and extension-created local file records. When possible, the extension also removes downloaded files that it created through the browser downloads API.
+            Permanent deletion removes the record, related local metadata, related assets, tags, preview state, and any legacy FileRecord metadata. It does not delete, move, or modify files on the user's file system.
           </p>
         </article>
 

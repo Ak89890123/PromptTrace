@@ -10,21 +10,37 @@ import {
   type CaptureSessionState,
 } from '@/src/core/capture/session';
 import { checkSelection } from '@/src/core/capture/overlap';
-import type { Asset, FileRecord, PendingAsset } from '@/src/core/domain/entities';
+import type { Asset, PendingAsset } from '@/src/core/domain/entities';
 import { isRoleAllowed } from '@/src/core/domain/validation';
 import { createConflict } from '@/src/core/errors/conflictTypes';
-import { createCaptureError, mapDownloadError } from '@/src/core/errors/errorTypes';
-import type { ExtensionMessage, GenerateVideoPreviewResult } from '@/src/core/messages';
+import { createCaptureError } from '@/src/core/errors/errorTypes';
+import type { ExtensionMessage, GenerateVideoPreviewResult, MediaPreviewChangedMessage } from '@/src/core/messages';
+import {
+  bytesToDataUrl,
+  IMAGE_PREVIEW_MAX_BYTES,
+  isDataUrl,
+  parseDataUrl,
+  validateCanonicalPreviewRef,
+} from '@/src/core/media/dataUrl';
+import {
+  DEFAULT_MEDIA_QUALITY,
+  mediaQualityProfileFor,
+  normalizeMediaQuality,
+  type MediaQuality,
+} from '@/src/core/media/quality';
 import { requestPromptSummary, selectedSummaryModel, summaryPromptTextFromAssets } from '@/src/core/summary';
 import { isSummaryDailyTokenLimitReached } from '@/src/core/summaryUsage';
-import { commitSessionToLibrary, downloadPathFor } from '@/src/storage/commitSession';
+import { commitSessionToLibrary, isDownloadableUrl } from '@/src/storage/commitSession';
 import {
   assetRepository,
   categoryRepository,
+  claimNextPreviewJob,
+  completePreviewJob,
   deleteRecordCascade,
-  fileRecordRepository,
+  failPreviewJob,
   purgeExpiredTrash,
   recordRepository,
+  renewPreviewJob,
 } from '@/src/storage/repositories';
 import { seedDefaults } from '@/src/storage/seed';
 import { resolveLanguage, UI_TEXT } from '@/src/ui/i18n';
@@ -78,21 +94,9 @@ export default defineBackground(() => {
     });
   }
 
-  async function removeDownloadedFiles(fileRecords: Awaited<ReturnType<typeof deleteRecordCascade>>): Promise<void> {
-    for (const f of fileRecords) {
-      if (f.downloadId == null) continue;
-      try {
-        await chrome.downloads.removeFile(f.downloadId);
-      } catch {
-        // file may already be gone / moved — ignore
-      }
-    }
-  }
-
   async function purgeExpiredTrashNow(): Promise<{ deletedCount: number }> {
     const settings = await loadSettings();
     const result = await purgeExpiredTrash(settings.trashRetentionDays);
-    await removeDownloadedFiles(result.fileRecords);
     return { deletedCount: result.recordIds.length };
   }
 
@@ -125,11 +129,13 @@ export default defineBackground(() => {
     syncSummaryAlarm().catch(() => {});
     syncTrashAlarm().catch(() => {});
     purgeExpiredTrashNow().catch(() => {});
+    processPreviewJobs().catch(() => {});
   });
   chrome.runtime.onStartup.addListener(() => {
     syncSummaryAlarm().catch(() => {});
     syncTrashAlarm().catch(() => {});
     purgeExpiredTrashNow().catch(() => {});
+    processPreviewJobs().catch(() => {});
   });
   onSettingsChanged(() => {
     updateContextMenus();
@@ -137,6 +143,7 @@ export default defineBackground(() => {
     syncTrashAlarm().catch(() => {});
   });
   seedDefaults().catch(() => {});
+  processPreviewJobs().catch(() => {});
 
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === SUMMARY_ALARM) runAutoSummary().catch(() => {});
@@ -286,128 +293,6 @@ export default defineBackground(() => {
     return (a.textContent ?? a.originalUrl ?? '').slice(0, 120);
   }
 
-  // ---------- downloads ----------
-  async function startDownload(fileRecordId: string, url: string, recordId: string): Promise<void> {
-    const fileRecord = await fileRecordRepository.get(fileRecordId);
-    if (!fileRecord) return;
-    try {
-      const downloadId = await chrome.downloads.download({
-        url,
-        filename: downloadPathFor(recordId, fileRecord),
-        conflictAction: 'uniquify',
-        // Keep media capture seamless: files always go under Downloads/PrompTrace.
-        saveAs: false,
-      });
-      await fileRecordRepository.save({
-        ...fileRecord,
-        downloadId,
-        downloadStatus: 'downloading',
-        updatedAt: new Date().toISOString(),
-      });
-    } catch (e) {
-      await fileRecordRepository.save({
-        ...fileRecord,
-        downloadStatus: 'failed',
-        updatedAt: new Date().toISOString(),
-      });
-      setSession(
-        addError(
-          session,
-          createCaptureError(mapDownloadError(String(e)), 'background/download', {
-            sourceUrl: url,
-            assetId: fileRecord.assetId,
-            canSaveSourceOnly: true,
-            canRetry: true,
-          }),
-        ),
-      );
-    }
-  }
-
-  const MAX_PREVIEW_DIM = 768;
-
-  async function blobToDataUrl(blob: Blob): Promise<string> {
-    const bytes = new Uint8Array(await blob.arrayBuffer());
-    let binary = '';
-    const chunk = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunk) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-    }
-    return `data:${blob.type || 'application/octet-stream'};base64,${btoa(binary)}`;
-  }
-
-  /**
-   * Fetch an image and store a small, durable data: URL thumbnail on its asset.
-   * ChatGPT (and similar) serve images from short-lived signed URLs that expire,
-   * and the in-page gallery is also subject to the host page's CSP — so a remote
-   * `originalUrl` eventually fails to render and the OUTPUT goes blank. The
-   * service worker has <all_urls> host access and isn't bound by page CSP, so it
-   * can grab the bytes while the URL is still valid and keep a local copy.
-   * Best-effort: any failure just leaves the gallery falling back to originalUrl.
-   */
-  async function cacheAssetPreview(assetId: string, url: string): Promise<string | undefined> {
-    try {
-      if (!/^https?:/i.test(url)) return undefined;
-      const asset = await assetRepository.get(assetId);
-      if (!asset || asset.assetType !== 'image') return undefined;
-      if (asset.previewRef) return asset.previewRef;
-      const resp = await fetch(url);
-      if (!resp.ok) return undefined;
-      const bitmap = await createImageBitmap(await resp.blob());
-      const scale = Math.min(1, MAX_PREVIEW_DIM / Math.max(bitmap.width, bitmap.height));
-      const w = Math.max(1, Math.round(bitmap.width * scale));
-      const h = Math.max(1, Math.round(bitmap.height * scale));
-      const canvas = new OffscreenCanvas(w, h);
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        bitmap.close();
-        return undefined;
-      }
-      ctx.drawImage(bitmap, 0, 0, w, h);
-      bitmap.close();
-      const thumb = await canvas.convertToBlob({ type: 'image/webp', quality: 0.82 });
-      const previewRef = await blobToDataUrl(thumb);
-      const fresh = await assetRepository.get(assetId);
-      if (fresh) await assetRepository.save({ ...fresh, previewRef });
-      return previewRef;
-    } catch {
-      // best-effort; the gallery falls back to the original URL
-      return undefined;
-    }
-  }
-
-  async function downloadCompressedImage(fileRecordId: string, assetId: string, url: string, recordId: string): Promise<void> {
-    const previewRef = await cacheAssetPreview(assetId, url);
-    if (previewRef) await startDownload(fileRecordId, previewRef, recordId);
-    else {
-      const fileRecord = await fileRecordRepository.get(fileRecordId);
-      if (fileRecord) {
-        await fileRecordRepository.save({
-          ...fileRecord,
-          downloadStatus: 'failed',
-          updatedAt: new Date().toISOString(),
-        });
-      }
-    }
-  }
-
-  async function retryMediaDownload(fileRecord: FileRecord, asset: Asset): Promise<void> {
-    if (!asset.originalUrl) return;
-    const settings = await loadSettings();
-    if (asset.assetType === 'image' && settings.mediaStorage.image === 'webp') {
-      await downloadCompressedImage(fileRecord.id, asset.id, asset.originalUrl, asset.recordId);
-    } else if (asset.assetType === 'video' && settings.mediaStorage.video === 'preview-only') {
-      await cacheVideoPreview(asset.id, asset.originalUrl);
-      await fileRecordRepository.save({
-        ...fileRecord,
-        downloadStatus: 'not_required',
-        updatedAt: new Date().toISOString(),
-      });
-    } else {
-      await startDownload(fileRecord.id, asset.originalUrl, asset.recordId);
-    }
-  }
-
   let creatingOffscreenDocument: Promise<void> | undefined;
 
   async function ensureOffscreenDocument(): Promise<void> {
@@ -431,25 +316,135 @@ export default defineBackground(() => {
     await creatingOffscreenDocument;
   }
 
-  /** Generate a short local GIF (or still-image fallback) for a saved video. */
-  async function cacheVideoPreview(assetId: string, url: string): Promise<void> {
+  async function encodeImagePreview(source: string, quality: MediaQuality): Promise<string> {
+    const response = await fetch(source);
+    if (!response.ok) throw new Error(`MEDIA_PREVIEW_FETCH_${response.status}`);
+    const bitmap = await createImageBitmap(await response.blob());
     try {
-      if (!/^https?:/i.test(url)) return;
-      const asset = await assetRepository.get(assetId);
-      if (!asset || asset.assetType !== 'video' || asset.previewRef) return;
-      await ensureOffscreenDocument();
-      const result = await chrome.runtime.sendMessage<ExtensionMessage, GenerateVideoPreviewResult>({
-        type: 'media/generateVideoPreview',
-        payload: { url },
-      });
-      if (!result.ok || !result.previewRef) return;
-      const fresh = await assetRepository.get(assetId);
-      if (fresh && !fresh.previewRef) {
-        await assetRepository.save({ ...fresh, previewRef: result.previewRef });
+      const normalizedQuality = normalizeMediaQuality(quality);
+      const fallbackQualities: MediaQuality[] = normalizedQuality === 'high'
+        ? ['high', 'medium', 'low']
+        : normalizedQuality === 'medium'
+          ? ['medium', 'low']
+          : ['low'];
+      const selectedProfiles = fallbackQualities.map((candidate) => mediaQualityProfileFor(candidate).image);
+      for (const profile of [
+        ...selectedProfiles,
+        { maxDimension: 512, quality: 0.72 },
+        { maxDimension: 320, quality: 0.62 },
+      ]) {
+        const scale = Math.min(1, profile.maxDimension / Math.max(bitmap.width, bitmap.height));
+        const width = Math.max(2, Math.round((bitmap.width * scale) / 2) * 2);
+        const height = Math.max(2, Math.round((bitmap.height * scale) / 2) * 2);
+        const canvas = new OffscreenCanvas(width, height);
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('MEDIA_PREVIEW_CANVAS_UNAVAILABLE');
+        context.drawImage(bitmap, 0, 0, width, height);
+        const blob = await canvas.convertToBlob({ type: 'image/webp', quality: profile.quality });
+        if (blob.size <= IMAGE_PREVIEW_MAX_BYTES) {
+          const previewRef = bytesToDataUrl(new Uint8Array(await blob.arrayBuffer()), 'image/webp');
+          validateCanonicalPreviewRef(previewRef, 'image');
+          return previewRef;
+        }
       }
-    } catch {
-      // Best-effort only. The original video download remains authoritative.
+    } finally {
+      bitmap.close();
     }
+    throw new Error('MEDIA_PREVIEW_TOO_LARGE');
+  }
+
+  async function generateVideoPreview(source: string, quality: MediaQuality): Promise<string> {
+    await ensureOffscreenDocument();
+    const result = await chrome.runtime.sendMessage<ExtensionMessage, GenerateVideoPreviewResult>({
+      type: 'media/generateVideoPreview',
+      payload: { url: source, quality },
+    });
+    if (!result.ok || !result.previewRef) throw new Error(result.reason ?? 'MEDIA_VIDEO_PREVIEW_FAILED');
+    validateCanonicalPreviewRef(result.previewRef, 'video');
+    return result.previewRef;
+  }
+
+  async function preparePendingAssets(
+    assets: PendingAsset[],
+    quality: MediaQuality = DEFAULT_MEDIA_QUALITY,
+  ): Promise<PendingAsset[]> {
+    const prepared: PendingAsset[] = [];
+    for (const asset of assets) {
+      if (asset.assetType === 'text' || !asset.originalUrl || !isDataUrl(asset.originalUrl)) {
+        if (asset.assetType !== 'text' && asset.previewRef) {
+          validateCanonicalPreviewRef(asset.previewRef, asset.assetType);
+        }
+        prepared.push(asset);
+        continue;
+      }
+      // Validate the input before decoding it, then persist only the fixed
+      // canonical preview produced by the same pipeline as remote media.
+      parseDataUrl(asset.originalUrl, asset.assetType);
+      const previewRef = asset.assetType === 'image'
+        ? await encodeImagePreview(asset.originalUrl, quality)
+        : await generateVideoPreview(asset.originalUrl, quality);
+      prepared.push({ ...asset, originalUrl: undefined, previewRef, sourceOnly: false });
+    }
+    return prepared;
+  }
+
+  async function broadcastPreviewChanged(asset: Asset): Promise<void> {
+    const message: MediaPreviewChangedMessage = {
+      type: 'media/previewChanged',
+      payload: {
+        assetId: asset.id,
+        recordId: asset.recordId,
+        status: asset.previewStatus ?? 'failed',
+        previewRef: asset.previewRef,
+        errorCode: asset.previewErrorCode,
+      },
+    };
+    chrome.runtime.sendMessage(message).catch(() => {});
+    const tabs = await chrome.tabs.query({});
+    for (const tab of tabs) {
+      if (tab.id != null) chrome.tabs.sendMessage(tab.id, message).catch(() => {});
+    }
+  }
+
+  let previewProcessing: Promise<void> | undefined;
+
+  async function processPreviewJobs(): Promise<void> {
+    if (previewProcessing) return previewProcessing;
+    previewProcessing = (async () => {
+      while (true) {
+        const claim = await claimNextPreviewJob();
+        if (!claim) break;
+        const heartbeat = globalThis.setInterval(() => {
+          renewPreviewJob(claim.asset.id, claim.claimToken).catch(() => {});
+        }, 20_000);
+        try {
+          if (!claim.asset.originalUrl || !isDownloadableUrl(claim.asset.originalUrl)) {
+            throw new Error('MEDIA_PREVIEW_SOURCE_UNAVAILABLE');
+          }
+          // Assets created before previewQuality existed keep the old compact behavior.
+          const quality = normalizeMediaQuality(claim.asset.previewQuality ?? 'low');
+          const previewRef = claim.asset.assetType === 'image'
+            ? await encodeImagePreview(claim.asset.originalUrl!, quality)
+            : await generateVideoPreview(claim.asset.originalUrl!, quality);
+          const finished = await completePreviewJob(claim.asset.id, claim.claimToken, previewRef);
+          const fresh = await assetRepository.get(claim.asset.id);
+          if (finished && fresh) await broadcastPreviewChanged(fresh);
+        } catch (error) {
+          await failPreviewJob(
+            claim.asset.id,
+            claim.claimToken,
+            error instanceof Error ? error.message : String(error),
+          );
+          const fresh = await assetRepository.get(claim.asset.id);
+          if (fresh) await broadcastPreviewChanged(fresh);
+        } finally {
+          globalThis.clearInterval(heartbeat);
+        }
+      }
+    })().finally(() => {
+      previewProcessing = undefined;
+    });
+    return previewProcessing;
   }
 
   async function summarizeRecord(recordId: string): Promise<{ ok: boolean; reason?: string }> {
@@ -547,49 +542,6 @@ export default defineBackground(() => {
       await summarizeRecord(record.id);
     }
   }
-
-  chrome.downloads.onChanged.addListener(async (delta) => {
-    const matches = await fileRecordRepository.byDownloadId(delta.id);
-    const fileRecord = matches[0];
-    if (!fileRecord) return;
-
-    if (delta.state?.current === 'complete') {
-      const [item] = await chrome.downloads.search({ id: delta.id });
-      await fileRecordRepository.save({
-        ...fileRecord,
-        downloadStatus: 'completed',
-        localPath: item?.filename,
-        mimeType: item?.mime,
-        fileSize: item?.fileSize,
-        downloadedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-      chrome.runtime
-        .sendMessage({ type: 'media/fileRecordChanged', payload: { fileRecordId: fileRecord.id } })
-        .catch(() => {});
-    } else if (delta.state?.current === 'interrupted' || delta.error) {
-      await fileRecordRepository.save({
-        ...fileRecord,
-        downloadStatus: 'failed',
-        updatedAt: new Date().toISOString(),
-      });
-      const asset = await assetRepository.get(fileRecord.assetId);
-      setSession(
-        addError(
-          session,
-          createCaptureError(mapDownloadError(delta.error?.current), 'background/download', {
-            sourceUrl: asset?.originalUrl,
-            assetId: fileRecord.assetId,
-            canSaveSourceOnly: true,
-            canRetry: true,
-          }),
-        ),
-      );
-      chrome.runtime
-        .sendMessage({ type: 'media/fileRecordChanged', payload: { fileRecordId: fileRecord.id } })
-        .catch(() => {});
-    }
-  });
 
   // ---------- message routing ----------
   chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendResponse) => {
@@ -728,25 +680,6 @@ export default defineBackground(() => {
             setSession(addAsset(dismissError(session, message.payload.errorId), asset));
             return sendResponse({ ok: true });
           }
-          if (error?.assetId) {
-            const fileRecords = await fileRecordRepository.byAsset(error.assetId);
-            const fileRecord = fileRecords[0];
-            if (message.payload.action === 'retry' && fileRecord) {
-              const asset = await assetRepository.get(error.assetId);
-              if (asset?.originalUrl) {
-                setSession(dismissError(session, message.payload.errorId));
-                await retryMediaDownload(fileRecord, asset);
-                return sendResponse({ ok: true });
-              }
-            } else if (message.payload.action === 'save_source_only' && fileRecord) {
-              // Keep the asset with its source URL, give up on the file download.
-              await fileRecordRepository.save({
-                ...fileRecord,
-                downloadStatus: 'not_required',
-                updatedAt: new Date().toISOString(),
-              });
-            }
-          }
           setSession(dismissError(session, message.payload.errorId));
           return sendResponse({ ok: true });
         }
@@ -754,33 +687,27 @@ export default defineBackground(() => {
         case 'capture/commitSession': {
           try {
             const settings = await loadSettings();
-            const result = await commitSessionToLibrary(session.assets, message.payload, settings.mediaStorage);
+            const preparedAssets = await preparePendingAssets(session.assets, settings.mediaQuality);
+            const result = await commitSessionToLibrary(preparedAssets, message.payload, settings.mediaQuality);
             const tabIds = new Set(session.assets.map((a) => a.tabId).filter((t): t is number => t != null));
             conflictCandidates.clear();
             setSession(emptySession());
             for (const tabId of tabIds) {
               chrome.tabs.sendMessage(tabId, { type: 'overlay/clearAll' }).catch(() => {});
             }
-            for (const { fileRecord, url, mode } of result.pendingDownloads) {
-              if (mode === 'image-webp') {
-                void downloadCompressedImage(fileRecord.id, fileRecord.assetId, url, result.record.id);
-              } else {
-                void startDownload(fileRecord.id, url, result.record.id);
-              }
-            }
-            for (const { assetId, assetType, url } of result.pendingPreviews) {
-              if (assetType === 'image' && settings.mediaStorage.image === 'original') {
-                void cacheAssetPreview(assetId, url);
-              } else if (assetType === 'video') {
-                void cacheVideoPreview(assetId, url);
-              }
-            }
+            void result.pendingPreviews;
+            void processPreviewJobs();
             sendResponse({ ok: true, recordId: result.record.id });
           } catch (e) {
+            const reason = String(e);
+            const previewFailure = reason.includes('MEDIA_DATA_URL') || reason.includes('MEDIA_PREVIEW') || reason.includes('MEDIA_VIDEO');
             setSession(
               addError(
                 session,
-                createCaptureError('STORAGE_WRITE_FAILED', 'background/commit', { canRetry: true }),
+                createCaptureError(previewFailure ? 'MEDIA_PREVIEW_FAILED' : 'STORAGE_WRITE_FAILED', 'background/commit', {
+                  canRetry: !previewFailure,
+                  canSaveSourceOnly: false,
+                }),
               ),
             );
             sendResponse({ ok: false, error: String(e) });
@@ -788,46 +715,10 @@ export default defineBackground(() => {
           return;
         }
 
-        case 'media/retryDownload': {
-          const fileRecord = await fileRecordRepository.get(message.payload.fileRecordId);
-          if (!fileRecord) return sendResponse({ ok: false });
-          const asset = await assetRepository.get(fileRecord.assetId);
-          if (asset?.originalUrl) {
-            await retryMediaDownload(fileRecord, asset);
-            return sendResponse({ ok: true });
-          }
-          return sendResponse({ ok: false });
-        }
-
-        case 'media/deleteRecordFiles': {
-          // Delete local files for all file records of a record (downloads we created).
-          const assets = await assetRepository.byRecord(message.payload.recordId);
-          const failures: string[] = [];
-          for (const asset of assets) {
-            for (const fileRecord of await fileRecordRepository.byAsset(asset.id)) {
-              if (fileRecord.downloadId == null) continue;
-              try {
-                await chrome.downloads.removeFile(fileRecord.downloadId);
-                await fileRecordRepository.save({
-                  ...fileRecord,
-                  deleteStatus: 'deleted',
-                  updatedAt: new Date().toISOString(),
-                });
-              } catch (e) {
-                const msg = String(e);
-                const status = msg.includes('not found') || msg.includes('No such')
-                  ? 'file_not_found'
-                  : 'delete_failed';
-                await fileRecordRepository.save({
-                  ...fileRecord,
-                  deleteStatus: status,
-                  updatedAt: new Date().toISOString(),
-                });
-                failures.push(fileRecord.id);
-              }
-            }
-          }
-          return sendResponse({ ok: failures.length === 0, failures });
+        case 'media/generateVideoPreview': {
+          await ensureOffscreenDocument();
+          const result = await chrome.runtime.sendMessage<ExtensionMessage, GenerateVideoPreviewResult>(message);
+          return sendResponse(result);
         }
 
         case 'taxonomy/get': {
@@ -893,6 +784,8 @@ export default defineBackground(() => {
                   textContent: a.textContent,
                   originalUrl: a.originalUrl,
                   previewRef: a.previewRef,
+                  previewStatus: a.previewStatus,
+                  previewErrorCode: a.previewErrorCode,
                 })),
             }));
           return sendResponse({ records: gallery });
@@ -914,8 +807,7 @@ export default defineBackground(() => {
         }
 
         case 'library/deleteRecord': {
-          const fileRecords = await deleteRecordCascade(message.payload.recordId);
-          await removeDownloadedFiles(fileRecords);
+          await deleteRecordCascade(message.payload.recordId);
           return sendResponse({ ok: true });
         }
 
@@ -961,17 +853,39 @@ export default defineBackground(() => {
           if (!source) return sendResponse({ ok: false, reason: 'empty_source' });
           const now = new Date().toISOString();
           const assets = await assetRepository.byRecord(rec.id);
-          await assetRepository.save({
+          const settings = await loadSettings();
+          let prepared: PendingAsset;
+          try {
+            [prepared] = await preparePendingAssets([{
+              id: crypto.randomUUID(),
+              assetType: message.payload.assetType,
+              role: message.payload.role,
+              originalUrl: source,
+              previewRef: message.payload.previewRef,
+              pageUrl: rec.sourcePageUrl ?? '',
+              pageTitle: rec.sourcePageTitle ?? '',
+              capturedAt: now,
+            }], settings.mediaQuality);
+          } catch (error) {
+            return sendResponse({ ok: false, reason: error instanceof Error ? error.message : String(error) });
+          }
+          const remoteSource = prepared.originalUrl && isDownloadableUrl(prepared.originalUrl);
+          const newAsset: Asset = {
             id: crypto.randomUUID(),
             recordId: rec.id,
             assetType: message.payload.assetType,
             role: message.payload.role,
-            originalUrl: source,
-            previewRef: message.payload.previewRef ?? source,
+            originalUrl: prepared.originalUrl,
+            previewRef: prepared.previewRef,
+            previewStatus: prepared.previewRef ? 'ready' : remoteSource ? 'pending' : undefined,
+            previewUpdatedAt: prepared.previewRef ? now : undefined,
+            previewQuality: settings.mediaQuality,
             orderIndex: Math.max(-1, ...assets.map((asset) => asset.orderIndex)) + 1,
             capturedAt: now,
-          });
+          };
+          await assetRepository.save(newAsset);
           await recordRepository.save({ ...rec, updatedAt: now });
+          if (remoteSource) void processPreviewJobs();
           return sendResponse({ ok: true });
         }
 

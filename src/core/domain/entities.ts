@@ -1,5 +1,6 @@
 import type { SummaryProvider, SummaryStatus, SummaryTokenUsage } from '../summary';
-import type { AssetRole, AssetType, DeleteStatus, DownloadStatus } from './enums';
+import type { MediaQuality } from '../media/quality';
+import type { AssetRole, AssetType, DeleteStatus, DownloadStatus, PreviewStatus } from './enums';
 
 export type RecordCategory = {
   id: string;
@@ -76,6 +77,14 @@ export type Asset = {
   textContent?: string;
   originalUrl?: string;
   previewRef?: string;
+  previewStatus?: PreviewStatus;
+  previewErrorCode?: string;
+  previewLeaseUntil?: string;
+  previewClaimToken?: string;
+  previewUpdatedAt?: string;
+  previewAttemptCount?: number;
+  /** Preset captured with this asset; later settings changes do not alter its preview job. */
+  previewQuality?: MediaQuality;
 
   pageUrl?: string;
   pageTitle?: string;
@@ -122,6 +131,8 @@ export type PendingAsset = {
   role: AssetRole | null; // null = pending (not yet classified)
   textContent?: string;
   originalUrl?: string;
+  /** Prepared canonical preview. Raw data URLs must never be persisted as originalUrl. */
+  previewRef?: string;
   pageUrl: string;
   pageTitle: string;
   tabId?: number;
