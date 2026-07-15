@@ -93,7 +93,10 @@ export function createOverlayManager() {
     captureSelection,
     captureMediaElement,
     trackAsset: (asset: PendingAsset, anchor: CaptureAnchor): void => {
-      tracked.set(asset.id, { id: asset.id, range: anchor.range });
+      tracked.set(asset.id, {
+        id: asset.id,
+        range: asset.assetType === 'text' ? anchor.range : undefined,
+      });
     },
     removeAsset: (id: string): void => {
       tracked.delete(id);
