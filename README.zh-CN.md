@@ -67,7 +67,7 @@ Extension pages: Popup · Library · Settings · Trash
 | 路径 | 用途 |
 | --- | --- |
 | `entrypoints/background.ts` | Service worker、消息路由、右键菜单、下载、alarms、摘要与垃圾桶任务。 |
-| `entrypoints/content/` | Content script、shadow-root UI、浮动面板、overlay 边框、文字 / 媒体采集。 |
+| `entrypoints/content/` | Content script、shadow-root UI、浮动面板、文字 / 媒体采集。 |
 | `entrypoints/popup/` | 工具栏 popup，用于快速设置与导航。 |
 | `entrypoints/library/` | 完整本地记录库 dashboard。 |
 | `entrypoints/settings/` | 详细设置、分类、角色颜色、备份恢复、摘要设置。 |

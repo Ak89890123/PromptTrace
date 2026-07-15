@@ -5,9 +5,9 @@
 ## Demo 1：文字工作流
 
 1. 開任意文章頁（例如 Wikipedia）。
-2. 反白一段段落 → 右鍵 → **PrompTrace：加入選取文字**。頁面出現灰色（Pending）框線、Side Panel 出現 Text item。
-3. 在 Side Panel 點 **Input Reference** → 框線變紫色。
-4. 再反白另一段 → 右鍵加入 → 標記 **Input** → 框線變青色。
+2. 反白一段段落 → 右鍵 → **PrompTrace：加入選取文字**。Side Panel 出現 Text item，頁面內容不加框線。
+3. 在 Side Panel 點 **Input Reference** → item 移到對應角色區。
+4. 再反白另一段 → 右鍵加入 → 標記 **Input** → item 角色更新。
 5. 按 **✓ 保存** → Step 1 選「生文」（或快速新增自訂分類）→ Step 2 選 Not applicable → 保存。
 6. 點「在 Library 中查看」確認 record。
 
@@ -31,7 +31,7 @@
 ## Demo 4：重複 / 重疊選取
 
 1. 反白一段文字加入。
-2. 再反白完全相同文字加入 → 不新增、原框線閃爍、Conflict Card 提示重複。
+2. 再反白完全相同文字加入 → 不新增、Conflict Card 提示重複。
 3. 反白與原選取部分重疊的範圍 → Conflict Card 提供「用新範圍取代 / 取消新選取」。
 
 ## Demo 5：Library 操作

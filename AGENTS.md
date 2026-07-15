@@ -5,7 +5,7 @@
 PrompTrace is a local-first WXT Chrome extension using TypeScript, React, Manifest V3, IndexedDB, `chrome.storage`, context menus, downloads, and clipboard APIs. It has no backend, account system, cloud sync, LLM API calls, or analytics.
 
 - `entrypoints/background.ts`: service worker, context menus, capture session source of truth, download tracking, message routing, and library mutation actions.
-- `entrypoints/content/`: content script, shadow-root UI, overlay frames, selection/media capture, and the right-edge in-page panel/gallery.
+- `entrypoints/content/`: content script, shadow-root UI, selection/media capture, and the right-edge in-page panel/gallery.
 - `entrypoints/popup/`, `entrypoints/library/`, `entrypoints/settings/`: extension pages for quick settings, library browsing, and detailed settings.
 - `src/core/`: pure TypeScript domain logic, validation, capture/session reducers, overlap detection, exports, copy bundle composition, and error/conflict models. Prefer keeping Chrome APIs out of this layer.
 - `src/storage/`: IndexedDB schema, repositories, seed data, and commit/delete services.

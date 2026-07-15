@@ -38,9 +38,9 @@
           };
           session.assets.push(asset);
           broadcast();
-          // mimic background → content overlay echo
+          // mimic background → content capture echo
           for (const fn of listeners) {
-            fn({ type: 'overlay/assetAdded', payload: { asset } }, {}, () => {});
+            fn({ type: 'capture/assetAdded', payload: { asset } }, {}, () => {});
           }
           return { ok: true };
         }

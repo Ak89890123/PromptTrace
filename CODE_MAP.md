@@ -7,7 +7,7 @@
 
 ## Main Entrypoints
 - `entrypoints/background.ts`: service worker, context menus, capture session state, download tracking, extension-page navigation messages, and library mutation routes.
-- `entrypoints/content/`: injected shadow-root UI for selection toolbar, capture panel, right-edge gallery, card editor, lightbox, and overlay frames.
+- `entrypoints/content/`: injected shadow-root UI for selection toolbar, capture panel, right-edge gallery, card editor, lightbox, and selection/media capture.
 - `entrypoints/popup/`: toolbar popup for quick settings and links to Library / Settings.
 - `entrypoints/library/`: full-page local record browser with left filters, central record cards, and right detail inspector.
 - `entrypoints/settings/`: detailed settings for language, interaction/display controls, categories, local files, backup/restore, and BYOK summary provider/API key/system prompt/token usage.

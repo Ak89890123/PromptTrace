@@ -7,7 +7,7 @@
       body { margin: 0; font: 16px/1.6 system-ui, sans-serif; background: #f7f7f8; }
       header { padding: 12px 20px; border-bottom: 1px solid #e5e5e5; font-weight: 600; }
       /* The conversation pane scrolls on its own (nested overflow), like ChatGPT.
-         The page body itself does NOT scroll — this is what broke overlay frames
+         The page body itself does NOT scroll — nested scrolling remains part of the fixture
          before the capture-phase scroll listener fix. */
       #thread { height: 320px; overflow: auto; padding: 16px 20px; }
       .msg { max-width: 640px; margin: 0 0 28px; padding: 14px 16px; border-radius: 12px; background: #fff; }
@@ -33,7 +33,7 @@
     <main id="thread">
       <div class="msg" id="msg-1">
         The quick brown fox jumps over the lazy dog. This paragraph is the
-        capture target — selecting it should draw a role-colored overlay frame
+        capture target — selecting it should keep the page content unchanged
         that tracks this nested scroll container.
       </div>
       <div class="msg user" id="msg-2">A reply message to add vertical content.</div>

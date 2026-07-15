@@ -8,9 +8,8 @@ test('popup renders quick toggles and persists a change across reopen', async ({
   await page.reload();
 
   await expect(page.getByText('快速開關')).toBeVisible();
-  await expect(page.locator('label.tog-row')).toHaveCount(6);
+  await expect(page.locator('label.tog-row')).toHaveCount(5);
   await expect(page.getByText('右邊漂浮小卡')).toBeVisible();
-  await expect(page.getByText('選取框線')).toBeVisible();
   await expect(page.getByText('快速複製列')).toHaveCount(0);
   await expect(page.getByText('LANGUAGE')).toBeVisible();
   await expect(page.getByText('介面語言')).toBeVisible();

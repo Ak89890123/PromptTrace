@@ -583,15 +583,6 @@ function DisplaySettingsSection({
           <input
             type="checkbox"
             style={{ width: 'auto' }}
-            checked={settings.overlayEnabled}
-            onChange={(e) => onPatch({ overlayEnabled: e.target.checked })}
-          />
-          {t.pageFrame}
-        </label>
-        <label className="settings-control-row">
-          <input
-            type="checkbox"
-            style={{ width: 'auto' }}
             checked={settings.copyTrayEnabled}
             onChange={(e) => onPatch({ copyTrayEnabled: e.target.checked })}
           />
