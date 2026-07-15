@@ -34,7 +34,7 @@ export default defineContentScript({
           overlay.clearTracked();
           return sendResponse({ ok: true });
         case 'capture/assetReplaced': {
-          const anchor = overlay.consumePendingAnchor() ?? {};
+          const anchor = overlay.consumePendingAnchor() ?? overlay.anchorOf(message.payload.oldId) ?? {};
           overlay.removeAsset(message.payload.oldId);
           overlay.trackAsset(message.payload.asset, anchor);
           return sendResponse({ ok: true });

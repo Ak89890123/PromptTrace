@@ -109,5 +109,9 @@ export function createOverlayManager() {
       pendingAnchor = null;
       return anchor;
     },
+    anchorOf: (id: string): CaptureAnchor | null => {
+      const item = tracked.get(id);
+      return item?.range ? { range: item.range } : null;
+    },
   };
 }
