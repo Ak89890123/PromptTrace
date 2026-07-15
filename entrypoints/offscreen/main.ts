@@ -1,18 +1,10 @@
 import { GIFEncoder, applyPalette, quantize } from 'gifenc';
 import type { ExtensionMessage, GenerateVideoPreviewResult } from '@/src/core/messages';
-import {
-  VIDEO_PREVIEW_MAX_BYTES,
-  previewFrameTimes,
-  scaledPreviewDimensions,
-} from '@/src/core/media/videoPreview';
+import { bytesToDataUrl, validateCanonicalPreviewRef } from '@/src/core/media/dataUrl';
+import { mediaQualityProfileFor, type GifQualityProfile, type MediaQuality } from '@/src/core/media/quality';
+import { previewFrameTimes, scaledPreviewDimensions } from '@/src/core/media/videoPreview';
 
 const LOAD_TIMEOUT_MS = 20_000;
-
-type GifProfile = { maxDimension: number; fps: number; colors: number };
-const GIF_PROFILES: GifProfile[] = [
-  { maxDimension: 320, fps: 8, colors: 128 },
-  { maxDimension: 240, fps: 6, colors: 96 },
-];
 
 function waitForEvent(target: EventTarget, event: string, timeoutMs = LOAD_TIMEOUT_MS): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -49,16 +41,7 @@ function dimensions(video: HTMLVideoElement, maxDimension: number): { width: num
   return scaledPreviewDimensions(video.videoWidth, video.videoHeight, maxDimension);
 }
 
-function bytesToDataUrl(bytes: Uint8Array, mimeType: string): string {
-  let binary = '';
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-  }
-  return `data:${mimeType};base64,${btoa(binary)}`;
-}
-
-async function encodeGif(video: HTMLVideoElement, profile: GifProfile): Promise<Uint8Array> {
+async function encodeGif(video: HTMLVideoElement, profile: GifQualityProfile): Promise<Uint8Array> {
   const { width, height } = dimensions(video, profile.maxDimension);
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -86,8 +69,11 @@ async function encodeGif(video: HTMLVideoElement, profile: GifProfile): Promise<
   return gif.bytes();
 }
 
-async function encodeStill(video: HTMLVideoElement): Promise<string> {
-  const { width, height } = dimensions(video, 320);
+async function encodeStill(
+  video: HTMLVideoElement,
+  profile: { maxDimension: number; quality: number },
+): Promise<string> {
+  const { width, height } = dimensions(video, profile.maxDimension);
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -95,14 +81,15 @@ async function encodeStill(video: HTMLVideoElement): Promise<string> {
   if (!context) throw new Error('canvas_unavailable');
   await seek(video, 0);
   context.drawImage(video, 0, 0, width, height);
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/webp', 0.78));
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/webp', profile.quality));
   if (!blob) throw new Error('still_encode_failed');
   return bytesToDataUrl(new Uint8Array(await blob.arrayBuffer()), 'image/webp');
 }
 
-async function generateVideoPreview(url: string): Promise<GenerateVideoPreviewResult> {
+async function generateVideoPreview(url: string, quality?: MediaQuality): Promise<GenerateVideoPreviewResult> {
   let objectUrl: string | undefined;
   try {
+    const profile = mediaQualityProfileFor(quality).video;
     const response = await fetch(url);
     if (!response.ok) return { ok: false, reason: `fetch_${response.status}` };
     objectUrl = URL.createObjectURL(await response.blob());
@@ -113,14 +100,18 @@ async function generateVideoPreview(url: string): Promise<GenerateVideoPreviewRe
     await waitForEvent(video, 'loadedmetadata');
     if (!video.videoWidth || !video.videoHeight) return { ok: false, reason: 'no_video_dimensions' };
 
-    for (const profile of GIF_PROFILES) {
-      const bytes = await encodeGif(video, profile);
-      if (bytes.byteLength <= VIDEO_PREVIEW_MAX_BYTES) {
-        return { ok: true, previewRef: bytesToDataUrl(bytes, 'image/gif'), kind: 'gif' };
+    for (const gifProfile of [profile.primary, profile.fallback]) {
+      const bytes = await encodeGif(video, gifProfile);
+      if (bytes.byteLength <= profile.maxBytes) {
+        const previewRef = bytesToDataUrl(bytes, 'image/gif');
+        validateCanonicalPreviewRef(previewRef, 'video');
+        return { ok: true, previewRef, kind: 'gif' };
       }
     }
 
-    return { ok: true, previewRef: await encodeStill(video), kind: 'still' };
+    const previewRef = await encodeStill(video, profile.still);
+    validateCanonicalPreviewRef(previewRef, 'video');
+    return { ok: true, previewRef, kind: 'still' };
   } catch (error) {
     return { ok: false, reason: error instanceof Error ? error.message : String(error) };
   } finally {
@@ -133,7 +124,7 @@ let queue = Promise.resolve();
 chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
   if (message.type !== 'media/generateVideoPreview') return;
   queue = queue
-    .then(async () => sendResponse(await generateVideoPreview(message.payload.url)))
+    .then(async () => sendResponse(await generateVideoPreview(message.payload.url, message.payload.quality)))
     .catch((error) => sendResponse({ ok: false, reason: String(error) } satisfies GenerateVideoPreviewResult));
   return true;
 });

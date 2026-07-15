@@ -2,6 +2,8 @@
 
 ## Status
 
+Media persistence details are superseded by [ADR-0005](ADR-0005-indexeddb-canonical-media-previews.md).
+
 Accepted（2026-06-12）
 
 ## Context

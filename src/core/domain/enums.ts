@@ -15,6 +15,8 @@ export type DeleteStatus =
   | 'file_not_found'
   | 'delete_failed';
 
+export type PreviewStatus = 'pending' | 'processing' | 'ready' | 'failed';
+
 export const ASSET_ROLES: AssetRole[] = [
   'input',
   'input_reference',

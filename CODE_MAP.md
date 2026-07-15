@@ -3,7 +3,7 @@
 ## Product Shape
 - PrompTrace is a local-first Chrome MV3 extension for capturing prompt workflow assets as Input, Input Reference, Negative, and Output.
 - It has no backend, account system, analytics, or cloud sync. Optional BYOK prompt summaries can call OpenAI, Gemini, Claude, or OpenRouter only after the user enables them.
-- User data stays in IndexedDB, `chrome.storage`, and extension-managed downloads under `Downloads/PrompTrace/`.
+- User data stays in IndexedDB and `chrome.storage`; canonical compact media previews are stored in IndexedDB and legacy download metadata remains read-only.
 
 ## Main Entrypoints
 - `entrypoints/background.ts`: service worker, context menus, capture session state, download tracking, extension-page navigation messages, and library mutation routes.

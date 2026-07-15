@@ -6,6 +6,7 @@ import type {
   RecordCategory,
   Tag,
 } from '../core/domain/entities';
+import type { PreviewStatus } from '../core/domain/enums';
 import { openDb, reqAsPromise, STORES, tx, type StoreName } from './db';
 
 async function getAll<T>(store: StoreName): Promise<T[]> {
@@ -101,6 +102,144 @@ export const exportRecordRepository = {
   list: () => getAll<ExportRecordEntry>(STORES.exportRecords),
   save: (e: ExportRecordEntry) => put(STORES.exportRecords, e),
 };
+
+/** Persist a newly captured record and all of its assets as one atomic unit. */
+export async function commitRecordAndAssets(record: LibraryRecord, assets: Asset[]): Promise<void> {
+  const db = await openDb();
+  await tx(db, [STORES.libraryRecords, STORES.assets], 'readwrite', (transaction) => {
+    transaction.objectStore(STORES.libraryRecords).add(record);
+    for (const asset of assets) transaction.objectStore(STORES.assets).add(asset);
+  });
+}
+
+const PREVIEW_LEASE_MS = 60_000;
+
+export type PreviewJobClaim = {
+  asset: Asset;
+  claimToken: string;
+};
+
+function leaseExpired(value: string | undefined, now: string): boolean {
+  return !value || value <= now;
+}
+
+function claimablePreview(asset: Asset, now: string): boolean {
+  if (asset.assetType === 'text' || !asset.originalUrl || asset.previewRef) return false;
+  if (asset.previewStatus === 'pending') return true;
+  return asset.previewStatus === 'processing' && leaseExpired(asset.previewLeaseUntil, now);
+}
+
+/** Claim one pending/expired preview job using an IndexedDB write transaction. */
+export async function claimNextPreviewJob(now = new Date()): Promise<PreviewJobClaim | undefined> {
+  const db = await openDb();
+  const nowIso = now.toISOString();
+  let claim: PreviewJobClaim | undefined;
+  await tx(db, STORES.assets, 'readwrite', (transaction) => {
+    const store = transaction.objectStore(STORES.assets);
+    const request = store.getAll();
+    request.onsuccess = () => {
+      const asset = (request.result as Asset[]).find((candidate) => claimablePreview(candidate, nowIso));
+      if (!asset) return;
+      const claimToken = crypto.randomUUID();
+      const updated: Asset = {
+        ...asset,
+        previewStatus: 'processing',
+        previewClaimToken: claimToken,
+        previewLeaseUntil: new Date(now.getTime() + PREVIEW_LEASE_MS).toISOString(),
+        previewUpdatedAt: nowIso,
+        previewAttemptCount: (asset.previewAttemptCount ?? 0) + 1,
+      };
+      store.put(updated);
+      claim = { asset: updated, claimToken };
+    };
+  });
+  return claim;
+}
+
+async function finishPreviewJob(
+  assetId: string,
+  claimToken: string,
+  result: { status: PreviewStatus; previewRef?: string; errorCode?: string },
+  now = new Date(),
+): Promise<boolean> {
+  const db = await openDb();
+  const nowIso = now.toISOString();
+  let finished = false;
+  await tx(db, STORES.assets, 'readwrite', (transaction) => {
+    const store = transaction.objectStore(STORES.assets);
+    const request = store.get(assetId);
+    request.onsuccess = () => {
+      const asset = request.result as Asset | undefined;
+      if (!asset) return;
+      // A stale worker can never overwrite a newer claimant. A ready asset
+      // is also an idempotent terminal success.
+      if (asset.previewStatus === 'ready' && asset.previewRef) {
+        finished = true;
+        return;
+      }
+      if (
+        asset.previewStatus !== 'processing' ||
+        asset.previewClaimToken !== claimToken ||
+        leaseExpired(asset.previewLeaseUntil, nowIso)
+      ) return;
+      const updated: Asset = {
+        ...asset,
+        previewStatus: result.status,
+        previewRef: result.previewRef,
+        previewErrorCode: result.errorCode,
+        previewLeaseUntil: undefined,
+        previewClaimToken: undefined,
+        previewUpdatedAt: nowIso,
+      };
+      store.put(updated);
+      finished = true;
+    };
+  });
+  return finished;
+}
+
+export function completePreviewJob(
+  assetId: string,
+  claimToken: string,
+  previewRef: string,
+  now?: Date,
+): Promise<boolean> {
+  return finishPreviewJob(assetId, claimToken, { status: 'ready', previewRef }, now);
+}
+
+export async function renewPreviewJob(
+  assetId: string,
+  claimToken: string,
+  now = new Date(),
+): Promise<boolean> {
+  const db = await openDb();
+  const nowIso = now.toISOString();
+  let renewed = false;
+  await tx(db, STORES.assets, 'readwrite', (transaction) => {
+    const store = transaction.objectStore(STORES.assets);
+    const request = store.get(assetId);
+    request.onsuccess = () => {
+      const asset = request.result as Asset | undefined;
+      if (!asset || asset.previewStatus !== 'processing' || asset.previewClaimToken !== claimToken || leaseExpired(asset.previewLeaseUntil, nowIso)) return;
+      store.put({
+        ...asset,
+        previewLeaseUntil: new Date(now.getTime() + PREVIEW_LEASE_MS).toISOString(),
+        previewUpdatedAt: nowIso,
+      } satisfies Asset);
+      renewed = true;
+    };
+  });
+  return renewed;
+}
+
+export function failPreviewJob(
+  assetId: string,
+  claimToken: string,
+  errorCode: string,
+  now?: Date,
+): Promise<boolean> {
+  return finishPreviewJob(assetId, claimToken, { status: 'failed', errorCode }, now);
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

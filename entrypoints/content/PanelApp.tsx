@@ -14,7 +14,7 @@ import {
 import { assetTypeLabel, categoryLabel, resolveLanguage, roleLabel, UI_TEXT, type ResolvedLanguage, type UiText } from '@/src/ui/i18n';
 import type { OverlayManager } from './overlay';
 import { LOGO_DATA_URL } from './logo';
-import type { GalleryAsset, GalleryRecord, ListRecordsResult } from '@/src/core/messages';
+import type { GalleryAsset, GalleryRecord, ListRecordsResult, MediaPreviewChangedMessage } from '@/src/core/messages';
 import { PrompTraceWordmark } from '@/src/ui/PrompTraceWordmark';
 
 const send = (message: unknown) => chrome.runtime.sendMessage(message).catch(() => undefined);
@@ -56,6 +56,7 @@ type HoverPreviewRequest = {
 export default function PanelApp({ overlay }: { overlay: OverlayManager }) {
   const [settings, setSettings] = useState<DisplaySettings>(DEFAULT_SETTINGS);
   const [session, setSession] = useState<CaptureSessionState>(emptySession());
+  const [previewRefreshSignal, setPreviewRefreshSignal] = useState(0);
 
   useEffect(() => {
     loadSettings().then(setSettings);
@@ -66,6 +67,9 @@ export default function PanelApp({ overlay }: { overlay: OverlayManager }) {
     const listener = (message: { type?: string; payload?: { state?: CaptureSessionState } }) => {
       if (message?.type === 'capture/sessionUpdated' && message.payload?.state) {
         setSession(message.payload.state);
+      }
+      if ((message as MediaPreviewChangedMessage)?.type === 'media/previewChanged') {
+        setPreviewRefreshSignal((value) => value + 1);
       }
     };
     chrome.runtime.onMessage.addListener(listener);
@@ -78,7 +82,7 @@ export default function PanelApp({ overlay }: { overlay: OverlayManager }) {
     <>
       {settings.selectionToolbarEnabled && <SelectionToolbar overlay={overlay} settings={settings} language={language} />}
       {settings.edgePanelEnabled && <CapturePanel session={session} settings={settings} t={t} language={language} />}
-      {settings.edgePanelEnabled && <GalleryPanel settings={settings} t={t} language={language} />}
+      {settings.edgePanelEnabled && <GalleryPanel settings={settings} t={t} language={language} previewRefreshSignal={previewRefreshSignal} />}
     </>
   );
 }
@@ -520,10 +524,12 @@ function GalleryPanel({
   settings,
   t,
   language,
+  previewRefreshSignal,
 }: {
   settings: DisplaySettings;
   t: UiText;
   language: ResolvedLanguage;
+  previewRefreshSignal: number;
 }) {
   const [open, setOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
@@ -537,6 +543,9 @@ function GalleryPanel({
   const panelPlacementLockedRef = useRef(false);
   const [panelTopPx, setPanelTopPx] = useState<number | null>(null);
   const [refreshSignal, setRefreshSignal] = useState(0);
+  useEffect(() => {
+    if (previewRefreshSignal > 0) setRefreshSignal((value) => value + 1);
+  }, [previewRefreshSignal]);
   const panelWidth = settings.cardLayout === 'split' ? 'min(440px, 94vw)' : 'min(267px, 94vw)';
   const edgeStyle = { '--pt-gallery-panel-width': panelWidth } as CSSProperties;
   // The tab sits where the user put it; the panel keeps its natural content height

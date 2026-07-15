@@ -4,7 +4,7 @@ import type { BrowserContext, Locator, Page } from '@playwright/test';
 const CAPTURE_TEXT = 'The quick brown fox jumps over the lazy dog';
 const QUICK_TEXT = 'Manual note from right click quick add';
 const PASTED_TEXT = 'Manual note from card paste';
-const PASTED_IMAGE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80"><rect width="120" height="80" fill="#14B8A6"/><circle cx="60" cy="40" r="22" fill="#FFFFFF"/></svg>`;
+const PASTED_IMAGE_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
 async function createSavedRecord(page: Page) {
   await createPendingRecord(page);
@@ -127,12 +127,14 @@ test('pasting on a saved card opens role choices without an input panel', async 
 test('pasting an image on a saved card previews the image and saves it with media roles', async ({ context }) => {
   const { page, card } = await createGalleryCard(context);
 
-  await card.evaluate((el, svg) => {
-    const file = new File([svg], 'pasted-image.svg', { type: 'image/svg+xml' });
+  await card.evaluate((el, base64) => {
+    const binary = atob(base64);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const file = new File([bytes], 'pasted-image.png', { type: 'image/png' });
     const transfer = new DataTransfer();
     transfer.items.add(file);
     el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true }));
-  }, PASTED_IMAGE_SVG);
+  }, PASTED_IMAGE_PNG_BASE64);
 
   const quickEditor = page.locator('.pt-quick-editor');
   await expect(quickEditor).toBeVisible({ timeout: 5_000 });
@@ -145,7 +147,7 @@ test('pasting an image on a saved card previews the image and saves it with medi
   await expect(quickEditor.locator('.pt-choices')).toContainText(/Output|輸出/);
   await quickEditor.locator('.pt-choices button').first().click();
 
-  await expect(card.locator('.pt-gthumb[src^="data:image/svg+xml"]')).toBeVisible({ timeout: 5_000 });
+  await expect(card.locator('.pt-gthumb[src^="data:image/webp"]')).toBeVisible({ timeout: 5_000 });
 });
 
 test('quick-add flyout for a bottom card stays above the viewport bottom', async ({ context }) => {

@@ -8,7 +8,6 @@ export default defineConfig({
       'Capture and organize AI prompts, references, negatives, and outputs in a local searchable library.',
     permissions: [
       'contextMenus',
-      'downloads',
       'storage',
       'alarms',
       'activeTab',

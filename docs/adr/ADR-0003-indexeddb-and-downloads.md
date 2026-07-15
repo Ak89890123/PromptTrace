@@ -2,6 +2,8 @@
 
 ## Status
 
+Superseded by [ADR-0005](ADR-0005-indexeddb-canonical-media-previews.md). This file records the historical v1 decision only; it is not the current runtime contract.
+
 Accepted（2026-06-12）
 
 ## Context

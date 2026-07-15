@@ -1,13 +1,14 @@
 import { useEffect, useId, useState } from 'react';
-import type { Asset, FileRecord, LibraryRecord, RecordCategory } from '@/src/core/domain/entities';
+import type { Asset, LibraryRecord, RecordCategory } from '@/src/core/domain/entities';
 import {
   backupFilename,
   createPromptTraceBackupZip,
   parsePromptTraceBackupZip,
-  promptTraceBackupMediaDownloadFilename,
-  sanitizeBackupFileRecord,
+  promptTraceBackupMediaPath,
   type BackupMediaEntry,
 } from '@/src/core/backup/archive';
+import { bytesToDataUrl, dataUrlToBlob, IMAGE_PREVIEW_MAX_BYTES, validateCanonicalPreviewRef } from '@/src/core/media/dataUrl';
+import { formatMediaAssetTotalSize, summarizeMediaAssetStorage } from '@/src/core/media/storageSize';
 import { ROLE_LABELS, type AssetRole } from '@/src/core/domain/enums';
 import { validateCategoryName } from '@/src/core/domain/validation';
 import { formatHotkeyFromEvent } from '@/src/core/hotkeys';
@@ -23,10 +24,10 @@ import { summaryUsageStats } from '@/src/core/summaryUsage';
 import {
   assetRepository,
   categoryRepository,
-  fileRecordRepository,
   recordRepository,
   tagRepository,
 } from '@/src/storage/repositories';
+import { prepareBackupRestore, restorePreparedBackup } from '@/src/storage/backupRestore';
 import { BUILTIN_CATEGORY_DEFAULTS } from '@/src/storage/seed';
 import { categoryLabel, resolveLanguage, roleLabel, UI_TEXT, type ResolvedLanguage, type UiText } from '@/src/ui/i18n';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type DisplaySettings } from '@/src/ui/roleColors';
@@ -84,7 +85,7 @@ function colorFamilyFor(value: string): string {
   const normalized = value.toUpperCase();
   return COLOR_PALETTES.find((palette) => palette.shades.includes(normalized))?.id ?? 'cyan';
 }
-
+// End of settings page sections.
 export default function App() {
   const [refresh, setRefresh] = useState(0);
   const { categories } = useTaxonomy(refresh);
@@ -127,10 +128,9 @@ export default function App() {
             <InteractionDisplaySettings settings={settings} onPatch={patchSettings} t={t} language={language} />
             <div className="settings-inner-divider settings-primary-divider" />
             <DataFilesSettingsSection
-              t={t}
-              language={language}
               settings={settings}
               onPatch={patchSettings}
+              t={t}
             />
           </section>
         </div>
@@ -149,7 +149,6 @@ export default function App() {
     </div>
   );
 }
-
 function LanguageSettings({
   settings,
   onPatch,
@@ -1034,222 +1033,171 @@ function downloadBlob(filename: string, blob: Blob): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function mediaExtension(asset: Asset, blob?: Blob): string {
-  if (blob?.type === 'image/gif') return 'gif';
-  if (blob?.type === 'image/webp') return 'webp';
-  if (blob?.type === 'image/jpeg') return 'jpg';
-  if (blob?.type === 'image/png') return 'png';
-  if (blob?.type === 'video/webm') return 'webm';
-  if (blob?.type === 'video/mp4') return 'mp4';
-  return asset.assetType === 'image' ? 'png' : 'mp4';
-}
-
-async function blobFromRef(ref: string | undefined): Promise<{ blob: Blob; source: BackupMediaEntry['source'] } | null> {
-  if (!ref) return null;
-  if (ref.startsWith('data:')) {
-    return { blob: await (await fetch(ref)).blob(), source: 'data-url' };
-  }
-  if (/^https?:/i.test(ref)) {
-    try {
-      return { blob: await (await fetch(ref)).blob(), source: 'original' };
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
-async function mediaBlobForBackup(
-  asset: Asset,
-  existingFile: FileRecord | undefined,
-): Promise<{ blob: Blob; source: BackupMediaEntry['source'] } | null> {
-  const compactOnly =
-    (asset.assetType === 'image' && existingFile?.mimeType === 'image/webp') ||
-    (asset.assetType === 'video' && !existingFile);
-  if (compactOnly) return blobFromRef(asset.previewRef);
-  return (await blobFromRef(asset.originalUrl)) ?? (await blobFromRef(asset.previewRef));
-}
-
 async function exportPromptTraceBackup(): Promise<{ records: number; mediaFiles: number }> {
-  const [records, assets, originalFileRecords, tags, categories] = await Promise.all([
+  const [records, assets, tags, categories] = await Promise.all([
     recordRepository.list(),
     assetRepository.list(),
-    fileRecordRepository.list(),
     tagRepository.list(),
     categoryRepository.list(),
   ]);
-  const originalFileByAsset = new Map<string, FileRecord>();
-  for (const fileRecord of originalFileRecords) {
-    if (!originalFileByAsset.has(fileRecord.assetId)) originalFileByAsset.set(fileRecord.assetId, fileRecord);
-  }
-
-  const fileRecords = new Map<string, FileRecord>();
-  for (const fileRecord of originalFileRecords) {
-    fileRecords.set(fileRecord.id, {
-      ...sanitizeBackupFileRecord(fileRecord),
-      downloadStatus: 'not_required',
-    });
-  }
-
   const media: BackupMediaEntry[] = [];
   const mediaFiles = new Map<string, Blob>();
   for (const asset of assets) {
-    if (asset.assetType === 'text') continue;
-    const existing = originalFileByAsset.get(asset.id);
-    const mediaBlob = await mediaBlobForBackup(asset, existing);
-    if (!mediaBlob) continue;
-    const fileRecord: FileRecord = existing
-      ? sanitizeBackupFileRecord(existing)
-      : {
-          id: `backup-file-${asset.id}`,
-          assetId: asset.id,
-          filename: `${asset.id}.${mediaExtension(asset, mediaBlob.blob)}`,
-          downloadStatus: 'pending',
-          deleteStatus: 'not_deleted',
-          updatedAt: new Date().toISOString(),
-        };
-    const filename = existing?.filename ?? fileRecord.filename;
-    const path = `media/${asset.recordId}/${filename}`;
-    fileRecords.set(fileRecord.id, {
-      ...fileRecord,
-      filename,
-      downloadStatus: 'pending',
-      mimeType: mediaBlob.blob.type || fileRecord.mimeType,
-      fileSize: mediaBlob.blob.size,
-    });
-    media.push({
-      assetId: asset.id,
-      fileRecordId: fileRecord.id,
+    if (asset.assetType === 'text' || !asset.previewRef?.startsWith('data:')) continue;
+    let canonicalPreviewRef = asset.previewRef;
+    try {
+      validateCanonicalPreviewRef(canonicalPreviewRef, asset.assetType);
+    } catch {
+      canonicalPreviewRef = await canonicalizeRestoreMedia(asset, dataUrlToBlob(canonicalPreviewRef));
+    }
+    const blob = dataUrlToBlob(canonicalPreviewRef);
+    const path = promptTraceBackupMediaPath({
       recordId: asset.recordId,
-      path,
-      filename,
-      mimeType: mediaBlob.blob.type || undefined,
-      source: mediaBlob.source,
+      assetId: asset.id,
+      mimeType: blob.type || (asset.assetType === 'image' ? 'image/webp' : 'image/gif'),
     });
-    mediaFiles.set(path, mediaBlob.blob);
+    media.push({ assetId: asset.id, recordId: asset.recordId, path, mimeType: blob.type || undefined });
+    mediaFiles.set(path, blob);
   }
 
   const zip = await createPromptTraceBackupZip(
-    {
-      records,
-      assets,
-      fileRecords: Array.from(fileRecords.values()),
-      tags,
-      categories,
-      media,
-    },
+    { records, assets, tags, categories, media },
     mediaFiles,
   );
   downloadBlob(backupFilename(), zip);
   return { records: records.length, mediaFiles: mediaFiles.size };
 }
 
-async function restorePromptTraceBackup(file: File): Promise<{ records: number; mediaFiles: number }> {
-  const parsed = await parsePromptTraceBackupZip(file);
-  const mediaByFileRecord = new Map(parsed.data.media.map((entry) => [entry.fileRecordId, entry]));
-
-  for (const category of parsed.data.categories ?? []) await categoryRepository.save(category);
-  for (const record of parsed.data.records) await recordRepository.save(record);
-  for (const asset of parsed.data.assets) await assetRepository.save(asset);
-  for (const tag of parsed.data.tags ?? []) await tagRepository.save(tag);
-
-  let restoredMedia = 0;
-  for (const fileRecord of parsed.data.fileRecords ?? []) {
-    const mediaEntry = mediaByFileRecord.get(fileRecord.id);
-    const mediaFile = mediaEntry ? parsed.files.get(mediaEntry.path) : undefined;
-    const baseRecord: FileRecord = {
-      ...fileRecord,
-      localPath: undefined,
-      downloadId: undefined,
-      downloadStatus: mediaFile ? 'pending' : 'not_required',
-      updatedAt: new Date().toISOString(),
-    };
-    await fileRecordRepository.save(baseRecord);
-    if (!mediaEntry || !mediaFile) continue;
-
-    const url = URL.createObjectURL(mediaFile);
+async function canonicalizeRestoreMedia(asset: Asset, source: Blob): Promise<string> {
+  if (asset.assetType === 'image') {
+    const bitmap = await createImageBitmap(source);
     try {
-      const downloadId = await chrome.downloads.download({
-        url,
-        filename: promptTraceBackupMediaDownloadFilename(mediaEntry),
-        conflictAction: 'uniquify',
-        saveAs: false,
-      });
-      await fileRecordRepository.save({
-        ...baseRecord,
-        downloadId,
-        downloadStatus: 'downloading',
-        updatedAt: new Date().toISOString(),
-      });
-      restoredMedia += 1;
+      for (const profile of [
+        { maxDimension: 768, quality: 0.82 },
+        { maxDimension: 512, quality: 0.72 },
+        { maxDimension: 320, quality: 0.62 },
+      ]) {
+        const scale = Math.min(1, profile.maxDimension / Math.max(bitmap.width, bitmap.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(2, Math.round((bitmap.width * scale) / 2) * 2);
+        canvas.height = Math.max(2, Math.round((bitmap.height * scale) / 2) * 2);
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('MEDIA_PREVIEW_CANVAS_UNAVAILABLE');
+        context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        const output = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/webp', profile.quality));
+        if (output && output.size <= IMAGE_PREVIEW_MAX_BYTES) {
+          const previewRef = bytesToDataUrl(new Uint8Array(await output.arrayBuffer()), 'image/webp');
+          validateCanonicalPreviewRef(previewRef, 'image');
+          return previewRef;
+        }
+      }
     } finally {
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      bitmap.close();
     }
+    throw new Error('MEDIA_PREVIEW_TOO_LARGE');
   }
 
-  return { records: parsed.data.records.length, mediaFiles: restoredMedia };
+  const sourceUrl = bytesToDataUrl(new Uint8Array(await source.arrayBuffer()), source.type || 'video/mp4');
+  const result = await chrome.runtime.sendMessage({
+    type: 'media/generateVideoPreview',
+    payload: { url: sourceUrl },
+  });
+  if (!result?.ok || !result.previewRef) throw new Error(result?.reason ?? 'MEDIA_VIDEO_PREVIEW_FAILED');
+  validateCanonicalPreviewRef(result.previewRef, 'video');
+  return result.previewRef;
+}
+async function restorePromptTraceBackup(file: File): Promise<{ records: number; mediaFiles: number }> {
+  const parsed = await parsePromptTraceBackupZip(file);
+  const prepared = await prepareBackupRestore(parsed, canonicalizeRestoreMedia);
+  await restorePreparedBackup(prepared.data);
+  return { records: prepared.data.records.length, mediaFiles: prepared.restoredMedia };
 }
 
 function DataFilesSettingsSection({
-  t,
-  language,
   settings,
   onPatch,
+  t,
 }: {
-  t: UiText;
-  language: ResolvedLanguage;
   settings: DisplaySettings;
   onPatch: (patch: Partial<DisplaySettings>) => void;
+  t: UiText;
 }) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
-  const isEnglish = language === 'en-US';
+  const [mediaStorage, setMediaStorage] = useState<{ assetCount: number; totalBytes: number } | null>();
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadMediaStorage = async () => {
+      try {
+        const assets = await assetRepository.list();
+        if (!cancelled) setMediaStorage(summarizeMediaAssetStorage(assets));
+      } catch {
+        if (!cancelled) setMediaStorage(null);
+      }
+    };
+    loadMediaStorage();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const qualityOptions: Array<{
+    value: DisplaySettings['mediaQuality'];
+    label: string;
+    detail: string;
+  }> = [
+    { value: 'low', label: t.previewQualityLow, detail: t.previewQualityLowDetail },
+    { value: 'medium', label: t.previewQualityMedium, detail: t.previewQualityMediumDetail },
+    { value: 'high', label: t.previewQualityHigh, detail: t.previewQualityHighDetail },
+  ];
 
   return (
     <div className="settings-subsection settings-files-subsection">
       <h2>{t.files}</h2>
-      <div className="settings-control-stack settings-media-storage">
-        <label className="settings-field">
-          <span>{isEnglish ? 'Image storage' : '圖片保存'}</span>
-          <select
-            value={settings.mediaStorage.image}
-            onChange={(event) => onPatch({
-              mediaStorage: { ...settings.mediaStorage, image: event.target.value as DisplaySettings['mediaStorage']['image'] },
-            })}
-          >
-            <option value="original">{isEnglish ? 'Keep original + WebP preview' : '保留原圖＋WebP 預覽'}</option>
-            <option value="webp">{isEnglish ? 'Compressed WebP only' : '只保存壓縮 WebP'}</option>
-          </select>
-        </label>
-        <label className="settings-field">
-          <span>{isEnglish ? 'Video storage' : '影片保存'}</span>
-          <select
-            value={settings.mediaStorage.video}
-            onChange={(event) => onPatch({
-              mediaStorage: { ...settings.mediaStorage, video: event.target.value as DisplaySettings['mediaStorage']['video'] },
-            })}
-          >
-            <option value="original">{isEnglish ? 'Keep original + GIF preview' : '保留原片＋GIF 預覽'}</option>
-            <option value="preview-only">{isEnglish ? 'GIF preview only' : '只保存 GIF 預覽'}</option>
-          </select>
-        </label>
-        <p className="muted">
-          {isEnglish
-            ? 'Preview-only modes skip the original download. Existing downloaded files are not removed.'
-            : '只保存預覽會直接略過原始檔下載，不會刪除既有的下載檔案。'}
-        </p>
+      <fieldset className="settings-field settings-media-quality-field" aria-describedby="settings-media-quality-hint">
+        <legend>{t.previewQuality}</legend>
+        <div className="settings-media-quality-options" role="radiogroup" aria-label={t.previewQuality}>
+          {qualityOptions.map((option) => {
+            const selected = settings.mediaQuality === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                aria-label={`${option.label} · ${option.detail}`}
+                className={`settings-media-quality-option${selected ? ' is-selected' : ''}`}
+                onClick={() => onPatch({ mediaQuality: option.value })}
+              >
+                <span className="settings-media-quality-label">{option.label}</span>
+                <span className="settings-media-quality-detail">{option.detail}</span>
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
+      <p id="settings-media-quality-hint" className="muted settings-media-quality-hint">{t.previewQualityHint}</p>
+      <div
+        className="settings-storage-usage"
+        data-testid="media-asset-storage"
+        aria-live="polite"
+        title={t.mediaAssetStorageHint}
+      >
+        <span>{t.mediaAssetStorage}</span>
+        {mediaStorage === undefined ? (
+          <span className="muted">{t.loading}</span>
+        ) : mediaStorage ? (
+          <strong>
+            {formatMediaAssetTotalSize(mediaStorage.totalBytes)}
+            <span className="settings-storage-separator" aria-hidden="true">·</span>
+            {t.mediaAssetCount.replace('{count}', String(mediaStorage.assetCount))}
+          </strong>
+        ) : (
+          <span className="muted">{t.mediaAssetStorageUnavailable}</span>
+        )}
       </div>
       <div className="row settings-file-actions">
-        <button
-          type="button"
-          onClick={() => {
-            openPromptTraceFolder().catch((error) => {
-              alert(error instanceof Error && error.message === 'NO_PROMPTTRACE_DOWNLOADS' ? t.noDownloads : t.openFolderFailed);
-            });
-          }}
-        >
-          {t.openFileFolder}
-        </button>
         <button
           type="button"
           disabled={busy}
@@ -1297,35 +1245,5 @@ function DataFilesSettingsSection({
     </div>
   );
 }
-
-const PROMPTRACE_FOLDER_REGEX = 'PrompTrace|PromptTrace';
-const PROMPTTRACE_ROOT_FILE_REGEX = `[\\\\/](${PROMPTRACE_FOLDER_REGEX})[\\\\/][^\\\\/]+$`;
-const PROMPTTRACE_FILE_REGEX = `[\\\\/](${PROMPTRACE_FOLDER_REGEX})[\\\\/]`;
-
-async function openPromptTraceFolder(): Promise<void> {
-  const [rootItem] = await chrome.downloads.search({
-    filenameRegex: PROMPTTRACE_ROOT_FILE_REGEX,
-    state: 'complete',
-    exists: true,
-    orderBy: ['-startTime'],
-    limit: 1,
-  });
-  if (rootItem) {
-    chrome.downloads.show(rootItem.id);
-    return;
-  }
-
-  const [nestedItem] = await chrome.downloads.search({
-    filenameRegex: PROMPTTRACE_FILE_REGEX,
-    state: 'complete',
-    exists: true,
-    orderBy: ['-startTime'],
-    limit: 1,
-  });
-  if (nestedItem) {
-    chrome.downloads.show(nestedItem.id);
-    return;
-  }
-
-  throw new Error('NO_PROMPTTRACE_DOWNLOADS');
-}
+// EOF
+export {};

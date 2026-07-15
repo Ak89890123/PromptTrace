@@ -45,7 +45,7 @@ PrompTrace turns those scattered assets into a searchable local library.
 - **Trash with retention**: move records to Trash, restore them, delete immediately, or auto-purge after the configured retention period.
 - **Optional summaries**: bring your own API key and summary provider. Summaries are optional and user-configured.
 - **Backup and restore**: export/import the local library as a ZIP, including metadata and available media files.
-- **Local-first storage**: records live in IndexedDB, settings in chrome.storage, and downloaded media under the browser Downloads folder.
+- **Local-first storage**: records, configurable low/medium/high canonical previews, and legacy-compatible metadata live in IndexedDB; settings live in chrome.storage.
 
 ## Architecture
 
@@ -54,7 +54,7 @@ Content Script  ── selection / overlay / page UI ──▶ Background Servic
       ▲                                             │
       │                                             ├─ IndexedDB repositories
       │                                             ├─ chrome.storage settings
-      │                                             ├─ chrome.downloads media files
+      │                                             ├─ IndexedDB canonical media previews
       │                                             └─ scheduled summary / trash tasks
       │
       └── Right-edge floating panel / gallery
@@ -66,7 +66,7 @@ Key folders:
 
 | Path | Purpose |
 | --- | --- |
-| `entrypoints/background.ts` | Service worker, message routing, context menus, downloads, alarms, summary and trash jobs. |
+| `entrypoints/background.ts` | Service worker, message routing, context menus, durable preview jobs, alarms, summary and trash jobs. |
 | `entrypoints/content/` | Content script, shadow-root UI, floating panel, overlay frames, selection/media capture. |
 | `entrypoints/popup/` | Browser-action popup for quick settings and navigation. |
 | `entrypoints/library/` | Full local library dashboard. |
@@ -80,7 +80,7 @@ See [docs/architecture.md](docs/architecture.md) for a deeper overview.
 
 ## Tech stack
 
-WXT · TypeScript · React · Chrome Extension Manifest V3 · IndexedDB · chrome.storage · chrome.contextMenus · chrome.downloads · Vitest · Playwright
+WXT · TypeScript · React · Chrome Extension Manifest V3 · IndexedDB · chrome.storage · chrome.contextMenus · Vitest · Playwright
 
 ## Install for development
 
@@ -127,7 +127,6 @@ This repository packages the extension but does **not** automatically submit it 
 | Permission | Why PrompTrace uses it |
 | --- | --- |
 | `contextMenus` | Adds user-triggered PrompTrace actions to save selected text, images, or videos. |
-| `downloads` | Downloads user-selected media into a PrompTrace folder and removes extension-created files on permanent deletion when possible. |
 | `storage` | Stores extension settings such as UI preferences, role colors, hotkeys, summary settings, and trash retention days. |
 | `alarms` | Runs local scheduled tasks such as optional summary checks and trash cleanup. |
 | `activeTab` | Interacts with the current active tab after a user action. |
@@ -141,7 +140,7 @@ PrompTrace is designed as a local-first extension.
 
 - Captured records are stored locally in the browser.
 - User settings are stored in `chrome.storage`.
-- Downloaded media is saved under the browser Downloads folder.
+- Canonical media previews are stored in IndexedDB using the low/medium/high quality selected when each asset is captured; original URLs remain source metadata when available, and original media files are not downloaded.
 - The extension does not sell user data.
 - The extension does not use advertising analytics.
 - The extension does not use remote executable code.
@@ -157,9 +156,9 @@ https://ak89890123.github.io/PromptTrace/privacy.html
 
 ## Known limitations
 
-- Some media cannot be downloaded, such as blob URLs, MediaSource streams, DRM-protected media, authenticated media, or anti-hotlinking sources.
+- Some media cannot be previewed, such as blob URLs, MediaSource streams, DRM-protected media, authenticated media, or anti-hotlinking sources; the source URL is retained when available.
 - If a remote media URL expires, PrompTrace keeps metadata and available previews where possible.
-- `chrome.downloads.removeFile` can only remove files created by the extension and still known to Chrome.
+- Existing legacy download metadata remains readable, but new capture, delete, trash cleanup, backup, and restore do not touch the file system.
 - Existing tabs must be refreshed after reloading the unpacked extension.
 - Chrome is the primary supported browser target.
 
