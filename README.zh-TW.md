@@ -28,10 +28,9 @@ PrompTrace 會把這些分散的素材整理成可搜尋的本機紀錄庫。
 
 1. 在網頁上反白文字，按召喚快捷鍵，選擇角色。
 2. 游標移到圖片或影片上，或用右鍵選單，把媒體保存為參考或輸出。
-3. PrompTrace 會在頁面上用角色顏色框線標記已保存內容。
-4. 滑鼠移到頁面右側邊緣，打開玻璃質感漂浮面板。
-5. 檢查本次 capture session，選擇分類後保存到本機紀錄庫。
-6. 在 Library 搜尋、預覽、複製、摘要、匯出、還原或刪除紀錄。
+3. 滑鼠移到頁面右側邊緣，打開玻璃質感漂浮面板。
+4. 檢查本次 capture session，選擇分類後保存到本機紀錄庫。
+5. 在 Library 搜尋、預覽、複製、摘要、匯出、還原或刪除紀錄。
 
 ## 功能
 
@@ -50,7 +49,7 @@ PrompTrace 會把這些分散的素材整理成可搜尋的本機紀錄庫。
 ## 架構
 
 ```text
-Content Script  ── 選取 / overlay / 頁內 UI ──▶ Background Service Worker
+Content Script  ── 選取 / 頁內 UI ──▶ Background Service Worker
       ▲                                      │
       │                                      ├─ IndexedDB repositories
       │                                      ├─ chrome.storage settings
@@ -67,7 +66,7 @@ Extension pages: Popup · Library · Settings · Trash
 | 路徑 | 用途 |
 | --- | --- |
 | `entrypoints/background.ts` | Service worker、訊息路由、右鍵選單、下載、alarms、摘要與垃圾桶任務。 |
-| `entrypoints/content/` | Content script、shadow-root UI、漂浮面板、overlay 框線、文字 / 媒體擷取。 |
+| `entrypoints/content/` | Content script、shadow-root UI、漂浮面板、文字 / 媒體擷取。 |
 | `entrypoints/popup/` | 工具列 popup，用於快速設定與導航。 |
 | `entrypoints/library/` | 完整本機紀錄庫 dashboard。 |
 | `entrypoints/settings/` | 詳細設定、分類、角色顏色、備份還原、摘要設定。 |

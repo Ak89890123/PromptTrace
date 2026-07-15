@@ -15,7 +15,6 @@ export const DEFAULT_ROLE_COLORS: RoleColorMap = {
 export type DisplaySettings = {
   language: 'system' | 'en-US' | 'zh-TW' | 'zh-CN';
   roleColors: RoleColorMap;
-  overlayEnabled: boolean;
   copyTrayEnabled: boolean;
 
   /** In-page floating panel that expands when hovering the right edge. */
@@ -46,7 +45,6 @@ export type DisplaySettings = {
 export const DEFAULT_SETTINGS: DisplaySettings = {
   language: 'system',
   roleColors: DEFAULT_ROLE_COLORS,
-  overlayEnabled: true,
   copyTrayEnabled: true,
 
   edgePanelEnabled: true,
@@ -66,10 +64,15 @@ const LEGACY_SETTINGS_KEY = 'prompttrace:settings';
 
 function withDefaults(stored: Partial<DisplaySettings> | undefined): DisplaySettings {
   if (!stored) return DEFAULT_SETTINGS;
-  // Remove the retired media-storage setting so legacy `original` values can
-  // never leak back into the runtime or remain in chrome.storage.local.
-  const { mediaStorage: _legacyMediaStorage, ...storedWithoutMediaStorage } = stored as Partial<DisplaySettings> & {
+  // Remove retired settings so they cannot leak back into the runtime or
+  // remain in chrome.storage.local.
+  const {
+    mediaStorage: _legacyMediaStorage,
+    overlayEnabled: _retiredOverlayEnabled,
+    ...storedWithoutRetiredSettings
+  } = stored as Partial<DisplaySettings> & {
     mediaStorage?: unknown;
+    overlayEnabled?: unknown;
   };
   const language =
     stored.language === 'system' || stored.language === 'en-US' || stored.language === 'zh-TW' || stored.language === 'zh-CN'
@@ -84,7 +87,7 @@ function withDefaults(stored: Partial<DisplaySettings> | undefined): DisplaySett
     : DEFAULT_SETTINGS.trashRetentionDays;
   return {
     ...DEFAULT_SETTINGS,
-    ...storedWithoutMediaStorage,
+    ...storedWithoutRetiredSettings,
     language,
     cardLayout,
     trashRetentionDays,
@@ -104,7 +107,10 @@ export async function loadSettings(): Promise<DisplaySettings> {
     const stored = data[SETTINGS_KEY] as Partial<DisplaySettings> | undefined;
     if (stored) {
       const normalized = withDefaults(stored);
-      if (Object.prototype.hasOwnProperty.call(stored, 'mediaStorage')) {
+      if (
+        Object.prototype.hasOwnProperty.call(stored, 'mediaStorage') ||
+        Object.prototype.hasOwnProperty.call(stored, 'overlayEnabled')
+      ) {
         await chrome.storage.local.set({ [SETTINGS_KEY]: normalized });
       }
       return normalized;

@@ -13,14 +13,12 @@ import { PrompTraceWordmark } from '@/src/ui/PrompTraceWordmark';
  *  the full settings page (詳細設定). */
 type ToggleKey =
   | 'edgePanelEnabled'
-  | 'selectionToolbarEnabled'
-  | 'overlayEnabled';
+  | 'selectionToolbarEnabled';
 
 function toggles(t: UiText): { key: ToggleKey; label: string; hint: string }[] {
   return [
     { key: 'edgePanelEnabled', label: t.edgePanelShort, hint: t.edgePanelHint },
     { key: 'selectionToolbarEnabled', label: t.selectionToolbarShort, hint: t.selectionToolbarHint },
-    { key: 'overlayEnabled', label: t.pageFrameShort, hint: t.pageFrameHint },
   ];
 }
 

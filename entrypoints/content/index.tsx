@@ -11,43 +11,34 @@ export default defineContentScript({
   async main(ctx) {
     const overlay = createOverlayManager();
 
-    // Background ↔ content overlay protocol.
+    // Background ↔ content capture protocol.
     chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       switch (message.type) {
         case 'toolbar/summon':
           // From the chrome.commands browser-level shortcut.
           window.dispatchEvent(new CustomEvent('prompttrace:summon'));
           return sendResponse({ ok: true });
-        case 'overlay/captureSelection': {
+        case 'capture/captureSelection': {
           const ok = overlay.captureSelection(null);
           return sendResponse({ ok });
         }
-        case 'overlay/markMedia':
-          overlay.markMedia(message.payload.srcUrl, message.payload.assetType);
-          return sendResponse({ ok: true });
-        case 'overlay/assetAdded': {
+        case 'capture/assetAdded': {
           const asset: PendingAsset = message.payload.asset;
-          overlay.addFrame(asset, overlay.consumePendingAnchor() ?? {});
+          overlay.trackAsset(asset, overlay.consumePendingAnchor() ?? {});
           return sendResponse({ ok: true });
         }
-        case 'overlay/roleChanged':
-          overlay.setRoleColor(message.payload.pendingAssetId, message.payload.role);
+        case 'capture/assetRemoved':
+          overlay.removeAsset(message.payload.pendingAssetId);
           return sendResponse({ ok: true });
-        case 'overlay/removeFrame':
-          overlay.removeFrame(message.payload.pendingAssetId);
+        case 'capture/clearTracked':
+          overlay.clearTracked();
           return sendResponse({ ok: true });
-        case 'overlay/replaceFrame': {
+        case 'capture/assetReplaced': {
           const anchor = overlay.consumePendingAnchor() ?? overlay.anchorOf(message.payload.oldId) ?? {};
-          overlay.removeFrame(message.payload.oldId);
-          overlay.addFrame(message.payload.asset, anchor);
+          overlay.removeAsset(message.payload.oldId);
+          overlay.trackAsset(message.payload.asset, anchor);
           return sendResponse({ ok: true });
         }
-        case 'overlay/clearAll':
-          overlay.clearAll();
-          return sendResponse({ ok: true });
-        case 'overlay/flash':
-          overlay.flash(message.payload.pendingAssetId);
-          return sendResponse({ ok: true });
         default:
           return;
       }

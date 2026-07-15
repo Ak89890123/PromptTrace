@@ -165,9 +165,9 @@ export default defineBackground(() => {
     if (!tab?.id) return;
 
     if (info.menuItemId === MENU_TEXT) {
-      // Ask the content script for selection details (text + overlap info + overlay anchor).
+      // Ask the content script for selection details and overlap information.
       chrome.tabs
-        .sendMessage(tab.id, { type: 'overlay/captureSelection' })
+        .sendMessage(tab.id, { type: 'capture/captureSelection' })
         .catch(() => {
           // No content script (e.g. chrome:// pages): fall back to plain selectionText.
           if (info.selectionText) {
@@ -208,10 +208,6 @@ export default defineBackground(() => {
         originalUrl: info.srcUrl,
         capturedAt: new Date().toISOString(),
       });
-      // Tell the content script to draw an overlay frame on the media element.
-      chrome.tabs
-        .sendMessage(tab.id, { type: 'overlay/markMedia', payload: { srcUrl: info.srcUrl, assetType } })
-        .catch(() => {});
     }
   });
 
@@ -246,11 +242,6 @@ export default defineBackground(() => {
           }),
         ),
       );
-      if (payload.tabId != null) {
-        chrome.tabs
-          .sendMessage(payload.tabId, { type: 'overlay/flash', payload: { pendingAssetId: check.existingId } })
-          .catch(() => {});
-      }
       return;
     }
 
@@ -283,7 +274,7 @@ export default defineBackground(() => {
     setSession(addAsset(session, asset));
     if (payload.tabId != null) {
       chrome.tabs
-        .sendMessage(payload.tabId, { type: 'overlay/assetAdded', payload: { asset } })
+        .sendMessage(payload.tabId, { type: 'capture/assetAdded', payload: { asset } })
         .catch(() => {});
     }
   }
@@ -575,11 +566,6 @@ export default defineBackground(() => {
             return sendResponse({ ok: false });
           }
           setSession(assignRole(session, pendingAssetId, role));
-          if (asset.tabId != null) {
-            chrome.tabs
-              .sendMessage(asset.tabId, { type: 'overlay/roleChanged', payload: { pendingAssetId, role } })
-              .catch(() => {});
-          }
           return sendResponse({ ok: true });
         }
 
@@ -614,7 +600,7 @@ export default defineBackground(() => {
           if (asset?.tabId != null) {
             chrome.tabs
               .sendMessage(asset.tabId, {
-                type: 'overlay/removeFrame',
+                type: 'capture/assetRemoved',
                 payload: { pendingAssetId: message.payload.pendingAssetId },
               })
               .catch(() => {});
@@ -627,7 +613,7 @@ export default defineBackground(() => {
           conflictCandidates.clear();
           setSession(emptySession());
           for (const tabId of tabIds) {
-            chrome.tabs.sendMessage(tabId, { type: 'overlay/clearAll' }).catch(() => {});
+            chrome.tabs.sendMessage(tabId, { type: 'capture/clearTracked' }).catch(() => {});
           }
           return sendResponse({ ok: true });
         }
@@ -647,7 +633,7 @@ export default defineBackground(() => {
             if (candidate.tabId != null) {
               chrome.tabs
                 .sendMessage(candidate.tabId, {
-                  type: 'overlay/replaceFrame',
+                  type: 'capture/assetReplaced',
                   payload: { oldId: conflict.existingAssetId, asset: candidate },
                 })
                 .catch(() => {});
@@ -693,7 +679,7 @@ export default defineBackground(() => {
             conflictCandidates.clear();
             setSession(emptySession());
             for (const tabId of tabIds) {
-              chrome.tabs.sendMessage(tabId, { type: 'overlay/clearAll' }).catch(() => {});
+              chrome.tabs.sendMessage(tabId, { type: 'capture/clearTracked' }).catch(() => {});
             }
             void result.pendingPreviews;
             void processPreviewJobs();

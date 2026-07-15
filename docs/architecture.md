@@ -29,7 +29,7 @@ IndexedDB v2
 | `src/core/backup` | v2 ZIP manifest/hash validation 與 v1 archive parsing |
 | `src/storage` | IndexedDB migration、atomic commit、preview lease fencing、restore transaction |
 | `entrypoints/background` | context menus、capture session、preview worker、訊息路由與更新通知 |
-| `entrypoints/content` | overlay、選取 capture、右側 Gallery 與 in-page UI |
+| `entrypoints/content` | 選取 capture、右側 Gallery 與 in-page UI |
 | `entrypoints/library` | library list/detail、搜尋、角色與紀錄編輯 |
 | `entrypoints/settings` | 本機設定、v2 backup export/import、分類管理 |
 | `entrypoints/trash` | restore-able trash、retention 與永久 DB deletion |

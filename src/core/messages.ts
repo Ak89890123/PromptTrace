@@ -121,12 +121,6 @@ export type OpenExtensionPageMessage = {
   };
 };
 
-/** Content script → background: highlight request was handled. */
-export type FlashOverlayMessage = {
-  type: 'overlay/flash';
-  payload: { pendingAssetId: string };
-};
-
 /** Content script → background: fetch categories + model presets for the in-page wizard. */
 export type TaxonomyGetMessage = {
   type: 'taxonomy/get';
@@ -247,7 +241,6 @@ export type ExtensionMessage =
   | GenerateVideoPreviewMessage
   | MediaPreviewChangedMessage
   | OpenExtensionPageMessage
-  | FlashOverlayMessage
   | TaxonomyGetMessage
   | TaxonomyQuickAddCategoryMessage
   | ListRecordsMessage

@@ -28,10 +28,9 @@ PrompTrace turns those scattered assets into a searchable local library.
 
 1. Select text on a page, press the summon hotkey, and choose a role.
 2. Hover over an image or video, or use the context menu, to save media as a reference or output.
-3. PrompTrace draws role-colored frames on saved page content.
-4. Move your mouse to the right edge of the page to open the floating glass panel.
-5. Review the capture session, choose a category, and save it to the local library.
-6. Search, preview, copy, summarize, export, restore, or delete records from the Library.
+3. Move your mouse to the right edge of the page to open the floating glass panel.
+4. Review the capture session, choose a category, and save it to the local library.
+5. Search, preview, copy, summarize, export, restore, or delete records from the Library.
 
 ## Features
 
@@ -50,7 +49,7 @@ PrompTrace turns those scattered assets into a searchable local library.
 ## Architecture
 
 ```text
-Content Script  ── selection / overlay / page UI ──▶ Background Service Worker
+Content Script  ── selection / page UI ──▶ Background Service Worker
       ▲                                             │
       │                                             ├─ IndexedDB repositories
       │                                             ├─ chrome.storage settings
@@ -67,7 +66,7 @@ Key folders:
 | Path | Purpose |
 | --- | --- |
 | `entrypoints/background.ts` | Service worker, message routing, context menus, durable preview jobs, alarms, summary and trash jobs. |
-| `entrypoints/content/` | Content script, shadow-root UI, floating panel, overlay frames, selection/media capture. |
+| `entrypoints/content/` | Content script, shadow-root UI, floating panel, selection/media capture. |
 | `entrypoints/popup/` | Browser-action popup for quick settings and navigation. |
 | `entrypoints/library/` | Full local library dashboard. |
 | `entrypoints/settings/` | Detailed settings, categories, role colors, backup/restore, summary settings. |
