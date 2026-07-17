@@ -118,8 +118,8 @@ The `CD` GitHub Actions workflow packages the extension and can submit it to the
 - The `CD` GitHub Actions workflow can compile, test, package, and upload the ZIP as a workflow artifact.
 - Version tags such as `v0.3.0` create a GitHub Release, then upload the same tested ZIP and submit it for Chrome Web Store review.
 - A manual workflow run only submits when `publish_to_chrome` is enabled. It defaults to `trustedTesters`; choose `default` for the public audience.
-- The publish job uses the protected GitHub environment `chrome-web-store`. Configure the environment variable `CHROME_EXTENSION_ID` and secrets `CHROME_CLIENT_ID`, `CHROME_CLIENT_SECRET`, and `CHROME_REFRESH_TOKEN` before the first release.
-- Add required reviewers to the `chrome-web-store` environment if every store submission should require explicit approval. Store review and rollout remain controlled by the Chrome Web Store Developer Dashboard.
+- The publish job reuses the protected GitHub environment `github-pages`. Configure the environment variable `CHROME_EXTENSION_ID` and secrets `CHROME_CLIENT_ID`, `CHROME_CLIENT_SECRET`, and `CHROME_REFRESH_TOKEN` there before the first release.
+- Add required reviewers to the `github-pages` environment if every store submission should require explicit approval. Store review and rollout remain controlled by the Chrome Web Store Developer Dashboard.
 
 ## Permissions
 

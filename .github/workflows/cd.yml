@@ -93,7 +93,7 @@ jobs:
     needs: package
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    environment: chrome-web-store
+    environment: github-pages
     permissions:
       contents: read
     env:
@@ -128,7 +128,7 @@ jobs:
           missing=0
           for name in CHROME_EXTENSION_ID CHROME_CLIENT_ID CHROME_CLIENT_SECRET CHROME_REFRESH_TOKEN; do
             if [[ -z "${!name:-}" ]]; then
-              echo "::error::${name} is not configured in the chrome-web-store environment"
+              echo "::error::${name} is not configured in the github-pages environment"
               missing=1
             fi
           done
