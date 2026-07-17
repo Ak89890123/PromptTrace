@@ -2,6 +2,18 @@ name: CD
 
 on:
   workflow_dispatch:
+    inputs:
+      publish_to_chrome:
+        description: Upload the packaged extension and submit it for Chrome Web Store review
+        type: boolean
+        default: false
+      chrome_publish_target:
+        description: Chrome Web Store audience for a manual publication
+        type: choice
+        options:
+          - trustedTesters
+          - default
+        default: trustedTesters
   push:
     tags:
       - 'v*'
@@ -72,3 +84,70 @@ jobs:
           files: artifacts/*.zip
           generate_release_notes: true
           prerelease: true
+
+  publish-chrome:
+    name: Submit to Chrome Web Store
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish_to_chrome)
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: chrome-web-store
+    permissions:
+      contents: read
+    env:
+      CHROME_EXTENSION_ID: ${{ vars.CHROME_EXTENSION_ID }}
+      CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+      CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+      CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+      CHROME_PUBLISH_TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.chrome_publish_target || 'default' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install pinned publishing tool
+        run: npm ci
+
+      - name: Download packaged extension artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: promptrace-chrome-extension
+          path: artifacts
+
+      - name: Validate Chrome Web Store configuration
+        shell: bash
+        run: |
+          missing=0
+          for name in CHROME_EXTENSION_ID CHROME_CLIENT_ID CHROME_CLIENT_SECRET CHROME_REFRESH_TOKEN; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::${name} is not configured in the chrome-web-store environment"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Upload and submit for Chrome Web Store review
+        shell: bash
+        run: |
+          shopt -s nullglob
+          zip_files=(artifacts/*.zip)
+          if [[ "${#zip_files[@]}" -ne 1 ]]; then
+            echo "::error::Expected exactly one extension ZIP, found ${#zip_files[@]}"
+            exit 1
+          fi
+
+          npx wxt submit \
+            --chrome-zip "${zip_files[0]}" \
+            --chrome-extension-id "$CHROME_EXTENSION_ID" \
+            --chrome-client-id "$CHROME_CLIENT_ID" \
+            --chrome-client-secret "$CHROME_CLIENT_SECRET" \
+            --chrome-refresh-token "$CHROME_REFRESH_TOKEN" \
+            --chrome-publish-target "$CHROME_PUBLISH_TARGET"
