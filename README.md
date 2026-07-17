@@ -75,8 +75,6 @@ Key folders:
 | `src/storage/` | IndexedDB schema, repositories, seed data, commit and delete services. |
 | `src/ui/` | Shared UI settings, role colors, hooks, tokens, base CSS, shared wordmark. |
 
-See [docs/architecture.md](docs/architecture.md) for a deeper overview.
-
 ## Tech stack
 
 WXT · TypeScript · React · Chrome Extension Manifest V3 · IndexedDB · chrome.storage · chrome.contextMenus · Vitest · Playwright
@@ -165,10 +163,7 @@ https://ak89890123.github.io/PromptTrace/privacy.html
 
 ## Documentation
 
-- [Architecture](docs/architecture.md)
 - [Privacy Policy](docs/privacy.html)
-- [Demo Script](docs/demo/demo-script.md)
-- [Architecture Decision Records](docs/adr/)
 - [Changelog](CHANGELOG.md)
 
 ## License
