@@ -115,12 +115,14 @@ npm run test:e2e     # 构建并运行 Playwright extension tests
 
 ## 发布流程
 
-此 repo 会打包 extension，但**不会自动提交到 Chrome Web Store 审核**。
+`CD` GitHub Actions workflow 会打包 extension，并可提交到 Chrome Web Store 审核。
 
 - `npm run zip` 会通过 WXT 创建 Chrome extension ZIP。
 - `CD` GitHub Actions workflow 可执行 compile、test、package，并把 ZIP 上传为 workflow artifact。
-- 推送 `v0.3.0` 这类 version tag 会创建 GitHub Release 并附上 packaged ZIP。
-- Chrome Web Store 提交审核仍需在 Developer Dashboard 手动上传与提交。
+- 推送 `v0.3.0` 这类 version tag 会创建 GitHub Release，随后上传同一份已测试的 ZIP 并提交到 Chrome Web Store 审核。
+- 手动执行 workflow 时，只有启用 `publish_to_chrome` 才会提交；默认目标为 `trustedTesters`，选择 `default` 才会提交给公开用户。
+- 发布 job 使用受保护的 GitHub environment `chrome-web-store`。首次发布前，请配置 environment variable `CHROME_EXTENSION_ID`，以及 secrets `CHROME_CLIENT_ID`、`CHROME_CLIENT_SECRET`、`CHROME_REFRESH_TOKEN`。
+- 如果每次提交审核都需要人工确认，请在 `chrome-web-store` environment 添加 required reviewers。商店审核和实际 rollout 仍由 Chrome Web Store Developer Dashboard 控制。
 
 ## 权限说明
 

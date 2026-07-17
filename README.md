@@ -114,12 +114,14 @@ npm run test:e2e     # Build and run Playwright extension tests
 
 ## Release process
 
-This repository packages the extension but does **not** automatically submit it to the Chrome Web Store.
+The `CD` GitHub Actions workflow packages the extension and can submit it to the Chrome Web Store.
 
 - `npm run zip` creates a Chrome extension ZIP through WXT.
 - The `CD` GitHub Actions workflow can compile, test, package, and upload the ZIP as a workflow artifact.
-- Version tags such as `v0.3.0` create a GitHub Release with the packaged ZIP.
-- Chrome Web Store submission is manual from the Developer Dashboard.
+- Version tags such as `v0.3.0` create a GitHub Release, then upload the same tested ZIP and submit it for Chrome Web Store review.
+- A manual workflow run only submits when `publish_to_chrome` is enabled. It defaults to `trustedTesters`; choose `default` for the public audience.
+- The publish job uses the protected GitHub environment `chrome-web-store`. Configure the environment variable `CHROME_EXTENSION_ID` and secrets `CHROME_CLIENT_ID`, `CHROME_CLIENT_SECRET`, and `CHROME_REFRESH_TOKEN` before the first release.
+- Add required reviewers to the `chrome-web-store` environment if every store submission should require explicit approval. Store review and rollout remain controlled by the Chrome Web Store Developer Dashboard.
 
 ## Permissions
 

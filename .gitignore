@@ -15,6 +15,7 @@ stats-*.json
 .codegraph/
 .agents/
 .codex/
+skills-lock.json
 goals/
 outputs/
 registry/
