@@ -75,8 +75,6 @@ Extension pages: Popup · Library · Settings · Trash
 | `src/storage/` | IndexedDB schema、repositories、seed data、commit / delete services。 |
 | `src/ui/` | 共用 UI 設定、角色顏色、hooks、tokens、base CSS、共用 wordmark。 |
 
-詳見 [docs/architecture.md](docs/architecture.md)。
-
 ## 技術棧
 
 WXT · TypeScript · React · Chrome Extension Manifest V3 · IndexedDB · chrome.storage · chrome.contextMenus · Vitest · Playwright
@@ -165,10 +163,7 @@ https://ak89890123.github.io/PromptTrace/privacy.html
 
 ## 文件
 
-- [Architecture](docs/architecture.md)
 - [Privacy Policy](docs/privacy.html)
-- [Demo Script](docs/demo/demo-script.md)
-- [Architecture Decision Records](docs/adr/)
 - [Changelog](CHANGELOG.md)
 
 ## License

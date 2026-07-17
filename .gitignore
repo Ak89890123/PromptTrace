@@ -20,6 +20,14 @@ goals/
 outputs/
 registry/
 
+# Local-only project guidance and engineering notes
+/AGENTS.md
+/CODE_MAP.md
+/DESIGN.md
+/docs/architecture.md
+/docs/adr/
+/docs/demo/
+
 # Local editor / OS noise
 .vscode/
 .idea/
