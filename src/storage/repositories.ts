@@ -258,6 +258,16 @@ export async function purgeExpiredTrash(
   return { recordIds: expiredRecords.map((record) => record.id), fileRecords: deletedFileRecords };
 }
 
+/** Delete every record currently in trash. Active records are left untouched. */
+export async function deleteAllTrashedRecords(): Promise<{ recordIds: string[]; fileRecords: FileRecord[] }> {
+  const trashedRecords = await recordRepository.listTrashed();
+  const deletedFileRecords: FileRecord[] = [];
+  for (const record of trashedRecords) {
+    deletedFileRecords.push(...(await deleteRecordCascade(record.id)));
+  }
+  return { recordIds: trashedRecords.map((record) => record.id), fileRecords: deletedFileRecords };
+}
+
 /** Delete a record and its assets / file records / tags. Returns the file records that existed. */
 export async function deleteRecordCascade(recordId: string): Promise<FileRecord[]> {
   const assets = await assetRepository.byRecord(recordId);
