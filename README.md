@@ -117,9 +117,9 @@ The `CD` GitHub Actions workflow packages the extension and can submit it to the
 - `npm run zip` creates a Chrome extension ZIP through WXT.
 - The `CD` GitHub Actions workflow can compile, test, package, and upload the ZIP as a workflow artifact.
 - Version tags such as `v0.3.0` create a GitHub Release, then upload the same tested ZIP and submit it for Chrome Web Store review.
-- A manual workflow run only submits when `publish_to_chrome` is enabled. It defaults to `trustedTesters`; choose `default` for the public audience.
-- The publish job reuses the protected GitHub environment `github-pages`. Configure the environment variable `CHROME_EXTENSION_ID` and secrets `CHROME_CLIENT_ID`, `CHROME_CLIENT_SECRET`, and `CHROME_REFRESH_TOKEN` there before the first release.
-- Add required reviewers to the `github-pages` environment if every store submission should require explicit approval. Store review and rollout remain controlled by the Chrome Web Store Developer Dashboard.
+- A manual workflow run only invokes the store when `publish_to_chrome` is enabled. `chrome_dry_run` defaults to enabled so Service Account authentication can be verified without uploading. `STAGED_PUBLISH` keeps an approved release staged until it is published manually; `DEFAULT_PUBLISH` publishes after approval.
+- The publish job uses Chrome Web Store API v2 and the protected GitHub environment `chrome-web-store`. Follow the [Chrome Web Store service account guide](https://developer.chrome.com/docs/webstore/service-accounts), then configure variables `CHROME_EXTENSION_ID`, `CHROME_PUBLISHER_ID`, and `CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL`, plus secret `CHROME_SERVICE_ACCOUNT_PRIVATE_KEY`.
+- Add required reviewers to the `chrome-web-store` environment if every store submission should require explicit approval. Legacy OAuth secrets (`CHROME_CLIENT_ID`, `CHROME_CLIENT_SECRET`, and `CHROME_REFRESH_TOKEN`) are no longer used. Store review and rollout remain controlled by the Chrome Web Store Developer Dashboard.
 
 ## Permissions
 

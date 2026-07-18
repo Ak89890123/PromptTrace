@@ -7,13 +7,17 @@ on:
         description: Upload the packaged extension and submit it for Chrome Web Store review
         type: boolean
         default: false
-      chrome_publish_target:
-        description: Chrome Web Store audience for a manual publication
+      chrome_dry_run:
+        description: Validate Chrome Web Store authentication without uploading or submitting
+        type: boolean
+        default: true
+      chrome_publish_type:
+        description: What to do after Chrome Web Store review approval
         type: choice
         options:
-          - trustedTesters
-          - default
-        default: trustedTesters
+          - STAGED_PUBLISH
+          - DEFAULT_PUBLISH
+        default: STAGED_PUBLISH
   push:
     tags:
       - 'v*'
@@ -93,15 +97,17 @@ jobs:
     needs: package
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    environment: github-pages
+    environment: chrome-web-store
     permissions:
       contents: read
     env:
+      CHROME_API_VERSION: v2
       CHROME_EXTENSION_ID: ${{ vars.CHROME_EXTENSION_ID }}
-      CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
-      CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
-      CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
-      CHROME_PUBLISH_TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.chrome_publish_target || 'default' }}
+      CHROME_PUBLISHER_ID: ${{ vars.CHROME_PUBLISHER_ID }}
+      CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL: ${{ vars.CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL }}
+      CHROME_SERVICE_ACCOUNT_PRIVATE_KEY: ${{ secrets.CHROME_SERVICE_ACCOUNT_PRIVATE_KEY }}
+      CHROME_PUBLISH_TYPE: ${{ github.event_name == 'workflow_dispatch' && inputs.chrome_publish_type || 'STAGED_PUBLISH' }}
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.chrome_dry_run || false }}
 
     steps:
       - name: Checkout
@@ -126,15 +132,15 @@ jobs:
         shell: bash
         run: |
           missing=0
-          for name in CHROME_EXTENSION_ID CHROME_CLIENT_ID CHROME_CLIENT_SECRET CHROME_REFRESH_TOKEN; do
+          for name in CHROME_EXTENSION_ID CHROME_PUBLISHER_ID CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL CHROME_SERVICE_ACCOUNT_PRIVATE_KEY; do
             if [[ -z "${!name:-}" ]]; then
-              echo "::error::${name} is not configured in the github-pages environment"
+              echo "::error::${name} is not configured in the chrome-web-store environment"
               missing=1
             fi
           done
           exit "$missing"
 
-      - name: Upload and submit for Chrome Web Store review
+      - name: Authenticate or submit with Chrome Web Store API v2
         shell: bash
         run: |
           shopt -s nullglob
@@ -144,10 +150,5 @@ jobs:
             exit 1
           fi
 
-          npx wxt submit \
-            --chrome-zip "${zip_files[0]}" \
-            --chrome-extension-id "$CHROME_EXTENSION_ID" \
-            --chrome-client-id "$CHROME_CLIENT_ID" \
-            --chrome-client-secret "$CHROME_CLIENT_SECRET" \
-            --chrome-refresh-token "$CHROME_REFRESH_TOKEN" \
-            --chrome-publish-target "$CHROME_PUBLISH_TARGET"
+          export CHROME_SERVICE_ACCOUNT_PRIVATE_KEY="${CHROME_SERVICE_ACCOUNT_PRIVATE_KEY//\\n/$'\n'}"
+          npx publish-extension --chrome-zip "${zip_files[0]}"
