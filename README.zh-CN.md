@@ -118,9 +118,9 @@ npm run test:e2e     # 构建并运行 Playwright extension tests
 - `npm run zip` 会通过 WXT 创建 Chrome extension ZIP。
 - `CD` GitHub Actions workflow 可执行 compile、test、package，并把 ZIP 上传为 workflow artifact。
 - 推送 `v0.3.0` 这类 version tag 会创建 GitHub Release，随后上传同一份已测试的 ZIP 并提交到 Chrome Web Store 审核。
-- 手动执行 workflow 时，只有启用 `publish_to_chrome` 才会提交；默认目标为 `trustedTesters`，选择 `default` 才会提交给公开用户。
-- 发布 job 共用受保护的 GitHub environment `github-pages`。首次发布前，请在该 environment 配置 variable `CHROME_EXTENSION_ID`，以及 secrets `CHROME_CLIENT_ID`、`CHROME_CLIENT_SECRET`、`CHROME_REFRESH_TOKEN`。
-- 如果每次提交审核都需要人工确认，请在 `github-pages` environment 添加 required reviewers。商店审核和实际 rollout 仍由 Chrome Web Store Developer Dashboard 控制。
+- 手动执行 workflow 时，只有启用 `publish_to_chrome` 才会连接商店。`chrome_dry_run` 默认启用，可只验证 Service Account 而不上传；`STAGED_PUBLISH` 会在审核通过后等待手动发布，`DEFAULT_PUBLISH` 则会在审核通过后发布。
+- 发布 job 使用 Chrome Web Store API v2 和受保护的 GitHub environment `chrome-web-store`。按照 [Chrome Web Store Service Account 指南](https://developer.chrome.com/docs/webstore/service-accounts)配置 variables `CHROME_EXTENSION_ID`、`CHROME_PUBLISHER_ID`、`CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL`，以及 secret `CHROME_SERVICE_ACCOUNT_PRIVATE_KEY`。
+- 如果每次提交审核都需要人工确认，请在 `chrome-web-store` environment 添加 required reviewers。旧 OAuth secrets（`CHROME_CLIENT_ID`、`CHROME_CLIENT_SECRET`、`CHROME_REFRESH_TOKEN`）已不再使用；商店审核和实际 rollout 仍由 Chrome Web Store Developer Dashboard 控制。
 
 ## 权限说明
 
