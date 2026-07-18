@@ -8,6 +8,7 @@ import {
   claimNextPreviewJob,
   categoryRepository,
   completePreviewJob,
+  deleteAllTrashedRecords,
   deleteRecordCascade,
   failPreviewJob,
   purgeExpiredTrash,
@@ -268,6 +269,19 @@ describe('trash and delete record with file linkage', () => {
     expect(await recordRepository.get(oldRecord.record.id)).toBeUndefined();
     expect(await recordRepository.get(freshRecord.record.id)).toBeTruthy();
     expect((await recordRepository.listTrashed()).map((record) => record.id)).toEqual([freshRecord.record.id]);
+  });
+
+  it('deletes all trashed records without touching active records', async () => {
+    const trashed = await commitSessionToLibrary([pending({ role: 'input', textContent: 'trash' })], {});
+    const active = await commitSessionToLibrary([pending({ role: 'input', textContent: 'keep' })], {});
+    await recordRepository.trash(trashed.record.id, '2026-07-01T00:00:00.000Z');
+
+    const deleted = await deleteAllTrashedRecords();
+
+    expect(deleted.recordIds).toEqual([trashed.record.id]);
+    expect(await recordRepository.get(trashed.record.id)).toBeUndefined();
+    expect(await recordRepository.get(active.record.id)).toBeTruthy();
+    expect(await assetRepository.byRecord(trashed.record.id)).toHaveLength(0);
   });
 
   it('cascade removes record, assets, legacy file records and tags without file deletion', async () => {

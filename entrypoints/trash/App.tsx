@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Asset, LibraryRecord, RecordCategory } from '@/src/core/domain/entities';
 import type { MediaPreviewChangedMessage } from '@/src/core/messages';
-import { assetRepository, categoryRepository, recordRepository } from '@/src/storage/repositories';
+import { assetRepository, categoryRepository, deleteAllTrashedRecords, recordRepository } from '@/src/storage/repositories';
 import { categoryLabel, resolveLanguage, type ResolvedLanguage } from '@/src/ui/i18n';
 import { DEFAULT_SETTINGS, loadSettings, onSettingsChanged, saveSettings, type DisplaySettings } from '@/src/ui/roleColors';
 import { PrompTraceWordmark } from '@/src/ui/PrompTraceWordmark';
@@ -48,16 +48,16 @@ function textFor(language: ResolvedLanguage) {
         retention: 'Auto-delete after',
         days: 'days',
         save: 'Save retention',
-        cleanExpired: 'Clean expired now',
+        deleteAll: 'Delete all',
         saved: 'Retention saved.',
-        cleaned: (count: number) => `Permanently deleted ${count} expired record${count === 1 ? '' : 's'}.`,
+        cleaned: (count: number) => `Deleted ${count} record${count === 1 ? '' : 's'}.`,
         emptyTitle: 'Trash is empty',
         emptyHint: 'Drag cards onto the trash area in the Library to keep them here before permanent deletion.',
         restored: 'Record restored.',
-        deleted: 'Record permanently deleted.',
+        deleted: 'Record deleted.',
         restore: 'Restore',
         deleteNow: 'Delete now',
-        confirmDelete: 'Permanently delete this record and its local files?',
+        confirmDelete: 'Delete this record and its local files?',
         movedAt: 'Moved to trash',
         expiresAt: 'Expires',
         left: (days: number | null) => (days == null ? '—' : days === 0 ? 'expires today' : `${days} day${days === 1 ? '' : 's'} left`),
@@ -72,16 +72,16 @@ function textFor(language: ResolvedLanguage) {
         retention: '自動刪除時間',
         days: '天',
         save: '保存時間',
-        cleanExpired: '立即清理過期項目',
+        deleteAll: '刪除全部',
         saved: '保留時間已保存。',
-        cleaned: (count: number) => `已永久刪除 ${count} 筆過期紀錄。`,
+        cleaned: (count: number) => `已刪除 ${count} 筆紀錄。`,
         emptyTitle: '垃圾桶是空的',
         emptyHint: '在紀錄庫把卡片拖到左下角垃圾桶後，會先暫存在這裡。',
         restored: '紀錄已還原。',
-        deleted: '紀錄已永久刪除。',
+        deleted: '紀錄已刪除。',
         restore: '還原',
-        deleteNow: '立即永久刪除',
-        confirmDelete: '確定要永久刪除這筆紀錄與本機檔案嗎？',
+        deleteNow: '立即刪除',
+        confirmDelete: '確定要刪除這筆紀錄與本機檔案嗎？',
         movedAt: '移入時間',
         expiresAt: '到期時間',
         left: (days: number | null) => (days == null ? '—' : days === 0 ? '今天到期' : `剩 ${days} 天`),
@@ -170,12 +170,13 @@ export default function App() {
     }
   };
 
-  const cleanExpired = async () => {
+  const deleteAll = async () => {
+    if (!window.confirm(language === 'en-US' ? 'Delete all records in Trash and their local files?' : '確定要刪除垃圾桶內的全部紀錄與本機檔案嗎？')) return;
     setBusy(true);
     try {
-      const result = await chrome.runtime.sendMessage({ type: 'library/purgeExpiredTrash', payload: {} });
+      const result = await deleteAllTrashedRecords();
       await load();
-      say(copy.cleaned(result?.deletedCount ?? 0));
+      say(copy.cleaned(result.recordIds.length));
     } finally {
       setBusy(false);
     }
@@ -206,8 +207,8 @@ export default function App() {
           <button type="button" onClick={() => { location.href = 'library.html'; }}>
             {copy.back}
           </button>
-          <button type="button" className="danger" disabled={busy} onClick={cleanExpired}>
-            {copy.cleanExpired}
+          <button type="button" className="danger" disabled={busy} onClick={deleteAll}>
+            {copy.deleteAll}
           </button>
         </div>
       </header>
