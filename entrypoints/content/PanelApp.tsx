@@ -933,7 +933,6 @@ function CaptureBody({
               key={a.id}
               asset={a}
               settings={settings}
-              t={t}
               language={language}
               onQuickAdd={onQuickAdd}
             />
@@ -948,13 +947,11 @@ function CaptureBody({
 function PanelAssetCard({
   asset,
   settings,
-  t,
   language,
   onQuickAdd,
 }: {
   asset: PendingAsset;
   settings: DisplaySettings;
-  t: UiText;
   language: ResolvedLanguage;
   onQuickAdd: (request: QuickAddRequest) => void;
 }) {

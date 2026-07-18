@@ -876,53 +876,6 @@ function TextAssetEditor({
   );
 }
 
-/* Legacy FileRecord UI is intentionally retired; metadata remains read-only in storage.
-function FileRecordLine({
-  file,
-  language,
-  onSay,
-}: {
-  file: FileRecord;
-  language: ResolvedLanguage;
-  onSay: (message: string) => void;
-}) {
-  const openLocation = () => {
-    if (file.downloadId == null) return;
-    try {
-      onSay(language === 'en-US' ? 'Legacy file metadata is read-only.' : '舊版檔案中繼資料僅供讀取。');
-    } catch {
-      onSay(language === 'en-US' ? 'Could not open the file location.' : '無法開啟檔案位置。');
-    }
-  };
-
-  return (
-    <>
-      {file.deleteStatus !== 'not_deleted' && (
-        <span className="file-record-meta">
-          {language === 'en-US' ? 'File status' : '檔案狀態'}：{file.deleteStatus}
-        </span>
-      )}
-      {file.downloadStatus === 'failed' ? (
-        <button
-          type="button"
-          onClick={() =>
-            chrome.runtime
-              .sendMessage({ type: 'media/retryDownload', payload: { fileRecordId: file.id } })
-              .then(() => onSay(language === 'en-US' ? 'Retried.' : '已重試。'))
-          }
-        >
-          {language === 'en-US' ? 'Retry' : '重試'}
-        </button>
-      ) : (
-        <button type="button" disabled={file.downloadId == null} onClick={openLocation}>
-          {language === 'en-US' ? 'Location' : '位置'}
-        </button>
-      )}
-    </>
-  );
-}
-
-*/
 async function copyPreviewAssetsToClipboard(assets: Asset[]): Promise<void> {
   const texts = assets
     .filter((asset) => asset.assetType === 'text')

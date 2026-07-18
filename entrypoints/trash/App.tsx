@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Asset, LibraryRecord, RecordCategory } from '@/src/core/domain/entities';
 import type { MediaPreviewChangedMessage } from '@/src/core/messages';
 import { assetRepository, categoryRepository, recordRepository } from '@/src/storage/repositories';
-import { categoryLabel, resolveLanguage, UI_TEXT, type ResolvedLanguage } from '@/src/ui/i18n';
+import { categoryLabel, resolveLanguage, type ResolvedLanguage } from '@/src/ui/i18n';
 import { DEFAULT_SETTINGS, loadSettings, onSettingsChanged, saveSettings, type DisplaySettings } from '@/src/ui/roleColors';
 import { PrompTraceWordmark } from '@/src/ui/PrompTraceWordmark';
 
@@ -111,7 +111,6 @@ export default function App() {
   }, []);
 
   const language = resolveLanguage(settings.language);
-  const t = UI_TEXT[language];
   const copy = textFor(language);
 
   const say = (message: string) => {
