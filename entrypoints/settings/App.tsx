@@ -285,7 +285,7 @@ function InteractionDisplaySettings({
 }) {
   return (
     <>
-      <InteractionSettings settings={settings} onPatch={onPatch} t={t} language={language} />
+      <InteractionSettings settings={settings} onPatch={onPatch} t={t} />
       <div className="settings-dashed-divider" />
       <DisplaySettingsSection settings={settings} onPatch={onPatch} t={t} language={language} />
     </>
@@ -296,12 +296,10 @@ function InteractionSettings({
   settings,
   onPatch,
   t,
-  language,
 }: {
   settings: DisplaySettings;
   onPatch: (p: Partial<DisplaySettings>) => void;
   t: UiText;
-  language: ResolvedLanguage;
 }) {
   return (
     <div className="settings-subsection">
