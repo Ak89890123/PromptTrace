@@ -18,6 +18,7 @@ stats-*.json
 skills-lock.json
 goals/
 outputs/
+brag-output/
 registry/
 
 # Local-only project guidance and engineering notes
