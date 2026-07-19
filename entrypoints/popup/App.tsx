@@ -22,6 +22,23 @@ function toggles(t: UiText): { key: ToggleKey; label: string; hint: string }[] {
   ];
 }
 
+function PopupNavIcon({ kind }: { kind: 'library' | 'settings' }) {
+  if (kind === 'library') {
+    return (
+      <svg className="pop-nav-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+        <path d="M3.5 4.5A2.5 2.5 0 0 1 6 2h10.5v15H6a2.5 2.5 0 0 0-2.5 2.5V4.5Z" />
+        <path d="M3.5 4.5V19M8 6.5h5.5M8 9.5h4.5" />
+      </svg>
+    );
+  }
+  return (
+    <svg className="pop-nav-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+      <circle cx="10" cy="10" r="3" />
+      <path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4" />
+    </svg>
+  );
+}
+
 export default function App() {
   const [settings, setSettings] = useState<DisplaySettings>(DEFAULT_SETTINGS);
   const [recording, setRecording] = useState(false);
@@ -50,8 +67,14 @@ export default function App() {
       </div>
 
       <div className="pop-footer">
-        <button onClick={() => openPage('library.html')}>📚 {t.goLibrary}</button>
-        <button onClick={() => openPage('settings.html')}>⚙ {t.detailedSettings}</button>
+        <button className="pop-nav-button" onClick={() => openPage('library.html')}>
+          <PopupNavIcon kind="library" />
+          {t.goLibrary}
+        </button>
+        <button className="pop-nav-button" onClick={() => openPage('settings.html')}>
+          <PopupNavIcon kind="settings" />
+          {t.detailedSettings}
+        </button>
       </div>
 
       <label className="pop-language">

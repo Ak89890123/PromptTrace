@@ -470,8 +470,8 @@ function CapturePanel({
             <PrompTraceWordmark className="pt-panel-wordmark" />
           </span>
           <span className="pt-links">
-            <a onClick={() => openExtensionPage('library')}>{t.goLibrary}</a>
-            <a onClick={() => openExtensionPage('settings')}>{t.settings}</a>
+            <button type="button" className="pt-panel-link" onClick={() => openExtensionPage('library')}>{t.goLibrary}</button>
+            <button type="button" className="pt-panel-link" onClick={() => openExtensionPage('settings')}>{t.settings}</button>
           </span>
         </div>
         <div className="pt-panel-body">
@@ -710,12 +710,14 @@ function GalleryPanel({
                 <PrompTraceWordmark className="pt-panel-wordmark" />
               </span>
               <span className="pt-links">
-                <a onClick={() => openExtensionPage('library')}>{t.goLibrary}</a>
-                <a onClick={() => openExtensionPage('settings')}>{t.settings}</a>
+                <button type="button" className="pt-panel-link" onClick={() => openExtensionPage('library')}>{t.goLibrary}</button>
+                <button type="button" className="pt-panel-link" onClick={() => openExtensionPage('settings')}>{t.settings}</button>
               </span>
               <span className="pt-panel-actions">
                 <button
                   className={`pt-icon-btn${pinned ? ' is-on' : ''}`}
+                  aria-label={pinned ? t.unpinTitle : t.pinTitle}
+                  aria-pressed={pinned}
                   title={pinned ? t.unpinTitle : t.pinTitle}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -727,6 +729,7 @@ function GalleryPanel({
                 </button>
                 <button
                   className="pt-icon-btn"
+                  aria-label={t.close}
                   title={t.close}
                   onClick={(e) => {
                     e.stopPropagation();

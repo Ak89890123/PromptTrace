@@ -784,6 +784,17 @@
   padding-right: 0;
 }
 
+.settings-category-list[data-hover-suppressed="true"] .settings-compact-actions button {
+  background: var(--pt-surface-control);
+  border-color: var(--pt-stroke-glass);
+  transition: none;
+}
+.settings-category-list[aria-busy="true"] .settings-compact-actions button {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .settings-row-header {
   margin: var(--pt-space-5) 0 7px;
   color: var(--pt-color-text-muted);
@@ -936,6 +947,22 @@
   border-radius: var(--pt-radius-control);
   background: var(--pt-surface-card-faint);
   color: var(--pt-color-text-muted);
+}
+
+@media (any-pointer: coarse) {
+  .settings-compact-actions button {
+    width: 44px;
+    min-width: 44px;
+  }
+
+  .settings-segmented button {
+    min-height: 44px;
+  }
+
+  .settings-color-current {
+    width: 44px;
+    height: 44px;
+  }
 }
 
 @media (max-width: 1320px) {
