@@ -18,6 +18,7 @@ stats-*.json
 skills-lock.json
 goals/
 outputs/
+/output/
 brag-output/
 registry/
 
