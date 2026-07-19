@@ -490,7 +490,7 @@ function CategorySettings({
               <div className="settings-compact-actions">
                 <button
                   aria-label={t.moveUp}
-                  disabled={movingCategoryId !== null}
+                  aria-disabled={movingCategoryId !== null}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => moveCategory(c, -1)}
                   title={t.moveUp}
@@ -499,7 +499,7 @@ function CategorySettings({
                 </button>
                 <button
                   aria-label={t.moveDown}
-                  disabled={movingCategoryId !== null}
+                  aria-disabled={movingCategoryId !== null}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => moveCategory(c, 1)}
                   title={t.moveDown}

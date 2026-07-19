@@ -4,7 +4,7 @@ test('mouse reorder does not leave focus on the moved category action', async ({
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/settings.html`);
 
-  const rows = page.locator('.settings-category-list > .settings-category-row:not(.settings-new-row)');
+  const rows = page.locator('.settings-category-list > .settings-category-row:not(.settings-row-header):not(.settings-new-row)');
   await expect(rows).toHaveCount(4);
 
   const movedName = await rows.last().locator('input').inputValue();
@@ -13,7 +13,7 @@ test('mouse reorder does not leave focus on the moved category action', async ({
 
   await page.waitForTimeout(16);
   const movedVisualState = await page.evaluate((name) => {
-    const categoryRows = [...document.querySelectorAll('.settings-category-row:not(.settings-new-row)')];
+    const categoryRows = [...document.querySelectorAll('.settings-category-row:not(.settings-row-header):not(.settings-new-row)')];
     const movedRow = categoryRows.find((row) => row.querySelector('input')?.value === name);
     const movedButton = movedRow?.querySelector('.settings-compact-actions button');
     const normalButton = categoryRows[0]?.querySelector('.settings-compact-actions button');
@@ -34,7 +34,7 @@ test('mouse reorder does not leave focus on the moved category action', async ({
     focusVisible: document.activeElement?.matches(':focus-visible') ?? false,
   }));
 
-  expect(focusState.ariaLabel).not.toBe('\u4e0a\u79fb');
+  expect(focusState.ariaLabel ?? '').not.toMatch(/^(?:\u4e0a\u79fb|Move up)$/);
   expect(focusState.focusVisible).toBe(false);
 
   const keyboardMovedName = await rows.nth(1).locator('input').inputValue();
@@ -47,6 +47,6 @@ test('mouse reorder does not leave focus on the moved category action', async ({
     focusVisible: document.activeElement?.matches(':focus-visible') ?? false,
   }));
 
-  expect(keyboardFocusState.ariaLabel).toBe('\u4e0a\u79fb');
+  expect(keyboardFocusState.ariaLabel).toMatch(/^(?:\u4e0a\u79fb|Move up)$/);
   expect(keyboardFocusState.focusVisible).toBe(true);
 });
