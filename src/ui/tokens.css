@@ -5,23 +5,23 @@
   --pt-font-family-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
   --pt-line-height-body: 1.55;
 
-  --pt-font-size-micro: 10px;
-  --pt-font-size-tag: 10.5px;
-  --pt-font-size-caption: 11px;
-  --pt-font-size-control: 12px;
-  --pt-font-size-body-sm: 12.5px;
-  --pt-font-size-body: 13px;
-  --pt-font-size-page: 14px;
-  --pt-font-size-title: 15px;
-  --pt-font-size-heading: 17px;
-  --pt-font-size-display-sm: 20px;
+  --pt-font-size-micro: 11px;
+  --pt-font-size-tag: 11.5px;
+  --pt-font-size-caption: 12px;
+  --pt-font-size-control: 13px;
+  --pt-font-size-body-sm: 13.5px;
+  --pt-font-size-body: 14px;
+  --pt-font-size-page: 15px;
+  --pt-font-size-title: 16px;
+  --pt-font-size-heading: 18px;
+  --pt-font-size-display-sm: 22px;
 
   --pt-color-text-primary: #f5f5f7;
-  --pt-color-text-secondary: rgba(245, 245, 247, 0.72);
-  --pt-color-text-muted: rgba(245, 245, 247, 0.55);
-  --pt-color-text-faint: rgba(245, 245, 247, 0.4);
-  --pt-color-text-disabled: rgba(245, 245, 247, 0.28);
-  --pt-color-text-empty: rgba(245, 245, 247, 0.22);
+  --pt-color-text-secondary: rgba(245, 245, 247, 0.8);
+  --pt-color-text-muted: rgba(245, 245, 247, 0.68);
+  --pt-color-text-faint: rgba(245, 245, 247, 0.55);
+  --pt-color-text-disabled: rgba(245, 245, 247, 0.42);
+  --pt-color-text-empty: rgba(245, 245, 247, 0.55);
   --pt-color-text-static-white: #fff;
   --pt-color-text-inverse: #0b1220;
   --pt-color-text-on-accent: #06231f;

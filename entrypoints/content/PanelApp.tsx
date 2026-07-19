@@ -716,6 +716,8 @@ function GalleryPanel({
               <span className="pt-panel-actions">
                 <button
                   className={`pt-icon-btn${pinned ? ' is-on' : ''}`}
+                  aria-label={pinned ? t.unpinTitle : t.pinTitle}
+                  aria-pressed={pinned}
                   title={pinned ? t.unpinTitle : t.pinTitle}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -727,6 +729,7 @@ function GalleryPanel({
                 </button>
                 <button
                   className="pt-icon-btn"
+                  aria-label={t.close}
                   title={t.close}
                   onClick={(e) => {
                     e.stopPropagation();

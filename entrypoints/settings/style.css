@@ -784,6 +784,12 @@
   padding-right: 0;
 }
 
+.settings-category-list[data-hover-suppressed="true"] .settings-compact-actions button {
+  background: var(--pt-surface-control);
+  border-color: var(--pt-stroke-glass);
+  transition: none;
+}
+
 .settings-row-header {
   margin: var(--pt-space-5) 0 7px;
   color: var(--pt-color-text-muted);

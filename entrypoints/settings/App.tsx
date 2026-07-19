@@ -366,10 +366,28 @@ function CategorySettings({
 }) {
   const [newName, setNewName] = useState('');
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const [hoverSuppressed, setHoverSuppressed] = useState(false);
   const categoryRows = [...categories].sort((a, b) => a.sortOrder - b.sortOrder);
 
   const save = async (c: RecordCategory, patch: Partial<RecordCategory>) => {
     await categoryRepository.save({ ...c, ...patch, updatedAt: new Date().toISOString() });
+    onChanged();
+  };
+
+  const moveCategory = async (category: RecordCategory, direction: -1 | 1) => {
+    const index = categoryRows.findIndex((item) => item.id === category.id);
+    const targetIndex = index + direction;
+    if (index < 0 || targetIndex < 0 || targetIndex >= categoryRows.length) return;
+
+    setHoverSuppressed(true);
+    const reordered = [...categoryRows];
+    [reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]];
+    const updatedAt = new Date().toISOString();
+    await Promise.all(
+      reordered.map((item, sortOrder) =>
+        categoryRepository.save({ ...item, sortOrder, updatedAt }),
+      ),
+    );
     onChanged();
   };
 
@@ -434,7 +452,11 @@ function CategorySettings({
         <span>{t.order}</span>
         <span>{t.action}</span>
       </div>
-      <div className="settings-category-list">
+      <div
+        className="settings-category-list"
+        data-hover-suppressed={hoverSuppressed ? 'true' : undefined}
+        onPointerMove={() => setHoverSuppressed(false)}
+      >
         {categoryRows.map((c) => {
           const displayName = categoryLabel(c, language);
           return (
@@ -456,8 +478,22 @@ function CategorySettings({
                 }}
               />
               <div className="settings-compact-actions">
-                <button onClick={() => save(c, { sortOrder: c.sortOrder - 1.5 })} title={t.moveUp}>↑</button>
-                <button onClick={() => save(c, { sortOrder: c.sortOrder + 1.5 })} title={t.moveDown}>↓</button>
+                <button
+                  aria-label={t.moveUp}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => moveCategory(c, -1)}
+                  title={t.moveUp}
+                >
+                  ↑
+                </button>
+                <button
+                  aria-label={t.moveDown}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => moveCategory(c, 1)}
+                  title={t.moveDown}
+                >
+                  ↓
+                </button>
               </div>
               <button
                 className="danger"

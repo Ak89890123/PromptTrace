@@ -816,8 +816,8 @@
   padding: var(--pt-space-2) var(--pt-space-3);
   border-radius: var(--pt-radius-thumb);
   background: var(--pt-surface-input);
-  color: var(--pt-color-text);
-  font-size: var(--pt-font-size-small);
+  color: var(--pt-color-text-secondary);
+  font-size: var(--pt-font-size-control);
   line-height: 1.45;
   overflow-wrap: anywhere;
   display: -webkit-box;
