@@ -166,6 +166,7 @@ function LanguageSettings({
       </h2>
       <label className="settings-field">
         <select
+          aria-label={t.interfaceLanguage}
           value={settings.language}
           onChange={(e) => onPatch({ language: e.target.value as DisplaySettings['language'] })}
         >
@@ -367,6 +368,7 @@ function CategorySettings({
   const [newName, setNewName] = useState('');
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [hoverSuppressed, setHoverSuppressed] = useState(false);
+  const [movingCategoryId, setMovingCategoryId] = useState<string | null>(null);
   const categoryRows = [...categories].sort((a, b) => a.sortOrder - b.sortOrder);
 
   const save = async (c: RecordCategory, patch: Partial<RecordCategory>) => {
@@ -375,20 +377,26 @@ function CategorySettings({
   };
 
   const moveCategory = async (category: RecordCategory, direction: -1 | 1) => {
+    if (movingCategoryId) return;
     const index = categoryRows.findIndex((item) => item.id === category.id);
     const targetIndex = index + direction;
     if (index < 0 || targetIndex < 0 || targetIndex >= categoryRows.length) return;
 
+    setMovingCategoryId(category.id);
     setHoverSuppressed(true);
     const reordered = [...categoryRows];
     [reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]];
     const updatedAt = new Date().toISOString();
-    await Promise.all(
-      reordered.map((item, sortOrder) =>
-        categoryRepository.save({ ...item, sortOrder, updatedAt }),
-      ),
-    );
-    onChanged();
+    try {
+      await Promise.all(
+        reordered.map((item, sortOrder) =>
+          categoryRepository.save({ ...item, sortOrder, updatedAt }),
+        ),
+      );
+      onChanged();
+    } finally {
+      setMovingCategoryId(null);
+    }
   };
 
   const resetBuiltinCategories = async () => {
@@ -455,6 +463,7 @@ function CategorySettings({
       <div
         className="settings-category-list"
         data-hover-suppressed={hoverSuppressed ? 'true' : undefined}
+        aria-busy={movingCategoryId !== null}
         onPointerMove={() => setHoverSuppressed(false)}
       >
         {categoryRows.map((c) => {
@@ -471,6 +480,7 @@ function CategorySettings({
               <input
                 key={`${c.id}:${c.updatedAt}:${displayName}`}
                 defaultValue={displayName}
+                aria-label={`${t.category}: ${displayName}`}
                 onBlur={(e) => {
                   const name = e.target.value.trim();
                   const v = validateCategoryName(name);
@@ -480,6 +490,7 @@ function CategorySettings({
               <div className="settings-compact-actions">
                 <button
                   aria-label={t.moveUp}
+                  disabled={movingCategoryId !== null}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => moveCategory(c, -1)}
                   title={t.moveUp}
@@ -488,6 +499,7 @@ function CategorySettings({
                 </button>
                 <button
                   aria-label={t.moveDown}
+                  disabled={movingCategoryId !== null}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => moveCategory(c, 1)}
                   title={t.moveDown}
@@ -511,6 +523,7 @@ function CategorySettings({
           <span />
           <input
             placeholder={t.newCategoryName}
+            aria-label={t.newCategoryName}
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
           />

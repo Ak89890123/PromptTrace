@@ -944,6 +944,22 @@
   color: var(--pt-color-text-muted);
 }
 
+@media (any-pointer: coarse) {
+  .settings-compact-actions button {
+    width: 44px;
+    min-width: 44px;
+  }
+
+  .settings-segmented button {
+    min-height: 44px;
+  }
+
+  .settings-color-current {
+    width: 44px;
+    height: 44px;
+  }
+}
+
 @media (max-width: 1320px) {
   .settings-page {
     width: min(860px, calc(100vw - 32px));

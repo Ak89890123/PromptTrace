@@ -839,3 +839,12 @@ body {
     padding: var(--pt-space-6);
   }
 }
+
+@media (any-pointer: coarse) {
+  .library-settings-button,
+  .filter-option,
+  .filter-add-item,
+  .filter-new-item-input {
+    min-height: 44px;
+  }
+}

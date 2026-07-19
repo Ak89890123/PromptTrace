@@ -470,8 +470,8 @@ function CapturePanel({
             <PrompTraceWordmark className="pt-panel-wordmark" />
           </span>
           <span className="pt-links">
-            <a onClick={() => openExtensionPage('library')}>{t.goLibrary}</a>
-            <a onClick={() => openExtensionPage('settings')}>{t.settings}</a>
+            <button type="button" className="pt-panel-link" onClick={() => openExtensionPage('library')}>{t.goLibrary}</button>
+            <button type="button" className="pt-panel-link" onClick={() => openExtensionPage('settings')}>{t.settings}</button>
           </span>
         </div>
         <div className="pt-panel-body">
@@ -710,8 +710,8 @@ function GalleryPanel({
                 <PrompTraceWordmark className="pt-panel-wordmark" />
               </span>
               <span className="pt-links">
-                <a onClick={() => openExtensionPage('library')}>{t.goLibrary}</a>
-                <a onClick={() => openExtensionPage('settings')}>{t.settings}</a>
+                <button type="button" className="pt-panel-link" onClick={() => openExtensionPage('library')}>{t.goLibrary}</button>
+                <button type="button" className="pt-panel-link" onClick={() => openExtensionPage('settings')}>{t.settings}</button>
               </span>
               <span className="pt-panel-actions">
                 <button

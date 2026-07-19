@@ -235,14 +235,22 @@
 .pt-panel-head .pt-title { display: inline-flex; align-items: center; gap: var(--pt-space-2); }
 .pt-panel-head .pt-logo-img { width: 18px; height: 18px; }
 .pt-panel-head .pt-links { display: flex; gap: var(--pt-space-4); }
-.pt-panel-head a {
+.pt-panel-head .pt-panel-link {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--pt-color-link);
   font-size: var(--pt-font-size-control);
   font-weight: 500;
   text-decoration: none;
   cursor: pointer;
 }
-.pt-panel-head a:hover { text-decoration: underline; }
+.pt-panel-head .pt-panel-link:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+  text-decoration: underline;
+}
 
 .pt-panel-actions {
   display: flex;
@@ -1036,4 +1044,18 @@ kbd {
   padding: 0 5px;
   font-size: var(--pt-font-size-caption);
   font-family: inherit;
+}
+
+@media (any-pointer: coarse) {
+  .pt-panel-link {
+    min-height: 44px;
+  }
+
+  .pt-edge-tab {
+    width: 44px;
+  }
+
+  .pt-filter-chip {
+    height: 44px;
+  }
 }

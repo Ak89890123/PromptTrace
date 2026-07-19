@@ -94,6 +94,10 @@ body {
   background: linear-gradient(135deg, #34d399, #22d3ee);
   border-color: transparent;
 }
+.pt-switch input:focus-visible + .pt-track {
+  outline: 2px solid var(--pt-color-accent);
+  outline-offset: 3px;
+}
 .pt-switch input:checked + .pt-track::before {
   transform: translateX(16px);
 }
@@ -105,6 +109,19 @@ body {
 }
 .pop-footer button {
   flex: 1;
+}
+.pop-nav-button {
+  gap: 6px;
+}
+.pop-nav-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
 }
 
 .pop-language {
@@ -135,4 +152,22 @@ body {
 }
 .pop-language select {
   width: 100%;
+}
+
+@media (any-pointer: coarse) {
+  .tog-row {
+    min-height: 44px;
+  }
+
+  .pt-switch {
+    width: 44px;
+    height: 44px;
+  }
+
+  .pt-track {
+    inset: 50% auto auto 50%;
+    width: 38px;
+    height: 22px;
+    transform: translate(-50%, -50%);
+  }
 }
