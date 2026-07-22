@@ -102,6 +102,46 @@ test('right-click add text opens the quick-add flyout and saves into the card', 
   await expect(page.locator('.pt-gprompt').filter({ hasText: QUICK_TEXT })).toBeVisible({ timeout: 5_000 });
 });
 
+test('right-click menu escapes the card frame and stays open while hovered', async ({ context }) => {
+  const { page, card } = await createGalleryCard(context);
+  const cardBox = await card.boundingBox();
+  expect(cardBox).not.toBeNull();
+  await page.mouse.click(cardBox!.x + 24, cardBox!.y + cardBox!.height - 8, { button: 'right' });
+
+  const menu = page.locator('.pt-gmenu');
+  await expect(menu).toBeVisible({ timeout: 5_000 });
+  await expect(menu).toHaveCSS('position', 'fixed');
+  const menuBox = await menu.boundingBox();
+  expect(menuBox).not.toBeNull();
+  const viewportHeight = await page.evaluate(() => window.innerHeight);
+  expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(viewportHeight - 8);
+
+  await page.mouse.move(menuBox!.x + menuBox!.width / 2, menuBox!.y + menuBox!.height / 2);
+  await page.waitForTimeout(350);
+  await expect(menu).toBeVisible();
+  await expect(card).toBeVisible();
+});
+
+test('closing the right-click menu inside a card does not replay the panel animation', async ({ context }) => {
+  const { page, card } = await createGalleryCard(context);
+  await page.waitForTimeout(300);
+  const cardBox = await card.boundingBox();
+  const panel = page.locator('.pt-gallery-panel');
+  expect(cardBox).not.toBeNull();
+
+  await page.mouse.click(cardBox!.x + 24, cardBox!.y + cardBox!.height - 8, { button: 'right' });
+  await expect(page.locator('.pt-gmenu')).toBeVisible({ timeout: 5_000 });
+  await page.mouse.click(cardBox!.x + 24, cardBox!.y + 12);
+  await expect(page.locator('.pt-gmenu')).toHaveCount(0);
+
+  const before = await panel.boundingBox();
+  await page.waitForTimeout(50);
+  const after = await panel.boundingBox();
+  expect(before).not.toBeNull();
+  expect(after).not.toBeNull();
+  expect(Math.abs((after!.x ?? 0) - (before!.x ?? 0))).toBeLessThan(1);
+});
+
 test('pasting on a saved card opens role choices without an input panel', async ({ context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   const { page, card } = await createGalleryCard(context);

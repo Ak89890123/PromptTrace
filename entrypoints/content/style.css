@@ -587,9 +587,10 @@
   position: fixed;
   inset: 0;
   z-index: 29;
+  pointer-events: auto;
 }
 .pt-gmenu {
-  position: absolute;
+  position: fixed;
   z-index: 30;
   min-width: 132px;
   padding: var(--pt-space-1);
@@ -597,6 +598,7 @@
   background: var(--pt-surface-menu);
   border: 1px solid var(--pt-stroke-strong);
   box-shadow: var(--pt-shadow-menu);
+  pointer-events: auto;
 }
 .pt-gmenu-item {
   display: block;
