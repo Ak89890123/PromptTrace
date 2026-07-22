@@ -44,6 +44,19 @@ type QuickAddRequest = {
   anchorTopPx: number;
 };
 
+type CaptureMenuRequest = {
+  x: number;
+  y: number;
+  anchorTopPx: number;
+};
+
+type GalleryMenuRequest = {
+  x: number;
+  y: number;
+  record: GalleryRecord;
+  anchorTopPx: number;
+};
+
 type HoverPreviewContent =
   | { kind: 'text'; label: string; text: string }
   | { kind: 'image'; label: string; src: string };
@@ -391,6 +404,30 @@ function rectsOverlap(a: { left: number; right: number; top: number; bottom: num
   return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 }
 
+function useFixedMenuPosition(menu: { x: number; y: number } | null, revision = 0) {
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!menu) {
+      setPosition(null);
+      return;
+    }
+    const rect = menuRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const margin = 8;
+    setPosition({
+      left: Math.min(Math.max(margin, menu.x), Math.max(margin, window.innerWidth - rect.width - margin)),
+      top: Math.min(Math.max(margin, menu.y), Math.max(margin, window.innerHeight - rect.height - margin)),
+    });
+  }, [menu, revision]);
+
+  return {
+    ref: menuRef,
+    style: position ?? (menu ? { left: menu.x, top: menu.y } : undefined),
+  };
+}
+
 function isSelectionForward(selection: Selection): boolean {
   const { anchorNode, focusNode } = selection;
   if (!anchorNode || !focusNode) return true;
@@ -427,6 +464,8 @@ function CapturePanel({
   const prevCount = useRef(0);
   const [wizard, setWizard] = useState<null | 'category'>(null);
   const [quickTextEditor, setQuickTextEditor] = useState<QuickAddRequest | null>(null);
+  const [menu, setMenu] = useState<CaptureMenuRequest | null>(null);
+  const menuPosition = useFixedMenuPosition(menu);
   const [savedToastRecordId, setSavedToastRecordId] = useState<string | null>(null);
 
   const count = session.assets.length;
@@ -485,6 +524,7 @@ function CapturePanel({
             savedRecordId={savedToastRecordId}
             onCommitted={setSavedToastRecordId}
             onQuickAdd={setQuickTextEditor}
+            onOpenMenu={setMenu}
           />
         </div>
         {count > 0 && !wizard && (
@@ -503,6 +543,30 @@ function CapturePanel({
           </div>
         )}
       </div>
+      {menu && <div className="pt-menu-backdrop" onClick={() => setMenu(null)} role="presentation" />}
+      {menu && (
+        <div
+          ref={menuPosition.ref}
+          className="pt-gmenu"
+          style={menuPosition.style}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="pt-gmenu-item"
+            onClick={() => {
+              setMenu(null);
+              setQuickTextEditor({
+                target: { kind: 'capture' },
+                content: { kind: 'text', text: '' },
+                mode: 'compose',
+                anchorTopPx: menu.anchorTopPx,
+              });
+            }}
+          >
+            {language === 'en-US' ? 'Add text' : '新增文字'}
+          </button>
+        </div>
+      )}
       {quickTextEditor && (
         <QuickTextEditor
           request={quickTextEditor}
@@ -536,6 +600,9 @@ function GalleryPanel({
   const [editing, setEditing] = useState<GalleryRecord | null>(null);
   const [quickTextEditor, setQuickTextEditor] = useState<QuickAddRequest | null>(null);
   const [hoverPreview, setHoverPreview] = useState<HoverPreviewRequest | null>(null);
+  const [menu, setMenu] = useState<GalleryMenuRequest | null>(null);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const menuPosition = useFixedMenuPosition(menu, confirmDel ? 1 : 0);
   const panelCloseTimerRef = useRef<number | null>(null);
   const hoverPreviewOpenTimerRef = useRef<number | null>(null);
   const hoverPreviewCloseTimerRef = useRef<number | null>(null);
@@ -557,6 +624,14 @@ function GalleryPanel({
   const fallbackPanelTopVh = Math.min(100 - PANEL_VH - 2, Math.max(2, edgeTop - PANEL_VH / 2));
   const resolvedPanelTopPx = panelTopPx ?? (window.innerHeight * fallbackPanelTopVh) / 100;
   const panelTopVh = (resolvedPanelTopPx / Math.max(1, window.innerHeight)) * 100;
+  const closeMenu = useCallback(() => {
+    setMenu(null);
+    setConfirmDel(false);
+  }, []);
+  const openMenu = useCallback((request: GalleryMenuRequest) => {
+    setConfirmDel(false);
+    setMenu(request);
+  }, []);
   const openGallery = () => {
     if (panelCloseTimerRef.current !== null) {
       window.clearTimeout(panelCloseTimerRef.current);
@@ -569,11 +644,11 @@ function GalleryPanel({
       window.clearTimeout(panelCloseTimerRef.current);
       panelCloseTimerRef.current = null;
     }
-    if (editing || quickTextEditor || pinned) return;
+    if (editing || quickTextEditor || pinned || menu) return;
     setOpen(false);
     panelPlacementLockedRef.current = false;
     setPanelTopPx(null);
-  }, [editing, pinned, quickTextEditor]);
+  }, [editing, menu, pinned, quickTextEditor]);
   const cancelHoverPreviewOpen = useCallback(() => {
     if (hoverPreviewOpenTimerRef.current !== null) {
       window.clearTimeout(hoverPreviewOpenTimerRef.current);
@@ -600,15 +675,17 @@ function GalleryPanel({
     setEditing(null);
     setQuickTextEditor(null);
     setHoverPreview(null);
+    closeMenu();
     setOpen(false);
     panelPlacementLockedRef.current = false;
     setPanelTopPx(null);
-  }, [cancelHoverPreviewOpen]);
+  }, [cancelHoverPreviewOpen, closeMenu]);
   const openQuickAdd = useCallback((request: QuickAddRequest) => {
     cancelHoverPreviewOpen();
     setHoverPreview(null);
+    closeMenu();
     setQuickTextEditor(request);
-  }, [cancelHoverPreviewOpen]);
+  }, [cancelHoverPreviewOpen, closeMenu]);
   const keepHoverPreviewOpen = useCallback(() => {
     cancelHoverPreviewOpen();
     if (hoverPreviewCloseTimerRef.current !== null) {
@@ -691,6 +768,13 @@ function GalleryPanel({
       window.removeEventListener('resize', onResize);
     };
   }, [edgeTop, open]);
+  const removeMenuRecord = async () => {
+    if (!menu) return;
+    const recordId = menu.record.id;
+    closeMenu();
+    await send({ type: 'library/trashRecord', payload: { recordId } });
+    setRefreshSignal((value) => value + 1);
+  };
   return (
     <div className="pt-gallery-edge" style={edgeStyle}>
       {open ? (
@@ -745,8 +829,8 @@ function GalleryPanel({
                 settings={settings}
                 t={t}
                 language={language}
-                onEdit={setEditing}
                 onQuickAdd={openQuickAdd}
+                onOpenMenu={openMenu}
                 onHoverPreview={showHoverPreview}
                 onClearHoverPreview={scheduleHoverPreviewClose}
                 onDismissHoverPreview={closeHoverPreviewNow}
@@ -766,6 +850,57 @@ function GalleryPanel({
           }}
         >
           <img className="pt-tab-img" src={LOGO_DATA_URL} alt="PrompTrace" />
+        </div>
+      )}
+      {menu && <div className="pt-menu-backdrop" onClick={closeMenu} role="presentation" />}
+      {menu && (
+        <div
+          ref={menuPosition.ref}
+          className="pt-gmenu"
+          style={menuPosition.style}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {!confirmDel ? (
+            <>
+              <button
+                className="pt-gmenu-item"
+                onClick={() => {
+                  const record = menu.record;
+                  closeMenu();
+                  setEditing(record);
+                }}
+              >
+                {language === 'en-US' ? 'Edit tags' : '編輯標籤'}
+              </button>
+              <button
+                className="pt-gmenu-item"
+                onClick={() => {
+                  const request = menu;
+                  openQuickAdd({
+                    target: { kind: 'record', record: request.record },
+                    content: { kind: 'text', text: '' },
+                    mode: 'compose',
+                    anchorTopPx: request.anchorTopPx,
+                  });
+                }}
+              >
+                {language === 'en-US' ? 'Add text' : '新增文字'}
+              </button>
+              <button className="pt-gmenu-item pt-gmenu-item--danger" onClick={() => setConfirmDel(true)}>
+                {t.delete}
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="pt-gmenu-confirm">{language === 'en-US' ? 'Move this record to Trash? You can restore it before auto-delete.' : '移到垃圾桶？自動刪除前可以還原。'}</div>
+              <button className="pt-gmenu-item pt-gmenu-item--danger" onClick={removeMenuRecord}>
+                {language === 'en-US' ? 'Move to Trash' : '移到垃圾桶'}
+              </button>
+              <button className="pt-gmenu-item" onClick={() => setConfirmDel(false)}>
+                {language === 'en-US' ? 'Cancel' : '取消'}
+              </button>
+            </>
+          )}
         </div>
       )}
       {editing && (
@@ -820,6 +955,7 @@ function CaptureBody({
   savedRecordId,
   onCommitted,
   onQuickAdd,
+  onOpenMenu,
 }: {
   session: CaptureSessionState;
   settings: DisplaySettings;
@@ -830,6 +966,7 @@ function CaptureBody({
   savedRecordId: string | null;
   onCommitted: (recordId: string) => void;
   onQuickAdd: (request: QuickAddRequest) => void;
+  onOpenMenu: (request: CaptureMenuRequest) => void;
 }) {
   const grouped = useMemo(() => {
     const order: (AssetRole | null)[] = [null, 'input', 'input_reference', 'negative', 'output'];
@@ -938,6 +1075,7 @@ function CaptureBody({
               settings={settings}
               language={language}
               onQuickAdd={onQuickAdd}
+              onOpenMenu={onOpenMenu}
             />
           ))}
         </div>
@@ -952,16 +1090,16 @@ function PanelAssetCard({
   settings,
   language,
   onQuickAdd,
+  onOpenMenu,
 }: {
   asset: PendingAsset;
   settings: DisplaySettings;
   language: ResolvedLanguage;
   onQuickAdd: (request: QuickAddRequest) => void;
+  onOpenMenu: (request: CaptureMenuRequest) => void;
 }) {
   const allowed = allowedRolesFor(asset.assetType);
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
-  const closeMenu = () => setMenu(null);
   const editorAnchorTopForCard = () => {
     const rect = cardRef.current?.getBoundingClientRect();
     return rect?.top ?? 8;
@@ -994,8 +1132,8 @@ function PanelAssetCard({
       onContextMenu={(e) => {
         if ((e.target as HTMLElement).closest('textarea')) return;
         e.preventDefault();
-        const rect = e.currentTarget.getBoundingClientRect();
-        setMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+        const rect = cardRef.current?.getBoundingClientRect();
+        onOpenMenu({ x: e.clientX, y: e.clientY, anchorTopPx: rect?.top ?? 8 });
       }}
     >
       <div className="pt-spread">
@@ -1028,24 +1166,6 @@ function PanelAssetCard({
           );
         })}
       </div>
-      {menu && <div className="pt-menu-backdrop" onClick={closeMenu} role="presentation" />}
-      {menu && (
-        <div
-          className="pt-gmenu"
-          style={{ left: menu.x, top: menu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            className="pt-gmenu-item"
-            onClick={() => {
-              closeMenu();
-              openQuickAdd({ kind: 'text', text: '' }, 'compose');
-            }}
-          >
-            {language === 'en-US' ? 'Add text' : '新增文字'}
-          </button>
-        </div>
-      )}
     </div>
   );
 }
@@ -1331,8 +1451,8 @@ function Gallery({
   settings,
   t,
   language,
-  onEdit,
   onQuickAdd,
+  onOpenMenu,
   onHoverPreview,
   onClearHoverPreview,
   onDismissHoverPreview,
@@ -1341,8 +1461,8 @@ function Gallery({
   settings: DisplaySettings;
   t: UiText;
   language: ResolvedLanguage;
-  onEdit: (r: GalleryRecord) => void;
   onQuickAdd: (request: QuickAddRequest) => void;
+  onOpenMenu: (request: GalleryMenuRequest) => void;
   onHoverPreview: (request: HoverPreviewRequest) => void;
   onClearHoverPreview: () => void;
   onDismissHoverPreview: () => void;
@@ -1601,12 +1721,11 @@ function Gallery({
             settings={settings}
             t={t}
             language={language}
-            onEdit={onEdit}
             onQuickAdd={onQuickAdd}
+            onOpenMenu={onOpenMenu}
             onHoverPreview={onHoverPreview}
             onClearHoverPreview={onClearHoverPreview}
             onDismissHoverPreview={onDismissHoverPreview}
-            onChanged={refresh}
             onCategoryDragStart={onRecordDragStart}
             onCategoryDragEnd={onRecordDragEnd}
             isDragging={draggingRecord?.id === r.id}
@@ -1649,12 +1768,11 @@ function GalleryCard({
   settings,
   t,
   language,
-  onEdit,
   onQuickAdd,
+  onOpenMenu,
   onHoverPreview,
   onClearHoverPreview,
   onDismissHoverPreview,
-  onChanged,
   onCategoryDragStart,
   onCategoryDragEnd,
   isDragging,
@@ -1663,24 +1781,16 @@ function GalleryCard({
   settings: DisplaySettings;
   t: UiText;
   language: ResolvedLanguage;
-  onEdit: (r: GalleryRecord) => void;
   onQuickAdd: (request: QuickAddRequest) => void;
+  onOpenMenu: (request: GalleryMenuRequest) => void;
   onHoverPreview: (request: HoverPreviewRequest) => void;
   onClearHoverPreview: () => void;
   onDismissHoverPreview: () => void;
-  onChanged: () => void;
   onCategoryDragStart: (record: GalleryRecord, e: ReactDragEvent<HTMLButtonElement>) => void;
   onCategoryDragEnd: () => void;
   isDragging: boolean;
 }) {
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
-  const [confirmDel, setConfirmDel] = useState(false);
   const cardRef = useRef<HTMLDivElement | null>(null);
-
-  const closeMenu = () => {
-    setMenu(null);
-    setConfirmDel(false);
-  };
 
   // Left column = prompt side (input / reference / negative); right = output.
   const left = record.assets.filter((a) => a.role !== 'output');
@@ -1690,12 +1800,6 @@ function GalleryCard({
   const visibleSingleColumnAssets = isInputOnly ? left : right;
   const singleColumnHasMedia = visibleSingleColumnAssets.some((a) => a.assetType !== 'text');
   const categoryText = record.categoryName ?? t.uncategorized;
-
-  const remove = async () => {
-    closeMenu();
-    await send({ type: 'library/trashRecord', payload: { recordId: record.id } });
-    onChanged();
-  };
 
   const editorAnchorTopForCard = () => {
     const rect = cardRef.current?.getBoundingClientRect();
@@ -1735,8 +1839,8 @@ function GalleryCard({
         if ((e.target as HTMLElement).closest('textarea')) return;
         onDismissHoverPreview();
         e.preventDefault();
-        const rect = e.currentTarget.getBoundingClientRect();
-        setMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+        const rect = cardRef.current?.getBoundingClientRect();
+        onOpenMenu({ record, x: e.clientX, y: e.clientY, anchorTopPx: rect?.top ?? 8 });
       }}
     >
       <div className="pt-gmeta">
@@ -1798,53 +1902,6 @@ function GalleryCard({
         )}
       </div>
 
-      {menu && <div className="pt-menu-backdrop" onClick={closeMenu} role="presentation" />}
-      {menu && (
-        <div
-          className="pt-gmenu"
-          style={{ left: menu.x, top: menu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {!confirmDel ? (
-            <>
-              <button
-                className="pt-gmenu-item"
-                onClick={() => {
-                  closeMenu();
-                  onEdit(record);
-                }}
-              >
-                {language === 'en-US' ? 'Edit tags' : '編輯標籤'}
-              </button>
-              <button
-                className="pt-gmenu-item"
-                onClick={() => {
-                  closeMenu();
-                  openQuickAdd({ kind: 'text', text: '' }, 'compose');
-                }}
-              >
-                {language === 'en-US' ? 'Add text' : '新增文字'}
-              </button>
-              <button
-                className="pt-gmenu-item pt-gmenu-item--danger"
-                onClick={() => setConfirmDel(true)}
-              >
-                {t.delete}
-              </button>
-            </>
-          ) : (
-            <>
-              <div className="pt-gmenu-confirm">{language === 'en-US' ? 'Move this record to Trash? You can restore it before auto-delete.' : '移到垃圾桶？自動刪除前可以還原。'}</div>
-              <button className="pt-gmenu-item pt-gmenu-item--danger" onClick={remove}>
-                {language === 'en-US' ? 'Move to Trash' : '移到垃圾桶'}
-              </button>
-              <button className="pt-gmenu-item" onClick={() => setConfirmDel(false)}>
-                {language === 'en-US' ? 'Cancel' : '取消'}
-              </button>
-            </>
-          )}
-        </div>
-      )}
     </div>
   );
 }
