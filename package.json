@@ -1,6 +1,6 @@
 {
   "name": "promptrace",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "private": true,
   "description": "Local-first Chrome extension for capturing AI workflow assets (prompts, references, outputs) into a searchable local library.",
   "type": "module",
